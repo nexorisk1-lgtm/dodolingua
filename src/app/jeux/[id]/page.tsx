@@ -1,0 +1,101 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { Container } from '@/components/ui/Container'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { GAME_COMPONENTS, GAME_LIST, type GameId, type GameWord } from '@/components/games'
+import { createClient } from '@/lib/supabase/client'
+import { questPoints } from '@/lib/points'
+
+export default function GamePage() {
+  const params = useParams<{ id: string }>()
+  const router = useRouter()
+  const id = params.id as GameId
+  const meta = GAME_LIST.find(g => g.id === id)
+  const [words, setWords] = useState<GameWord[]>([])
+  const [voiceName, setVoiceName] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+  const [pts, setPts] = useState<number>(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+      // Si jeu nécessite image, sélectionner uniquement ces concepts
+      let q = supabase.from('concepts')
+        .select('id, image_url, image_alt, translations(lemma, ipa, audio_url)')
+        .limit(meta?.needsImage ? 12 : 8)
+      if (meta?.needsImage) q = q.not('image_url', 'is', null)
+      const { data: cs } = await q
+      const w: GameWord[] = (cs || []).map((c: any) => ({
+        id: c.id, image_url: c.image_url, image_alt: c.image_alt,
+        lemma: c.translations?.[0]?.lemma || '', ipa: c.translations?.[0]?.ipa,
+        audio_url: c.translations?.[0]?.audio_url,
+      }))
+      setWords(w)
+      const { data: vp } = await supabase.from('user_voice_pref')
+        .select('voice_name').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle()
+      if (vp) setVoiceName(vp.voice_name)
+      setLoading(false)
+    })()
+  }, [id, meta, router])
+
+  async function handleComplete(results: any[]) {
+    const correct = results.filter(r => r.correct).length
+    const perfect = correct === results.length
+    const p = questPoints({ perfect })
+    setPts(p.total); setDone(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const today = new Date().toISOString().slice(0, 10)
+      await supabase.from('daily_quests').upsert({
+        user_id: user.id, lang_code: 'en-GB', date: today,
+        quest_type: 'jeu', status: 'completed', points_earned: p.total,
+        completed_at: new Date().toISOString(),
+        content_ref: { game_id: id, score: correct, total: results.length },
+      }, { onConflict: 'user_id,lang_code,date,quest_type' })
+      await supabase.rpc('increment_user_points', { p_user: user.id, p_lang: 'en-GB', p_amount: p.total })
+    }
+  }
+
+  if (!meta) return <Container><Card>Jeu inconnu.</Card></Container>
+  const Game = GAME_COMPONENTS[id]
+  if (!Game) return <Container><Card>Jeu non disponible.</Card></Container>
+
+  if (loading) return <Container className="max-w-md"><Card>Chargement…</Card></Container>
+  if (done) return (
+    <Container className="max-w-md py-8">
+      <Card className="text-center space-y-3">
+        <div className="text-5xl">{meta.emoji}</div>
+        <h2 className="text-xl font-bold text-primary-900">{meta.name} terminé !</h2>
+        <div className="text-3xl font-extrabold text-primary-700">+{pts} pts</div>
+        <p className="text-sm text-gray-600">Quête « Jeu » validée.</p>
+        <div className="flex gap-2 pt-2">
+          <Button block onClick={() => router.push('/jeux')}>Autre jeu</Button>
+          <Button block variant="ghost" onClick={() => router.push('/dashboard')}>Dashboard</Button>
+        </div>
+      </Card>
+    </Container>
+  )
+
+  return (
+    <Container className="max-w-md py-6">
+      <div className="flex items-center justify-between mb-3">
+        <h1 className="text-lg font-bold text-primary-900">{meta.emoji} {meta.name}</h1>
+        <Button size="sm" variant="ghost" onClick={() => router.back()}>← Quitter</Button>
+      </div>
+      <Card>
+        <Game
+          words={words}
+          voiceName={voiceName}
+          onResult={() => {}}
+          onComplete={handleComplete}
+        />
+      </Card>
+    </Container>
+  )
+}
