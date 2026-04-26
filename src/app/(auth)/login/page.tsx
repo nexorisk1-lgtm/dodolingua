@@ -26,7 +26,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (error) setError(error.message)
-autre routeur.pousser(suivant comme n’importe quel)  }
+router.push(suivant as any)  }
 
   return (
     <main className="min-h-screen flex items-center justify-center py-12">
