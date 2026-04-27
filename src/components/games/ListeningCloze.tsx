@@ -18,6 +18,9 @@ export function ListeningClozeGame({ words, voiceName, onResult, onComplete }: G
 
   if (!w) return null
 
+  const isCorrect = shown && val.toLowerCase().trim() === w.lemma.toLowerCase().trim()
+  const isWrong = shown && !isCorrect
+
   function check() {
     const ok = val.toLowerCase().trim() === w.lemma.toLowerCase().trim()
     const r = { correct: ok }
@@ -25,7 +28,7 @@ export function ListeningClozeGame({ words, voiceName, onResult, onComplete }: G
     setTimeout(() => {
       if (idx + 1 >= words.length) onComplete?.([...results, r])
       else { setVal(''); setShown(false); setIdx(idx + 1) }
-    }, 1200)
+    }, ok ? 1200 : 2200)
   }
 
   return (
@@ -38,8 +41,24 @@ export function ListeningClozeGame({ words, voiceName, onResult, onComplete }: G
       </div>
       <input value={val} onChange={e => setVal(e.target.value)}
         disabled={shown} placeholder="Le mot manquant…"
-        className="w-full p-3 border-2 border-rule rounded-xl text-center" />
-      {shown && <div className="text-center text-primary-700 font-bold">{w.lemma}</div>}
+        className={`w-full p-3 border-2 rounded-xl text-center ${
+          isCorrect ? 'border-ok bg-green-50 text-ok' :
+          isWrong ? 'border-warn bg-red-50 text-warn line-through' :
+          'border-rule'
+        }`} />
+      {shown && (
+        <div className={`text-center p-3 rounded-xl border-2 ${isCorrect ? 'bg-green-50 border-ok' : 'bg-red-50 border-red-200'}`}>
+          {isCorrect ? (
+            <div className="text-ok font-semibold">✅ Bonne réponse : <b>{w.lemma}</b></div>
+          ) : (
+            <div className="text-warn">
+              <div className="font-semibold">❌ Le mot manquant était :</div>
+              <div className="text-2xl font-extrabold text-ok mt-1">{w.lemma}</div>
+              <div className="text-sm italic text-gray-600 mt-1">{sentence}</div>
+            </div>
+          )}
+        </div>
+      )}
       <button onClick={check} disabled={shown || !val} className="w-full p-3 bg-primary-700 text-white rounded-xl font-semibold disabled:opacity-50">Valider</button>
     </div>
   )
