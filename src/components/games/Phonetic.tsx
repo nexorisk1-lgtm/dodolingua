@@ -23,13 +23,16 @@ export function PhoneticGame({ words: all, voiceName, onResult, onComplete }: Ga
   function pick(id: string) {
     if (picked) return
     setPicked(id)
-    const r = { correct: id === w.id }
+    const correct = id === w.id
+    const r = { correct }
     onResult(r); setResults([...results, r])
     setTimeout(() => {
       if (idx + 1 >= words.length) onComplete?.([...results, r])
       else { setPicked(null); setIdx(idx + 1) }
-    }, 900)
+    }, correct ? 900 : 1800)
   }
+
+  const isWrong = picked && picked !== w.id
 
   return (
     <div className="space-y-4">
@@ -41,20 +44,29 @@ export function PhoneticGame({ words: all, voiceName, onResult, onComplete }: Ga
       </div>
       <div className="space-y-2">
         {choices.map(c => {
-          const correct = picked && c.id === w.id
-          const wrong = picked === c.id && c.id !== w.id
+          const isCorrectAnswer = c.id === w.id
+          const isPickedWrong = picked === c.id && c.id !== w.id
+          const showAsCorrect = picked && isCorrectAnswer
           return (
             <button key={c.id} onClick={() => pick(c.id)}
-              className={`w-full p-3 rounded-xl border-2 font-semibold ${
-                correct ? 'border-ok bg-green-50 text-ok' :
-                wrong ? 'border-warn bg-red-50 text-warn' :
+              disabled={!!picked}
+              className={`w-full p-3 rounded-xl border-2 font-semibold transition ${
+                showAsCorrect ? 'border-ok bg-green-50 text-ok' :
+                isPickedWrong ? 'border-warn bg-red-50 text-warn' :
                 'border-rule bg-white'
               }`}>
               {c.lemma}
+              {showAsCorrect && ' ✅ Bonne réponse'}
+              {isPickedWrong && ' ❌'}
             </button>
           )
         })}
       </div>
+      {isWrong && (
+        <div className="text-center text-sm text-warn bg-red-50 border border-red-200 rounded-xl p-3">
+          La bonne réponse était : <b className="text-ok">{w.lemma}</b>
+        </div>
+      )}
     </div>
   )
 }
