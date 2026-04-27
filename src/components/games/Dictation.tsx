@@ -26,16 +26,20 @@ export function DictationGame({ words, voiceName, onResult, onComplete }: GamePr
 
   if (!w) return null
 
+  const score = shown ? similarity(val, w.lemma) : 0
+  const isCorrect = score >= 0.9
+  const isWrong = shown && !isCorrect
+
   function check() {
-    const score = similarity(val, w.lemma)
-    const r = { correct: score >= 0.9, hesitated: score >= 0.6 && score < 0.9 }
+    const s = similarity(val, w.lemma)
+    const r = { correct: s >= 0.9, hesitated: s >= 0.6 && s < 0.9 }
     setShown(true)
     onResult(r)
     setResults([...results, r])
     setTimeout(() => {
       if (idx + 1 >= words.length) onComplete?.([...results, r])
       else { setVal(''); setShown(false); setIdx(idx + 1) }
-    }, 1200)
+    }, isCorrect ? 1200 : 2200)
   }
 
   return (
@@ -51,9 +55,27 @@ export function DictationGame({ words, voiceName, onResult, onComplete }: GamePr
       </div>
       <input value={val} onChange={e => setVal(e.target.value)}
         disabled={shown} placeholder="Tape ce que tu entends…"
-        className="w-full p-3 border-2 border-rule rounded-xl text-center text-lg" />
-      {shown && <div className="text-center font-bold text-primary-700">{w.lemma}</div>}
-      <button onClick={check} disabled={shown || !val} className="w-full p-3 bg-primary-700 text-white rounded-xl font-semibold disabled:opacity-50">Valider</button>
+        className={`w-full p-3 border-2 rounded-xl text-center text-lg ${
+          isCorrect ? 'border-ok bg-green-50 text-ok' :
+          isWrong ? 'border-warn bg-red-50 text-warn line-through' :
+          'border-rule'
+        }`} />
+      {shown && (
+        <div className={`text-center p-3 rounded-xl border-2 ${isCorrect ? 'bg-green-50 border-ok' : 'bg-red-50 border-red-200'}`}>
+          {isCorrect ? (
+            <div className="text-ok font-semibold">✅ Bonne réponse : <b>{w.lemma}</b></div>
+          ) : (
+            <div className="text-warn">
+              <div className="font-semibold">❌ La bonne orthographe était :</div>
+              <div className="text-2xl font-extrabold text-ok mt-1">{w.lemma}</div>
+              {w.translation && <div className="text-xs text-gray-600 italic mt-1">→ {w.translation}</div>}
+            </div>
+          )}
+        </div>
+      )}
+      <button onClick={check} disabled={shown || !val} className="w-full p-3 bg-primary-700 text-white rounded-xl font-semibold disabled:opacity-50">
+        Valider
+      </button>
     </div>
   )
 }
