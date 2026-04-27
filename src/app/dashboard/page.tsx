@@ -2,9 +2,28 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
-import { QUEST_TYPES, QUEST_LABELS, QUEST_ICONS } from '@/lib/points'
 import { tierMeta, nextTier } from '@/lib/leagues'
 import type { QuestType } from '@/types/database'
+
+interface QuestDef {
+  type: QuestType
+  emoji: string
+  title: string
+  description: string
+  reward: string
+  href: string
+}
+
+const QUESTS: QuestDef[] = [
+  { type: 'apprentissage', emoji: '📖', title: 'Apprentissage', description: 'Découvre 5 nouveaux mots', reward: '+15 pts', href: '/session' },
+  { type: 'revision', emoji: '🔄', title: 'Révision', description: 'Consolide tes mots à revoir', reward: '+10 pts', href: '/session?mode=revision' },
+  { type: 'pratique', emoji: '💬', title: 'Pratique', description: 'Échange avec ton coach IA', reward: '+15 pts', href: '/coach' },
+  { type: 'jeu', emoji: '🎮', title: 'Jeu', description: 'Choisis un jeu et amuse-toi', reward: '+10 pts', href: '/jeux' },
+]
+
+const LEAGUE_THRESHOLDS: Record<string, number> = {
+  bronze: 100, argent: 200, or: 350, saphir: 500, emeraude: 700, obsidienne: 1000,
+}
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -20,16 +39,17 @@ export default async function DashboardPage() {
 
   const questMap: Record<QuestType, any> = {} as any
   for (const q of quests || []) questMap[q.quest_type as QuestType] = q
+  const completedCount = QUESTS.filter(q => questMap[q.type]?.status === 'completed').length
 
-  const completedCount = QUEST_TYPES.filter(t => questMap[t]?.status === 'completed').length
   const tier = lang?.league_tier || 'bronze'
   const tierInfo = tierMeta(tier)
   const next = nextTier(tier)
   const nextThreshold = LEAGUE_THRESHOLDS[tier] ?? 100
   const wp = lang?.weekly_points ?? 0
+  const progressPct = Math.min(100, Math.round((wp / nextThreshold) * 100))
 
   return (
-    <Container className="space-y-5">
+    <Container className="space-y-5 pb-20">
       <Card className="!py-4">
         <div className="flex items-center justify-between">
           <div>
@@ -49,25 +69,44 @@ export default async function DashboardPage() {
       </Card>
 
       <div>
-        <h2 className="text-xs uppercase font-bold text-gray-500 mb-2">4 quêtes du jour</h2>
+        <div className="flex items-baseline justify-between mb-2">
+          <h2 className="text-xs uppercase font-bold text-gray-500">Tes 4 quêtes du jour</h2>
+          {completedCount === 4 && <span className="text-xs font-bold text-ok">⭐ Quadrifecta !</span>}
+        </div>
         <div className="space-y-2">
-          {QUEST_TYPES.map(t => {
-            const q = questMap[t]
-            const done = q?.status === 'completed'
-            const link = t === 'apprentissage' ? '/session' : t === 'revision' ? '/session?mode=revision' : t === 'pratique' ? '/coach' : '/jeux'
+          {QUESTS.map(q => {
+            const status = questMap[q.type]?.status
+            const earned = questMap[q.type]?.points_earned || 0
+            const done = status === 'completed'
+            const inProgress = status === 'in_progress'
             return (
-              <Link key={t} href={link}>
-                <div className={`p-3 rounded-xl border flex items-center gap-3 ${done ? 'bg-green-50 border-green-200' : 'bg-white border-rule'}`}>
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${done ? 'bg-ok text-white' : 'bg-primary-50'}`}>
-                    {done ? '✓' : QUEST_ICONS[t]}
+              <Link key={q.type} href={q.href as any}>
+                <div className={`p-3 rounded-xl border flex items-center gap-3 transition ${
+                  done ? 'bg-green-50 border-green-200' :
+                  inProgress ? 'bg-yellow-50 border-yellow-200' :
+                  'bg-white border-rule hover:border-primary-300'
+                }`}>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
+                    done ? 'bg-ok text-white' : 'bg-primary-50'
+                  }`}>
+                    {done ? '✓' : q.emoji}
                   </div>
                   <div className="flex-1">
-                    <div className="font-semibold text-sm">{QUEST_LABELS[t]}</div>
-                    <div className="text-xs text-gray-500">
-                      {done ? `+${q.points_earned} pts` : 'À faire'}
+                    <div className="font-bold text-sm text-primary-900">{q.title}</div>
+                    <div className="text-xs text-gray-600">
+                      {done ? <span className="text-ok font-semibold">+{earned} pts gagnés ✨</span> : q.description}
                     </div>
                   </div>
-                  {!done && <span className="text-primary-500">→</span>}
+                  <div className="text-right">
+                    {done ? (
+                      <span className="text-xs font-bold text-ok">⭐</span>
+                    ) : (
+                      <>
+                        <div className="text-xs font-bold text-primary-700">{q.reward}</div>
+                        <div className="text-primary-500 text-lg">→</div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </Link>
             )
@@ -78,25 +117,18 @@ export default async function DashboardPage() {
       <Link href="/ligue">
         <Card style={{ background: `linear-gradient(135deg, ${tierInfo.color}, #2E75B6)` }} className="text-white">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <div className="text-xs opacity-80">Ligue {tierInfo.label}</div>
               <div className="text-2xl font-extrabold mt-0.5">{wp} / {nextThreshold} pts</div>
               {next && <div className="text-xs opacity-80 mt-0.5">→ {tierMeta(next).label} si tu dépasses {nextThreshold}</div>}
+              <div className="mt-2 h-2 bg-white/20 rounded-full overflow-hidden">
+                <div className="h-full bg-white transition-all" style={{ width: `${progressPct}%` }} />
+              </div>
             </div>
-            <div className="text-5xl">{tierInfo.emoji}</div>
+            <div className="text-5xl ml-3">{tierInfo.emoji}</div>
           </div>
         </Card>
       </Link>
-
-      <Card>
-        <h2 className="text-sm font-bold text-primary-700 mb-2">Accès rapide</h2>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <Link href="/jeux" className="p-2 bg-primary-50 rounded-lg text-center font-semibold text-primary-700">🎮 Jeux</Link>
-          <Link href="/coach" className="p-2 bg-primary-50 rounded-lg text-center font-semibold text-primary-700">💬 Coach</Link>
-          <Link href="/profile" className="p-2 bg-primary-50 rounded-lg text-center font-semibold text-primary-700">👤 Profil</Link>
-          <Link href="/grc" className="p-2 bg-primary-50 rounded-lg text-center font-semibold text-primary-700">🛡️ GRC</Link>
-        </div>
-      </Card>
     </Container>
   )
 }
@@ -108,8 +140,4 @@ function Stat({ n, l }: { n: string; l: string }) {
       <div className="text-[10px] uppercase text-gray-500">{l}</div>
     </div>
   )
-}
-
-const LEAGUE_THRESHOLDS: Record<string, number> = {
-  bronze: 100, argent: 200, or: 350, saphir: 500, emeraude: 700, obsidienne: 1000,
 }
