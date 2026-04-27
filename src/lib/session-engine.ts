@@ -1,6 +1,6 @@
 /**
- * Moteur de session entrelacée — 4 phases.
- * Génère un plan d'exercices alterné pour une liste de mots à apprendre.
+ * Moteur de session entrelacée — version concise.
+ * Pour 5 mots : ~16 items au total (3-4 par mot), réparti en 3 phases.
  */
 
 export type Modality =
@@ -21,11 +21,11 @@ export interface PlanItem {
 
 interface BuildOpts {
   mode?: 'oral' | 'complet'
-  hasImageMap?: Record<string, boolean>   // word_id → true si concept a une image
+  hasImageMap?: Record<string, boolean>
 }
 
-const ORAL_MODS: Modality[] = ['audio', 'ipa', 'micro', 'speaking_cloze', 'phonetic', 'listening_cloze']
-const FULL_MODS: Modality[] = ['audio', 'ipa', 'micro', 'translation', 'example', 'quiz', 'sentence_builder', 'listening_cloze', 'speaking_cloze', 'phonetic']
+const ORAL_MODS: Modality[] = ['audio', 'micro', 'speaking_cloze', 'listening_cloze']
+const FULL_MODS: Modality[] = ['translation', 'micro', 'quiz', 'listening_cloze']
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -36,19 +36,6 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-function pickPracticeModality(mode: 'oral' | 'complet', usedCount: number): Modality {
-  const pool = mode === 'oral' ? ORAL_MODS : FULL_MODS
-  // Légère variation pour ne pas répéter
-  return pool[(usedCount * 7) % pool.length]
-}
-
-function pickRecallModality(mode: 'oral' | 'complet', recallIdx: number): Modality {
-  const recallPool: Modality[] = mode === 'oral'
-    ? ['speaking_cloze', 'listening_cloze', 'phonetic']
-    : ['quiz', 'sentence_builder', 'listening_cloze', 'speaking_cloze']
-  return recallPool[recallIdx % recallPool.length]
-}
-
 export function buildInterleavedPlan(
   wordIds: string[],
   opts: BuildOpts = {}
@@ -56,84 +43,26 @@ export function buildInterleavedPlan(
   const mode = opts.mode || 'complet'
   const hasImage = opts.hasImageMap || {}
   const items: PlanItem[] = []
+  const pool = mode === 'oral' ? ORAL_MODS : FULL_MODS
 
-  // ---- Phase 1 — Discovery burst ----
   for (const id of wordIds) {
-    items.push({
-      phase: 'discovery',
-      type: 'discovery',
-      word_id: id,
-      modality: 'discovery',
-      est_seconds: 7,
-    })
+    items.push({ phase: 'discovery', type: 'discovery', word_id: id, modality: 'discovery', est_seconds: 6 })
   }
 
-  // ---- Phase 2 — Pratique entrelacée ----
-  // Chaque mot reçoit 2-3 expositions : 1 practice + 1-2 recalls.
   const queue = shuffle(wordIds)
-  const recall: { id: string; count: number }[] = []
-  const practiceCount: Record<string, number> = {}
-
-  let safety = 0
-  while ((queue.length > 0 || recall.length > 0) && safety++ < 200) {
-    const wantRecall = Math.random() < 0.4 && recall.length > 0
-    if (wantRecall) {
-      const r = recall.shift()!
-      items.push({
-        phase: 'interleaved',
-        type: 'recall',
-        word_id: r.id,
-        modality: pickRecallModality(mode, r.count),
-        est_seconds: 12,
-        recall_count: r.count + 1,
-      })
-      if (r.count + 1 < 2) recall.push({ id: r.id, count: r.count + 1 })
-    } else if (queue.length > 0) {
-      const id = queue.shift()!
-      const used = (practiceCount[id] = (practiceCount[id] || 0) + 1)
-      items.push({
-        phase: 'interleaved',
-        type: 'practice',
-        word_id: id,
-        modality: pickPracticeModality(mode, used),
-        est_seconds: 18,
-      })
-      recall.push({ id, count: 0 })
-    }
+  let idx = 0
+  for (const id of queue) {
+    items.push({ phase: 'interleaved', type: 'practice', word_id: id, modality: pool[idx % pool.length], est_seconds: 14 })
+    idx++
   }
 
-  // ---- Phase 3 — Mix quiz final ----
   for (const id of shuffle(wordIds)) {
     const useImage = mode === 'complet' && hasImage[id]
-    items.push({
-      phase: 'mix',
-      type: 'mix_quiz',
-      word_id: id,
-      modality: useImage ? 'association' : 'quiz',
-      est_seconds: 10,
-    })
-  }
-  // 2e format
-  for (const id of shuffle(wordIds)) {
-    items.push({
-      phase: 'mix',
-      type: 'mix_quiz',
-      word_id: id,
-      modality: mode === 'oral' ? 'speaking_cloze' : 'sentence_builder',
-      est_seconds: 12,
-    })
+    items.push({ phase: 'interleaved', type: 'recall', word_id: id, modality: useImage ? 'association' : 'quiz', est_seconds: 10, recall_count: 1 })
   }
 
-  // ---- Phase 4 — Ancrage ----
-  // Phase générique ; les mots hésitants seront ré-injectés à l'exécution
-  for (const id of wordIds) {
-    items.push({
-      phase: 'anchor',
-      type: 'anchor',
-      word_id: id,
-      modality: 'translation',
-      est_seconds: 8,
-    })
+  for (const id of shuffle(wordIds)) {
+    items.push({ phase: 'mix', type: 'mix_quiz', word_id: id, modality: mode === 'oral' ? 'speaking_cloze' : 'quiz', est_seconds: 10 })
   }
 
   return items
@@ -145,5 +74,5 @@ export function planDurationMin(plan: PlanItem[]): number {
 }
 
 export function phaseLabel(p: Phase): string {
-  return ({ discovery: 'Discovery', interleaved: 'Pratique entrelacée', mix: 'Mix quiz', anchor: 'Ancrage' })[p]
+  return ({ discovery: 'Découverte', interleaved: 'Pratique', mix: 'Validation', anchor: 'Ancrage' })[p]
 }
