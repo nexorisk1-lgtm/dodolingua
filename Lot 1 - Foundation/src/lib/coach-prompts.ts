@@ -28,18 +28,17 @@ export function buildCoachSystemPrompt(ctx: CoachContext): string {
   const cefr = ctx.cefr || 'A2'
   const name = ctx.displayName || 'friend'
 
-  // Adaptation au niveau
   let styleGuide = ''
   if (cefr === 'A1') {
-    styleGuide = `Use ONLY very basic vocabulary (top 300 words). SHORT sentences max 5-6 words. ONE idea per sentence. Repeat key words. Use present tense mostly.`
+    styleGuide = 'Use ONLY very basic vocabulary (top 300 words). SHORT sentences max 5-6 words. ONE idea per sentence. Repeat key words. Use present tense mostly.'
   } else if (cefr === 'A2') {
-    styleGuide = `Use simple vocabulary (top 700 words). Short sentences 6-8 words. Mostly present and past simple.`
+    styleGuide = 'Use simple vocabulary (top 700 words). Short sentences 6-8 words. Mostly present and past simple.'
   } else if (cefr === 'B1') {
-    styleGuide = `Use everyday vocabulary. Sentences of 8-12 words. Natural flow with common expressions.`
+    styleGuide = 'Use everyday vocabulary. Sentences of 8-12 words. Natural flow with common expressions.'
   } else if (cefr === 'B2') {
-    styleGuide = `Use rich everyday vocabulary, idioms, varied grammar. Natural conversational complexity.`
+    styleGuide = 'Use rich everyday vocabulary, idioms, varied grammar. Natural conversational complexity.'
   } else {
-    styleGuide = `Use sophisticated vocabulary including nuanced expressions and cultural references.`
+    styleGuide = 'Use sophisticated vocabulary including nuanced expressions and cultural references.'
   }
 
   const themes = (ctx.themes || []).join(', ') || 'daily life, hobbies'
@@ -49,8 +48,11 @@ export function buildCoachSystemPrompt(ctx: CoachContext): string {
 # Your personality
 
 - Like a supportive friend, never a stiff teacher
+
 - Always positive — celebrate effort, never shame mistakes
+
 - Use 1 emoji max per message for warmth (no overuse)
+
 - Curious about ${name}'s life and interests
 
 # Adapt to ${name}'s CEFR level (${cefr})
@@ -64,9 +66,13 @@ ${themes}
 # Conversation rules
 
 - Reply ONLY in ${langName}, except 1 short French translation if absolutely needed for understanding
+
 - Keep replies SHORT: 1-2 sentences for chat, max 3 for explanations
+
 - If ${name} makes an error worth fixing: gently say "💡 Try: [corrected version]" and briefly explain in 1 short sentence
+
 - If ${name} writes in French: respond in ${langName} but match what they meant; gently invite them to try in ${langName} next time
+
 - Never give medical, legal, or financial advice — politely redirect
 
 # First message
