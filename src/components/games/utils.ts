@@ -13,6 +13,42 @@ export function pickDistractors(words: GameWord[], correct: GameWord, n = 3): Ga
   return shuffle(words.filter(w => w.id !== correct.id)).slice(0, n)
 }
 
+// Voix premium par ordre de préférence (les meilleures du marché Web Speech)
+const PREFERRED_VOICES = [
+  'Google UK English Female',
+  'Google UK English Male',
+  'Microsoft Sonia Online (Natural) - English (United Kingdom)',
+  'Microsoft Libby Online (Natural) - English (United Kingdom)',
+  'Microsoft Ryan Online (Natural) - English (United Kingdom)',
+  'Daniel',         // macOS UK
+  'Karen',          // macOS UK premium
+  'Serena',         // macOS UK premium
+  'Samantha',       // macOS US neural
+  'Microsoft Hazel - English (Great Britain)',
+]
+
+export function getBestVoice(langPrefix = 'en'): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null
+  const voices = window.speechSynthesis.getVoices()
+  if (voices.length === 0) return null
+
+  for (const name of PREFERRED_VOICES) {
+    const v = voices.find(v => v.name === name || v.name.includes(name))
+    if (v) return v
+  }
+  // Fallback : voix anglaise marquée "premium" ou "natural"
+  const premium = voices.find(v =>
+    v.lang.startsWith(langPrefix) &&
+    /natural|premium|neural|enhanced/i.test(v.name)
+  )
+  if (premium) return premium
+  // Dernier fallback : n'importe quelle voix UK puis US
+  return voices.find(v => v.lang === 'en-GB') ||
+         voices.find(v => v.lang === 'en-US') ||
+         voices.find(v => v.lang.startsWith(langPrefix)) ||
+         null
+}
+
 export function speak(text: string, voiceName?: string | null, rate = 1) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
   window.speechSynthesis.cancel()
@@ -21,8 +57,12 @@ export function speak(text: string, voiceName?: string | null, rate = 1) {
     const v = window.speechSynthesis.getVoices().find(v => v.name === voiceName)
     if (v) { u.voice = v; u.lang = v.lang }
   } else {
-    u.lang = 'en-GB'
+    // Auto-selection de la meilleure voix dispo
+    const best = getBestVoice('en')
+    if (best) { u.voice = best; u.lang = best.lang }
+    else u.lang = 'en-GB'
   }
   u.rate = rate
+  u.pitch = 1
   window.speechSynthesis.speak(u)
 }
