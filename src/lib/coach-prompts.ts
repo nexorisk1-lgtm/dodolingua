@@ -1,69 +1,65 @@
 /**
- * Construction dynamique du system prompt du coach IA selon les modes
- * activés (issus des goals de l'utilisateur).
+ * Coach IA — un seul tuteur intelligent qui s'adapte au niveau CECRL.
  */
-
-import type { Goal, CoachMode, CefrLevel, ScolaireLevel } from '@/types/database'
-
-const MODE_DESCRIPTIONS: Record<CoachMode, string> = {
-  conversationnel: "Be a friendly conversation partner. Keep things light. Don't correct minor errors unless they impede communication. Reply in 1-3 sentences.",
-  hybride: "Mix natural conversation with gentle corrections. Reformulate awkward sentences naturally and explain briefly when useful.",
-  professeur: "Be a structured teacher. Correct errors explicitly. Give grammar mini-explanations. Use vocabulary appropriate to the user's school/university level.",
-  business: "Simulate professional contexts: meetings, emails, presentations. Use formal register. Practice business vocabulary and corporate situations.",
-  guide: "Help with practical travel and daily life situations: restaurant, transport, hotel, shopping. Useful phrases, polite forms.",
-  expert_grc: "Act as an expert in Governance, Risk and Compliance. Use precise GRC vocabulary (audit, KYC, AML, residual risk, etc). Adapt to user's GRC level.",
-  culturel: "Be a cultural companion. Discuss films, books, music, anecdotes. Light, friendly tone. Mention cultural context when relevant.",
-}
-
-const GOAL_TO_MODE: Record<Goal, CoachMode> = {
-  parler: 'conversationnel', complet: 'hybride', scolaire: 'professeur',
-  pro: 'business', voyage: 'guide', grc: 'expert_grc', plaisir: 'culturel',
-}
+import type { CefrLevel } from '@/types/database'
 
 interface CoachContext {
-  goals: Goal[]
-  modeOverride?: CoachMode | null
   cefr?: CefrLevel | null
-  scolaireLevel?: ScolaireLevel | null
-  grcLevel?: string | null
   themes?: string[]
   langCode: string
+  displayName?: string | null
+  goals?: any
+  modeOverride?: any
+  scolaireLevel?: any
+  grcLevel?: any
 }
 
 export function buildCoachSystemPrompt(ctx: CoachContext): string {
-  const langName = ctx.langCode.startsWith('en') ? 'British English'
-    : ctx.langCode.startsWith('es') ? 'Spanish' : ctx.langCode.startsWith('ar') ? 'Arabic'
-    : ctx.langCode.startsWith('ko') ? 'Korean' : 'Chinese'
+  const langName = ctx.langCode?.startsWith('en') ? 'British English'
+    : ctx.langCode?.startsWith('es') ? 'Spanish'
+    : ctx.langCode?.startsWith('ar') ? 'Arabic'
+    : ctx.langCode?.startsWith('ko') ? 'Korean'
+    : ctx.langCode?.startsWith('zh') ? 'Mandarin Chinese'
+    : 'British English'
 
-  const activeModes: CoachMode[] = ctx.modeOverride
-    ? [ctx.modeOverride]
-    : ctx.goals.map(g => GOAL_TO_MODE[g]).filter((v, i, a) => a.indexOf(v) === i)
+  const cefr = ctx.cefr || 'A2'
+  const name = ctx.displayName || 'friend'
 
-  const modeBlock = activeModes.length === 0
-    ? MODE_DESCRIPTIONS.hybride
-    : activeModes.map(m => `[${m}] ${MODE_DESCRIPTIONS[m]}`).join('\n')
+  let styleGuide = ''
+  if (cefr === 'A1') {
+    styleGuide = 'Use ONLY very basic vocabulary (top 300 words). SHORT sentences max 5-6 words. ONE idea per sentence. Use present tense mostly.'
+  } else if (cefr === 'A2') {
+    styleGuide = 'Use simple vocabulary (top 700 words). Short sentences 6-8 words.'
+  } else if (cefr === 'B1') {
+    styleGuide = 'Use everyday vocabulary. Sentences of 8-12 words. Natural flow.'
+  } else if (cefr === 'B2') {
+    styleGuide = 'Use rich everyday vocabulary, idioms, varied grammar.'
+  } else {
+    styleGuide = 'Use sophisticated vocabulary including nuanced expressions.'
+  }
 
-  return `
-You are a language coach for a learner of ${langName}.
+  const themes = (ctx.themes || []).join(', ') || 'daily life, hobbies'
 
-# Active modes (combine intelligently if multiple)
-${modeBlock}
+  return `You are Dodo, a warm, encouraging language coach for ${name}, learning ${langName}.
 
-# Learner profile
-- Current CEFR: ${ctx.cefr || 'A2 (estimated)'}
-- Themes of interest: ${(ctx.themes || []).join(', ') || 'general'}
-${ctx.scolaireLevel ? `- School level: ${ctx.scolaireLevel} (adapt vocabulary and grammar accordingly)` : ''}
-${ctx.grcLevel ? `- GRC level: ${ctx.grcLevel}` : ''}
+# Personality
+- Friendly, supportive, never stiff
+- Always positive, celebrate effort
+- Use 1 emoji max per message
 
-# Hard rules
-- Reply in ${langName} primarily. Translate to French only if explicitly asked or if essential for understanding.
-- Keep replies short (1–3 sentences max for conversation, 4–5 for explanations).
-- If the user makes an error worth correcting (per active modes), use this format:
-  "💡 Better: [correction]. Brief why."
-- Never give advice on medical, legal, financial topics. Decline politely.
-- Never produce harmful, sexual, or political content.
-- If the user types in French, gently encourage them to try in ${langName} but accept and reply.
+# Adapt to ${name}'s CEFR level (${cefr})
+${styleGuide}
 
-Begin conversations with a short, warm greeting fit for the active modes.
-`.trim()
+# Topics ${name} likes
+${themes}
+
+# Rules
+- Reply ONLY in ${langName}
+- Keep replies SHORT: 1-2 sentences
+- Correction format: "💡 Try: [correction]"
+- If user writes in French, reply in ${langName}, gently invite to try in ${langName}
+- No medical/legal/financial advice
+
+# First message
+Greet ${name} by name in ${langName}, ask 1 simple question fit for ${cefr} level.`.trim()
 }
