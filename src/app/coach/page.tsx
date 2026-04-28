@@ -22,9 +22,49 @@ function cleanForVoice(text: string): string {
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F2FF}\u{FE00}-\u{FE0F}\u{1F100}-\u{1F1FF}]/gu, '')
     .replace(/\*\*/g, '')
     .replace(/\*/g, '')
-    .replace(/->/g, ' devient ')
+    .replace(/->/g, ' ')
+    .replace(/→/g, ' ')
+    .replace(/Correction:/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+// Parse une ligne "Correction: X -> Y. (Z)" ou "Correction: X → Y. (Z)"
+function parseCorrection(line: string): { wrong: string; correct: string; reason?: string } | null {
+  const m = line.match(/^Correction:\s*(.+?)\s*(?:->|→)\s*(.+?)(?:\s*\((.+?)\))?\.?\s*$/i)
+  if (!m) return null
+  return { wrong: m[1].trim(), correct: m[2].trim(), reason: m[3]?.trim() }
+}
+
+function MessageContent({ text }: { text: string }) {
+  const lines = text.split('\n').filter(l => l.trim() !== '')
+  return (
+    <div className="space-y-2">
+      {lines.map((line, i) => {
+        const corr = parseCorrection(line)
+        if (corr) {
+          return (
+            <div key={i} className="bg-amber-50 border-l-4 border-accent-500 rounded p-2 my-1">
+              <div className="text-[11px] font-bold text-accent-700 uppercase tracking-wide">💡 Correction</div>
+              <div className="mt-1 text-sm">
+                <span className="line-through text-warn">{corr.wrong}</span>
+                <span className="mx-2 text-gray-400">→</span>
+                <span className="font-bold text-ok">{corr.correct}</span>
+              </div>
+              {corr.reason && (
+                <div className="text-xs italic text-gray-600 mt-1">📖 {corr.reason}</div>
+              )}
+            </div>
+          )
+        }
+        return <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{line}</div>
+      })}
+    </div>
+  )
+}
+
+function hasCorrection(text: string): boolean {
+  return /correction\s*:/i.test(text)
 }
 
 export default function CoachPage() {
@@ -40,7 +80,7 @@ export default function CoachPage() {
   const greetedRef = useRef(false)
 
   function speakClean(text: string) {
-    if (voiceOn) speak(cleanForVoice(text), voiceName)
+    if (voiceOn) speak(cleanForVoice(text), voiceName, 0.85)
   }
 
   useEffect(() => {
@@ -125,14 +165,20 @@ export default function CoachPage() {
     setRecording(false)
   }
 
+  // Choisir la pose du Dodo selon le dernier message du coach
+  const lastModelMsg = [...messages].reverse().find(m => m.role === 'model')
+  const dodoPose = lastModelMsg
+    ? (hasCorrection(lastModelMsg.text) ? 'study' : 'happy')
+    : 'idle'
+
   return (
     <Container className="max-w-2xl space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Mascot pose="listen" size={56} animation="breathe" />
+          <Mascot pose={dodoPose} size={80} animation="breathe" />
           <div>
-            <h1 className="text-xl font-bold text-primary-900">Dodo, ton coach</h1>
-            <div className="text-xs text-gray-500">Discute en anglais, je t'aide</div>
+            <h1 className="text-2xl font-bold text-primary-900">Dodo, ton coach</h1>
+            <div className="text-xs text-gray-500">Discute en anglais, je te corrige en douceur</div>
           </div>
         </div>
         <button onClick={() => setVoiceOn(!voiceOn)}
@@ -144,20 +190,30 @@ export default function CoachPage() {
       <Card className="!p-3">
         <div ref={scrollRef} className="h-[60vh] overflow-y-auto space-y-2 px-1 py-2">
           {messages.length === 0 && !loading && (
-            <div className="text-center py-8">
-              <Mascot pose="idle" size={100} animation="wave" />
-              <div className="text-sm text-gray-400 italic mt-3">Dodo arrive…</div>
+            <div className="text-center py-12">
+              <Mascot pose="wave" size={140} animation="wave" />
+              <div className="text-sm text-gray-400 italic mt-4">Dodo arrive…</div>
+            </div>
+          )}
+          {messages.length === 0 && loading && (
+            <div className="text-center py-12">
+              <Mascot pose="study" size={140} animation="breathe" />
+              <div className="text-sm text-gray-400 italic mt-4">Dodo prépare ton accueil…</div>
             </div>
           )}
           {messages.map((m, i) => (
             <div key={i} className={`max-w-[85%] p-3 rounded-2xl text-sm ${m.role === 'user' ? 'ml-auto bg-primary-700 text-white rounded-br-md' : 'mr-auto bg-primary-50 text-gray-800 rounded-bl-md'}`}>
-              <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
-              {m.role === 'model' && (
-                <button onClick={() => speakClean(m.text)} className="block mt-1 text-[10px] opacity-60 hover:opacity-100">🔊 Réécouter</button>
+              {m.role === 'model' ? (
+                <>
+                  <MessageContent text={m.text} />
+                  <button onClick={() => speakClean(m.text)} className="block mt-2 text-[10px] opacity-60 hover:opacity-100">🔊 Réécouter</button>
+                </>
+              ) : (
+                <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
               )}
             </div>
           ))}
-          {loading && (
+          {loading && messages.length > 0 && (
             <div className="flex items-center gap-2 text-xs text-gray-400 italic">
               <Mascot pose="study" size={32} animation="breathe" />
               Dodo réfléchit…
