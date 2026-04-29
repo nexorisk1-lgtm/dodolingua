@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
+import { Button } from '@/components/ui/Button
 import { Mascot } from '@/components/Mascot'
 import { createClient } from '@/lib/supabase/client'
 import { speak } from '@/components/games/utils'
@@ -191,7 +191,7 @@ export default function CoachPage() {
         <div ref={scrollRef} className="h-[60vh] overflow-y-auto space-y-2 px-1 py-2">
           {messages.length === 0 && !loading && (
             <div className="text-center py-12">
-              <Mascot pose="wave" size={140} animation="wave" />
+              <Mascot pose="idle" size={140} animation="wave" />
               <div className="text-sm text-gray-400 italic mt-4">Dodo arrive…</div>
             </div>
           )}
