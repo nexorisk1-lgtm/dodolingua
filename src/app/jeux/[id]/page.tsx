@@ -24,17 +24,39 @@ export default function GamePage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      // Si jeu nécessite image, sélectionner uniquement ces concepts
+
+      // v1.4 — Récup niveau utilisateur (filtre CEFR)
+      const { data: ulang } = await supabase.from('user_languages')
+        .select('cefr_global').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle()
+      const order = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+      const userLevel = (ulang?.cefr_global || 'A1').toUpperCase()
+      const allowed = order.slice(0, Math.max(0, order.indexOf(userLevel)) + 1)
+
+      // v1.4 — SELECT enrichi : gloss_fr + translations(lemma, ipa, audio_url, example)
       let q = supabase.from('concepts')
-        .select('id, image_url, image_alt, translations(lemma, ipa, audio_url)')
-        .limit(meta?.needsImage ? 12 : 8)
+        .select('id, image_url, image_alt, gloss_fr, cefr_min, translations(lemma, ipa, audio_url, example)')
+        .in('cefr_min', allowed)
+        .eq('translations.lang_code', 'en-GB')
+        .limit(meta?.needsImage ? 16 : 12)
       if (meta?.needsImage) q = q.not('image_url', 'is', null)
       const { data: cs } = await q
-      const w: GameWord[] = (cs || []).map((c: any) => ({
-        id: c.id, image_url: c.image_url, image_alt: c.image_alt,
-        lemma: c.translations?.[0]?.lemma || '', ipa: c.translations?.[0]?.ipa,
+
+      let w: GameWord[] = (cs || []).map((c: any) => ({
+        id: c.id,
+        image_url: c.image_url,
+        image_alt: c.image_alt,
+        lemma: c.translations?.[0]?.lemma || '',
+        ipa: c.translations?.[0]?.ipa,
         audio_url: c.translations?.[0]?.audio_url,
+        translation: c.gloss_fr || null,         // v1.4 — sens en français
+        example: c.translations?.[0]?.example || null, // v1.4 — phrase exemple
       }))
+
+      // v1.4 — Filtrer pour les jeux qui ont besoin de phrases d'exemple
+      if (id === 'sentence' || id === 'speaking_cloze') {
+        w = w.filter(x => x.example && x.example.trim().length > 0)
+      }
+
       setWords(w)
       const { data: vp } = await supabase.from('user_voice_pref')
         .select('voice_name').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle()
@@ -67,6 +89,16 @@ export default function GamePage() {
   if (!Game) return <Container><Card>Jeu non disponible.</Card></Container>
 
   if (loading) return <Container className="max-w-md"><Card>Chargement…</Card></Container>
+  if (words.length === 0) return (
+    <Container className="max-w-md py-8">
+      <Card className="text-center space-y-3">
+        <div className="text-5xl">📚</div>
+        <h2 className="text-lg font-bold text-primary-900">Pas encore assez de contenu</h2>
+        <p className="text-sm text-gray-600">Ce jeu n&apos;a pas encore de phrases pour ton niveau. Reviens bientôt — on enrichit la base régulièrement.</p>
+        <button onClick={() => router.push('/jeux')} className="w-full p-2 bg-primary-700 text-white rounded-xl font-semibold">Retour aux jeux</button>
+      </Card>
+    </Container>
+  )
   if (done) return (
     <Container className="max-w-md py-8">
       <Card className="text-center space-y-3">

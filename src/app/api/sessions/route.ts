@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { buildInterleavedPlan } from '@/lib/session-engine'
 
+// v1.4 — Liste des niveaux CEFR <= au niveau utilisateur (inclusif)
+function levelsAtOrBelow(target: string | null | undefined): string[] {
+  const order = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+  const t = (target || 'A1').toUpperCase()
+  const idx = order.indexOf(t)
+  return idx < 0 ? ['A1'] : order.slice(0, idx + 1)
+}
+
+
 export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -25,10 +34,17 @@ export async function POST(req: NextRequest) {
   }
 
   if (concepts.length < wordCount) {
+    // v1.4 — Filtre CEFR : ne propose que les niveaux <= niveau utilisateur
+    const { data: ulang } = await supabase
+      .from('user_languages').select('cefr_global').eq('user_id', user.id)
+      .eq('lang_code', lang_code).maybeSingle()
+    const allowedLevels = levelsAtOrBelow(ulang?.cefr_global)
     const need = wordCount - concepts.length
     const knownIds = new Set(concepts.map(c => c.id))
     const { data: unseen } = await supabase
-      .from('concepts').select('id, image_url').limit(need * 2)
+      .from('concepts').select('id, image_url')
+      .in('cefr_min', allowedLevels)
+      .limit(need * 3)
     for (const c of unseen || []) {
       if (concepts.length >= wordCount) break
       if (!knownIds.has(c.id)) concepts.push(c)

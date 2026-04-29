@@ -57,11 +57,45 @@ export async function POST(req: NextRequest) {
     payload_json: { user_msg: messages[messages.length - 1]?.text?.slice(0, 200), provider },
   })
 
-  if ((count || 0) === 0) {
-    await supabase.from('daily_quests').upsert({
-      user_id: user.id, lang_code: prefs?.lang_code || 'en-GB',
-      date: today, quest_type: 'pratique', status: 'in_progress',
-    }, { onConflict: 'user_id,lang_code,date,quest_type' })
+  // v1.4 — Gestion de la quête "Pratique" :
+  // - 1er message réel → in_progress
+  // - 3 messages réels → completed + points
+  const realUserMsgs = messages.filter((m: any) => m.role === 'user' && m.text !== '__START__').length
+  const langCodePref = prefs?.lang_code || 'en-GB'
+
+  if (realUserMsgs >= 1) {
+    // Vérifie le statut actuel pour décider in_progress vs completed
+    const { data: existing } = await supabase.from('daily_quests')
+      .select('status, points_earned')
+      .eq('user_id', user.id).eq('lang_code', langCodePref)
+      .eq('date', today).eq('quest_type', 'pratique').maybeSingle()
+
+    if (realUserMsgs >= 3 && existing?.status !== 'completed') {
+      // v1.4 — Quête complétée après 3 messages réels
+      const points = 15  // matches QUEST reward "+15 pts" du dashboard
+      await supabase.from('daily_quests').upsert({
+        user_id: user.id, lang_code: langCodePref,
+        date: today, quest_type: 'pratique', status: 'completed',
+        points_earned: points,
+        completed_at: new Date().toISOString(),
+        content_ref: { messages_count: realUserMsgs },
+      }, { onConflict: 'user_id,lang_code,date,quest_type' })
+      // Incrémente les points hebdo/total
+      await supabase.rpc('increment_user_points', { p_user: user.id, p_lang: langCodePref, p_amount: points }).then(() => null, () => null)
+    } else if (existing?.status !== 'completed' && existing?.status !== 'in_progress') {
+      await supabase.from('daily_quests').upsert({
+        user_id: user.id, lang_code: langCodePref,
+        date: today, quest_type: 'pratique', status: 'in_progress',
+        content_ref: { messages_count: realUserMsgs },
+      }, { onConflict: 'user_id,lang_code,date,quest_type' })
+    } else if (existing?.status === 'in_progress') {
+      // Mise à jour du compteur dans content_ref
+      await supabase.from('daily_quests').upsert({
+        user_id: user.id, lang_code: langCodePref,
+        date: today, quest_type: 'pratique', status: 'in_progress',
+        content_ref: { messages_count: realUserMsgs },
+      }, { onConflict: 'user_id,lang_code,date,quest_type' })
+    }
   }
 
   return NextResponse.json({ reply, provider, remaining: DAILY_LIMIT - (count || 0) - 1 })
