@@ -12,13 +12,51 @@ interface QuestDef {
   description: string
   reward: string
   href: string
+  target: number   // v1.3 — objectif numérique pour la barre de progression
+  unit: string     // v1.3 — unité affichée (ex: "mots", "jeu", "message")
 }
 
 const QUESTS: QuestDef[] = [
-  { type: 'apprentissage', emoji: '📖', title: 'Apprentissage', description: 'Découvre 5 nouveaux mots', reward: '+15 pts', href: '/session' },
-  { type: 'revision', emoji: '🔄', title: 'Révision', description: 'Consolide tes mots à revoir', reward: '+10 pts', href: '/session?mode=revision' },
-  { type: 'pratique', emoji: '💬', title: 'Pratique', description: 'Échange avec ton coach IA', reward: '+15 pts', href: '/coach' },
-  { type: 'jeu', emoji: '🎮', title: 'Jeu', description: 'Choisis un jeu et amuse-toi', reward: '+10 pts', href: '/jeux' },
+  {
+    type: 'apprentissage',
+    emoji: '📖',
+    title: 'Apprentissage',
+    description: 'Découvre 5 nouveaux mots',
+    reward: '+15 pts',
+    href: '/session',
+    target: 5,
+    unit: 'mots',
+  },
+  {
+    type: 'revision',
+    emoji: '🔄',
+    title: 'Révision',
+    description: 'Consolide tes mots à revoir',
+    reward: '+10 pts',
+    href: '/session?mode=revision',
+    target: 5,
+    unit: 'mots',
+  },
+  {
+    type: 'pratique',
+    emoji: '💬',
+    title: 'Pratique',
+    description: 'Échange avec ton coach IA',
+    reward: '+15 pts',
+    href: '/coach',
+    target: 1,
+    unit: 'message',
+  },
+  {
+    type: 'jeu',
+    emoji: '🎮',
+    title: 'Jeu',
+    description: 'Choisis un jeu et amuse-toi',
+    reward: '+10 pts',
+    href: '/jeux',
+    target: 1,
+    unit: 'jeu',
+  },
 ]
 
 const LEAGUE_THRESHOLDS: Record<string, number> = {
@@ -39,8 +77,8 @@ export default async function DashboardPage() {
 
   const questMap: Record<QuestType, any> = {} as any
   for (const q of quests || []) questMap[q.quest_type as QuestType] = q
-  const completedCount = QUESTS.filter(q => questMap[q.type]?.status === 'completed').length
 
+  const completedCount = QUESTS.filter(q => questMap[q.type]?.status === 'completed').length
   const tier = lang?.league_tier || 'bronze'
   const tierInfo = tierMeta(tier)
   const next = nextTier(tier)
@@ -75,10 +113,19 @@ export default async function DashboardPage() {
         </div>
         <div className="space-y-2">
           {QUESTS.map(q => {
-            const status = questMap[q.type]?.status
-            const earned = questMap[q.type]?.points_earned || 0
+            const dq = questMap[q.type]
+            const status = dq?.status
+            const earned = dq?.points_earned || 0
             const done = status === 'completed'
             const inProgress = status === 'in_progress'
+            // v1.3 — Calcul progression : lit content_ref.progress si disponible,
+            // sinon dérive depuis le statut (in_progress = 1, completed = target).
+            const refProgress = (dq?.content_ref as any)?.progress
+            const current = done ? q.target
+              : typeof refProgress === 'number' ? Math.min(refProgress, q.target)
+              : inProgress ? Math.max(1, Math.floor(q.target * 0.3))
+              : 0
+            const progressPct = Math.round((current / q.target) * 100)
             return (
               <Link key={q.type} href={q.href as any}>
                 <div className={`p-3 rounded-xl border flex items-center gap-3 transition ${
@@ -91,11 +138,26 @@ export default async function DashboardPage() {
                   }`}>
                     {done ? '✓' : q.emoji}
                   </div>
-                  <div className="flex-1">
-                    <div className="font-bold text-sm text-primary-900">{q.title}</div>
-                    <div className="text-xs text-gray-600">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="font-bold text-sm text-primary-900">{q.title}</div>
+                      {/* v1.3 — Compteur X/Y visible sur quêtes en cours */}
+                      {!done && q.target > 1 && (
+                        <div className="text-[11px] font-bold text-primary-700 whitespace-nowrap">
+                          {current}/{q.target} {q.unit}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-600 truncate">
                       {done ? <span className="text-ok font-semibold">+{earned} pts gagnés ✨</span> : q.description}
                     </div>
+                    {/* v1.3 — Barre de progression visible si quête multi-étapes */}
+                    {!done && q.target > 1 && (
+                      <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full transition-all ${inProgress ? 'bg-warn' : 'bg-primary-300'}`}
+                          style={{ width: `${progressPct}%` }} />
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     {done ? (

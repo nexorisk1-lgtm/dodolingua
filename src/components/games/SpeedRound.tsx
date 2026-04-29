@@ -3,12 +3,15 @@ import { useState, useEffect, useMemo } from 'react'
 import type { GameProps } from './types'
 import { shuffle, pickDistractors } from './utils'
 
+// v1.3 — Feedback visuel : vert pour bonne réponse, rouge pour mauvaise,
+// avec un délai de 500ms avant de passer à la question suivante.
 export function SpeedRoundGame({ words, onResult, onComplete }: GameProps) {
   const [time, setTime] = useState(60)
   const [score, setScore] = useState(0)
   const [combo, setCombo] = useState(0)
   const [idx, setIdx] = useState(0)
   const [results, setResults] = useState<any[]>([])
+  const [feedback, setFeedback] = useState<{ pickedId: string; correct: boolean } | null>(null)
 
   const w = words[idx % words.length]
   const choices = useMemo(() => w ? shuffle([w, ...pickDistractors(words, w, 2)]) : [], [idx, w, words])
@@ -20,7 +23,7 @@ export function SpeedRoundGame({ words, onResult, onComplete }: GameProps) {
   }, [time, results, onComplete])
 
   function pick(id: string) {
-    if (time <= 0) return
+    if (time <= 0 || feedback) return
     const ok = id === w.id
     const r = { correct: ok }
     onResult(r)
@@ -32,7 +35,11 @@ export function SpeedRoundGame({ words, onResult, onComplete }: GameProps) {
     } else {
       setCombo(0)
     }
-    setIdx(idx + 1)
+    setFeedback({ pickedId: id, correct: ok })
+    setTimeout(() => {
+      setFeedback(null)
+      setIdx(prev => prev + 1)
+    }, 500)
   }
 
   if (!w) return null
@@ -59,11 +66,26 @@ export function SpeedRoundGame({ words, onResult, onComplete }: GameProps) {
         <div className="text-2xl font-extrabold text-primary-900">{w.lemma}</div>
       </div>
       <div className="space-y-2">
-        {choices.map(c => (
-          <button key={c.id} onClick={() => pick(c.id)} className="w-full p-3 rounded-xl border-2 border-rule bg-white font-semibold">
-            {c.translation || c.lemma}
-          </button>
-        ))}
+        {choices.map(c => {
+          // v1.3 — calcule l'état visuel selon le feedback
+          const isPicked = feedback?.pickedId === c.id
+          const isCorrectAnswer = feedback && c.id === w.id
+          let cls = 'border-rule bg-white'
+          if (feedback) {
+            if (isPicked && feedback.correct) cls = 'border-ok bg-green-100 text-ok'
+            else if (isPicked && !feedback.correct) cls = 'border-warn bg-red-100 text-warn'
+            else if (!isPicked && isCorrectAnswer) cls = 'border-ok bg-green-50 text-ok'
+            else cls = 'border-rule bg-white opacity-50'
+          }
+          return (
+            <button key={c.id} onClick={() => pick(c.id)} disabled={!!feedback}
+              className={`w-full p-3 rounded-xl border-2 font-semibold transition-colors ${cls}`}>
+              {c.translation || c.lemma}
+              {isPicked && feedback?.correct && ' ✓'}
+              {isPicked && !feedback?.correct && ' ✗'}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

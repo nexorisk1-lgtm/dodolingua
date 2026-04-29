@@ -29,6 +29,17 @@ function cleanForVoice(text: string): string {
     .trim()
 }
 
+// v1.3 — Ajoute une ponctuation basique à un transcript STT brut.
+// Capitalise la première lettre, ajoute "." ou "?" en fin si manquant.
+function addBasicPunctuation(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  let out = trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+  const isQuestion = /^(who|what|when|where|why|how|do|does|did|can|could|is|are|am|will|would|should|may|might)\b/i.test(trimmed)
+  if (!/[.!?]$/.test(out)) out += isQuestion ? '?' : '.'
+  return out
+}
+
 // Parse une ligne "Correction: X -> Y. (Z)" ou "Correction: X → Y. (Z)"
 function parseCorrection(line: string): { wrong: string; correct: string; reason?: string } | null {
   const m = line.match(/^Correction:\s*(.+?)\s*(?:->|→)\s*(.+?)(?:\s*\((.+?)\))?\.?\s*$/i)
@@ -163,6 +174,8 @@ export default function CoachPage() {
   function stopRecording() {
     try { recRef.current?.stop() } catch {}
     setRecording(false)
+    // v1.3 — Ponctuation auto sur le transcript final
+    setVal(prev => prev ? addBasicPunctuation(prev) : prev)
   }
 
   // Choisir la pose du Dodo selon le dernier message du coach
