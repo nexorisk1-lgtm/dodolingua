@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button
+import { Button } from '@/components/ui/Button'
 import { Mascot } from '@/components/Mascot'
 import { createClient } from '@/lib/supabase/client'
 import { speak } from '@/components/games/utils'
