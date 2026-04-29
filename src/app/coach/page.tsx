@@ -84,6 +84,8 @@ export default function CoachPage() {
   const [loading, setLoading] = useState(false)
   const [voiceName, setVoiceName] = useState<string | null>(null)
   const [voiceOn, setVoiceOn] = useState(true)
+  // v1.5 — mode coach : 'tuteur' | 'ami' | 'auto'
+  const [mode, setMode] = useState<'tuteur' | 'ami' | 'auto'>('auto')
   const [recording, setRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -118,7 +120,7 @@ export default function CoachPage() {
     try {
       const res = await fetch('/api/coach', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', text: '__START__' }] }),
+        body: JSON.stringify({ messages: [{ role: 'user', text: '__START__' }], mode }),
       })
       const data = await res.json()
       if (res.ok && data.reply) {
@@ -137,7 +139,7 @@ export default function CoachPage() {
     try {
       const res = await fetch('/api/coach', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({ messages: next, mode }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Erreur'); setLoading(false); return }
@@ -171,11 +173,31 @@ export default function CoachPage() {
     try { rec.start(); recRef.current = rec } catch (err: any) { setError(err.message) }
   }
 
-  function stopRecording() {
+  async function stopRecording() {
     try { recRef.current?.stop() } catch {}
     setRecording(false)
-    // v1.3 — Ponctuation auto sur le transcript final
-    setVal(prev => prev ? addBasicPunctuation(prev) : prev)
+    // v1.5 — Ponctuation via Gemini (fallback sur addBasicPunctuation si erreur)
+    setVal(prev => {
+      if (!prev) return prev
+      // Lance la ponctuation en arrière-plan, met à jour quand prête
+      ;(async () => {
+        try {
+          const res = await fetch('/api/punctuate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: prev, lang: 'en-GB' }),
+          })
+          const data = await res.json()
+          if (data?.text && data.text.trim().length > 0) {
+            setVal(data.text)
+          } else {
+            setVal(addBasicPunctuation(prev))
+          }
+        } catch {
+          setVal(addBasicPunctuation(prev))
+        }
+      })()
+      return prev // garde le texte brut en attendant
+    })
   }
 
   // Choisir la pose du Dodo selon le dernier message du coach
@@ -199,6 +221,30 @@ export default function CoachPage() {
           {voiceOn ? '🔊 Voix ON' : '🔇 Voix OFF'}
         </button>
       </div>
+
+      {/* v1.5 — Sélecteur de mode coach */}
+      <Card className="!p-2">
+        <div className="text-[10px] uppercase font-bold text-gray-500 px-2 py-1">Mode du coach</div>
+        <div className="flex gap-1 px-1">
+          <button onClick={() => setMode('auto')}
+            className={`flex-1 text-[12px] px-3 py-2 rounded-xl font-semibold transition ${mode === 'auto' ? 'bg-primary-700 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}>
+            🎯 Auto
+          </button>
+          <button onClick={() => setMode('tuteur')}
+            className={`flex-1 text-[12px] px-3 py-2 rounded-xl font-semibold transition ${mode === 'tuteur' ? 'bg-primary-700 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}>
+            🎓 Tuteur
+          </button>
+          <button onClick={() => setMode('ami')}
+            className={`flex-1 text-[12px] px-3 py-2 rounded-xl font-semibold transition ${mode === 'ami' ? 'bg-primary-700 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}>
+            💬 Ami
+          </button>
+        </div>
+        <div className="text-[10px] text-gray-500 px-2 pt-1 italic">
+          {mode === 'tuteur' && 'Toutes les erreurs corrigées + explications grammaticales.'}
+          {mode === 'ami' && 'Conversation naturelle, corrections rares et discrètes.'}
+          {mode === 'auto' && 'Équilibré : 1-2 corrections selon les erreurs.'}
+        </div>
+      </Card>
 
       <Card className="!p-3">
         <div ref={scrollRef} className="h-[60vh] overflow-y-auto space-y-2 px-1 py-2">

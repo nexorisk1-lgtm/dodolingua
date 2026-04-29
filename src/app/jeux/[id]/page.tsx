@@ -5,6 +5,7 @@ import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { GAME_COMPONENTS, GAME_LIST, type GameId, type GameWord } from '@/components/games'
+import { Mascot } from '@/components/Mascot'
 import { createClient } from '@/lib/supabase/client'
 import { questPoints } from '@/lib/points'
 
@@ -17,6 +18,7 @@ export default function GamePage() {
   const [voiceName, setVoiceName] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [pts, setPts] = useState<number>(0)
+  const [stats, setStats] = useState<{ correct: number; total: number }>({ correct: 0, total: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -67,9 +69,12 @@ export default function GamePage() {
 
   async function handleComplete(results: any[]) {
     const correct = results.filter(r => r.correct).length
-    const perfect = correct === results.length
+    const total = results.length
+    const perfect = correct === total
     const p = questPoints({ perfect })
-    setPts(p.total); setDone(true)
+    setPts(p.total)
+    setStats({ correct, total })
+    setDone(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
@@ -99,20 +104,68 @@ export default function GamePage() {
       </Card>
     </Container>
   )
-  if (done) return (
-    <Container className="max-w-md py-8">
-      <Card className="text-center space-y-3">
-        <div className="text-5xl">{meta.emoji}</div>
-        <h2 className="text-xl font-bold text-primary-900">{meta.name} terminé !</h2>
-        <div className="text-3xl font-extrabold text-primary-700">+{pts} pts</div>
-        <p className="text-sm text-gray-600">Quête « Jeu » validée.</p>
-        <div className="flex gap-2 pt-2">
-          <Button block onClick={() => router.push('/jeux')}>Autre jeu</Button>
-          <Button block variant="ghost" onClick={() => router.push('/dashboard')}>Dashboard</Button>
-        </div>
-      </Card>
-    </Container>
-  )
+  if (done) {
+    // v1.5 — Encouragement dynamique selon le score
+    const ratio = stats.total > 0 ? stats.correct / stats.total : 1
+    let mascotPose: 'champion' | 'happy' | 'study' | 'idle' = 'happy'
+    let mascotAnim: 'pop' | 'bounce' | 'breathe' = 'bounce'
+    let title = 'Bien joué !'
+    let subtitle = ''
+    let bgGradient = 'from-primary-50 to-white'
+
+    if (ratio >= 0.9) {
+      mascotPose = 'champion'; mascotAnim = 'pop'
+      const cheers = ['Excellent !', 'Parfait !', 'Tu es au top !', 'Génial !', 'Champion(ne) !']
+      title = cheers[Math.floor(Math.random() * cheers.length)]
+      subtitle = 'Score parfait ou presque — continue comme ça !'
+      bgGradient = 'from-yellow-50 via-amber-50 to-white'
+    } else if (ratio >= 0.7) {
+      mascotPose = 'happy'; mascotAnim = 'bounce'
+      const cheers = ['Super !', 'Très bien !', 'Bonne perf !', 'Solide !']
+      title = cheers[Math.floor(Math.random() * cheers.length)]
+      subtitle = 'Tu progresses bien, garde le rythme !'
+      bgGradient = 'from-green-50 to-white'
+    } else if (ratio >= 0.4) {
+      mascotPose = 'study'; mascotAnim = 'breathe'
+      title = 'Tu es sur la bonne voie'
+      subtitle = 'Encore un peu de pratique et ça va rentrer !'
+      bgGradient = 'from-blue-50 to-white'
+    } else {
+      mascotPose = 'idle'; mascotAnim = 'breathe'
+      title = "Pas grave, on retente !"
+      subtitle = "L'apprentissage demande de la répétition. Ne lâche rien !"
+      bgGradient = 'from-orange-50 to-white'
+    }
+
+    return (
+      <Container className="max-w-md py-6">
+        <Card className={`text-center space-y-4 bg-gradient-to-b ${bgGradient}`}>
+          <div className="flex justify-center pt-2">
+            <Mascot pose={mascotPose} size={140} animation={mascotAnim} />
+          </div>
+          <h2 className="text-2xl font-extrabold text-primary-900">{title}</h2>
+          <p className="text-sm text-gray-700 italic px-2">{subtitle}</p>
+          <div className="flex items-baseline justify-center gap-3 pt-1">
+            <div>
+              <div className="text-3xl font-extrabold text-primary-700">+{pts}</div>
+              <div className="text-[10px] uppercase text-gray-500">points</div>
+            </div>
+            {stats.total > 0 && (
+              <div className="border-l border-rule pl-3">
+                <div className="text-3xl font-extrabold text-ok">{stats.correct}<span className="text-base text-gray-400">/{stats.total}</span></div>
+                <div className="text-[10px] uppercase text-gray-500">bonnes réponses</div>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 pt-1">Quête « Jeu » validée ✨</p>
+          <div className="flex gap-2 pt-2">
+            <Button block onClick={() => router.push('/jeux')}>Un autre jeu</Button>
+            <Button block variant="ghost" onClick={() => router.push('/dashboard')}>Dashboard</Button>
+          </div>
+        </Card>
+      </Container>
+    )
+  }
 
   return (
     <Container className="max-w-md py-6">
