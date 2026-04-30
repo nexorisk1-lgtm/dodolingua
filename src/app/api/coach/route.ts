@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const messages: GroqMessage[] = body.messages || []
   // v1.5 — mode coach : 'tuteur' | 'ami' | 'auto'
-  const mode = (body.mode === 'tuteur' || body.mode === 'ami' || body.mode === 'auto') ? body.mode : 'auto'
+  const mode = (body.mode === 'tuteur' || body.mode === 'ami' || body.mode === 'auto' || body.mode === 'speaking_pur') ? body.mode : 'auto'
 
   const today = new Date().toISOString().slice(0, 10)
   const { count } = await supabase.from('audit_log').select('*', { count: 'exact', head: true })
