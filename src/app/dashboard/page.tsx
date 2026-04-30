@@ -149,7 +149,17 @@ export default async function DashboardPage() {
                       )}
                     </div>
                     <div className="text-xs text-gray-600 truncate">
-                      {done ? <span className="text-ok font-semibold">+{earned} pts gagnés ✨</span> : q.description}
+                      {done ? (
+                        <span className="text-ok font-semibold">
+                          +{earned} pts ✨
+                          {q.type === 'jeu' && (dq?.content_ref as any)?.games_played
+                            ? ` · ${(dq?.content_ref as any).games_played} jeu${((dq?.content_ref as any).games_played > 1) ? 'x' : ''}`
+                            : ''}
+                          {q.type === 'pratique' && (dq?.content_ref as any)?.messages_count
+                            ? ` · ${(dq?.content_ref as any).messages_count} msg`
+                            : ''}
+                        </span>
+                      ) : q.description}
                     </div>
                     {/* v1.3 — Barre de progression visible si quête multi-étapes */}
                     {!done && q.target > 1 && (

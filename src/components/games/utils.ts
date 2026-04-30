@@ -13,19 +13,42 @@ export function pickDistractors(words: GameWord[], correct: GameWord, n = 3): Ga
   return shuffle(words.filter(w => w.id !== correct.id)).slice(0, n)
 }
 
-// Voix premium par ordre de préférence (les meilleures du marché Web Speech)
+// v1.6 — Voix par ordre de préférence : voix natives OS d'abord (plus naturelles),
+// puis voix online Microsoft, puis Google en dernier (les Google sont plus robotiques).
 const PREFERRED_VOICES = [
-  'Google UK English Female',
-  'Google UK English Male',
+  'Daniel',         // macOS UK premium (la plus naturelle)
+  'Karen',          // macOS AU/UK premium
+  'Serena',         // macOS UK premium
+  'Samantha',       // macOS US neural
+  'Moira',          // macOS Irish-English
+  'Tessa',          // macOS South African UK
   'Microsoft Sonia Online (Natural) - English (United Kingdom)',
   'Microsoft Libby Online (Natural) - English (United Kingdom)',
   'Microsoft Ryan Online (Natural) - English (United Kingdom)',
-  'Daniel',         // macOS UK
-  'Karen',          // macOS UK premium
-  'Serena',         // macOS UK premium
-  'Samantha',       // macOS US neural
   'Microsoft Hazel - English (Great Britain)',
+  'Microsoft Susan - English (Great Britain)',
+  'Google UK English Female',
+  'Google UK English Male',
 ]
+
+// v1.6 — Attente que les voix soient chargées (Web Speech API les charge async)
+export function waitForVoices(timeoutMs = 2000): Promise<SpeechSynthesisVoice[]> {
+  return new Promise(resolve => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return resolve([])
+    const existing = window.speechSynthesis.getVoices()
+    if (existing.length > 0) return resolve(existing)
+    const handler = () => {
+      const v = window.speechSynthesis.getVoices()
+      window.speechSynthesis.removeEventListener('voiceschanged', handler)
+      resolve(v)
+    }
+    window.speechSynthesis.addEventListener('voiceschanged', handler)
+    setTimeout(() => {
+      window.speechSynthesis.removeEventListener('voiceschanged', handler)
+      resolve(window.speechSynthesis.getVoices())
+    }, timeoutMs)
+  })
+}
 
 export function getBestVoice(langPrefix = 'en'): SpeechSynthesisVoice | null {
   if (typeof window === 'undefined' || !window.speechSynthesis) return null

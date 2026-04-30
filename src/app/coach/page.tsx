@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Mascot } from '@/components/Mascot'
 import { createClient } from '@/lib/supabase/client'
-import { speak } from '@/components/games/utils'
+import { speak, getBestVoice, waitForVoices } from '@/components/games/utils'
 
 interface Msg { role: 'user' | 'model'; text: string }
 
@@ -96,6 +96,8 @@ export default function CoachPage() {
     if (voiceOn) speak(cleanForVoice(text), voiceName, 0.85)
   }
 
+  // v1.6 — Étape 1 : bootstrap (auth + lock voix)
+  const [voiceReady, setVoiceReady] = useState(false)
   useEffect(() => {
     (async () => {
       const supabase = createClient()
@@ -103,13 +105,24 @@ export default function CoachPage() {
       if (!user) return
       const { data: v } = await supabase.from('user_voice_pref')
         .select('voice_name').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle()
-      if (v) setVoiceName(v.voice_name)
-      if (!greetedRef.current) {
-        greetedRef.current = true
-        sendInitialGreeting()
+      await waitForVoices(2000)
+      if (v?.voice_name) {
+        setVoiceName(v.voice_name)
+      } else {
+        const best = getBestVoice('en')
+        if (best?.name) setVoiceName(best.name)
       }
+      setVoiceReady(true)
     })()
   }, [])
+
+  // v1.6 — Étape 2 : envoyer le greeting UNE FOIS la voix verrouillée (cohérence TTS)
+  useEffect(() => {
+    if (voiceReady && !greetedRef.current) {
+      greetedRef.current = true
+      sendInitialGreeting()
+    }
+  }, [voiceReady])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -207,42 +220,48 @@ export default function CoachPage() {
     : 'idle'
 
   return (
-    <Container className="max-w-2xl space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Mascot pose={dodoPose} size={80} animation="breathe" />
-          <div>
-            <h1 className="text-2xl font-bold text-primary-900">Dodo, ton coach</h1>
-            <div className="text-xs text-gray-500">Discute en anglais, je te corrige en douceur</div>
+    <Container className="max-w-2xl space-y-3 pb-20">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Mascot pose={dodoPose} size={56} animation="breathe" className="shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-bold text-primary-900 truncate">Dodo, ton coach</h1>
+            <div className="text-[11px] sm:text-xs text-gray-500 truncate">Discute en anglais, je te corrige en douceur</div>
           </div>
         </div>
         <button onClick={() => setVoiceOn(!voiceOn)}
-          className={`text-xs px-3 py-1.5 rounded-full font-semibold ${voiceOn ? 'bg-primary-700 text-white' : 'bg-white border border-rule text-gray-600'}`}>
-          {voiceOn ? '🔊 Voix ON' : '🔇 Voix OFF'}
+          className={`text-xs px-3 py-1.5 rounded-full font-semibold whitespace-nowrap shrink-0 ${voiceOn ? 'bg-primary-700 text-white' : 'bg-white border border-rule text-gray-600'}`}>
+          {voiceOn ? '🔊 Voix' : '🔇 Voix'}
         </button>
       </div>
 
-      {/* v1.5 — Sélecteur de mode coach */}
-      <Card className="!p-2">
-        <div className="text-[10px] uppercase font-bold text-gray-500 px-2 py-1">Mode du coach</div>
-        <div className="flex gap-1 px-1">
+      {/* v1.6 — Sélecteur de mode coach (descriptions user-friendly pour 12-17 ans) */}
+      <Card className="!p-3">
+        <div className="text-xs font-bold text-gray-700 mb-2">Comment veux-tu apprendre aujourd&apos;hui ?</div>
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={() => setMode('ami')}
+            className={`flex flex-col items-center gap-0.5 p-2 rounded-xl text-center transition ${mode === 'ami' ? 'bg-primary-700 text-white shadow-sm' : 'bg-white border border-rule hover:border-primary-300'}`}>
+            <span className="text-xl leading-none">💬</span>
+            <span className="text-xs font-bold">Ami</span>
+            <span className={`text-[10px] leading-tight ${mode === 'ami' ? 'text-white/80' : 'text-gray-500'}`}>Discute librement</span>
+          </button>
           <button onClick={() => setMode('auto')}
-            className={`flex-1 text-[12px] px-3 py-2 rounded-xl font-semibold transition ${mode === 'auto' ? 'bg-primary-700 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}>
-            🎯 Auto
+            className={`flex flex-col items-center gap-0.5 p-2 rounded-xl text-center transition ${mode === 'auto' ? 'bg-primary-700 text-white shadow-sm' : 'bg-white border border-rule hover:border-primary-300'}`}>
+            <span className="text-xl leading-none">🎯</span>
+            <span className="text-xs font-bold">Auto</span>
+            <span className={`text-[10px] leading-tight ${mode === 'auto' ? 'text-white/80' : 'text-gray-500'}`}>Équilibré</span>
           </button>
           <button onClick={() => setMode('tuteur')}
-            className={`flex-1 text-[12px] px-3 py-2 rounded-xl font-semibold transition ${mode === 'tuteur' ? 'bg-primary-700 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}>
-            🎓 Tuteur
-          </button>
-          <button onClick={() => setMode('ami')}
-            className={`flex-1 text-[12px] px-3 py-2 rounded-xl font-semibold transition ${mode === 'ami' ? 'bg-primary-700 text-white' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}`}>
-            💬 Ami
+            className={`flex flex-col items-center gap-0.5 p-2 rounded-xl text-center transition ${mode === 'tuteur' ? 'bg-primary-700 text-white shadow-sm' : 'bg-white border border-rule hover:border-primary-300'}`}>
+            <span className="text-xl leading-none">🎓</span>
+            <span className="text-xs font-bold">Tuteur</span>
+            <span className={`text-[10px] leading-tight ${mode === 'tuteur' ? 'text-white/80' : 'text-gray-500'}`}>Corrige tout</span>
           </button>
         </div>
-        <div className="text-[10px] text-gray-500 px-2 pt-1 italic">
-          {mode === 'tuteur' && 'Toutes les erreurs corrigées + explications grammaticales.'}
-          {mode === 'ami' && 'Conversation naturelle, corrections rares et discrètes.'}
-          {mode === 'auto' && 'Équilibré : 1-2 corrections selon les erreurs.'}
+        <div className="text-[11px] text-gray-600 px-1 pt-2 italic">
+          {mode === 'ami' && '💬 Comme avec un pote anglophone : on parle, on rigole, je corrige rarement (juste si tu te trompes vraiment).'}
+          {mode === 'auto' && '🎯 Mix idéal : conversation fluide + 1-2 corrections quand c&apos;est utile.'}
+          {mode === 'tuteur' && '🎓 Mode prof : je repère TOUTES les erreurs et je t&apos;explique pourquoi.'}
         </div>
       </Card>
 

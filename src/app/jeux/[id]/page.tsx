@@ -79,11 +79,27 @@ export default function GamePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const today = new Date().toISOString().slice(0, 10)
+      // v1.6 — Cumul des points et du nombre de jeux joués aujourd'hui
+      const { data: existing } = await supabase.from('daily_quests')
+        .select('points_earned, content_ref')
+        .eq('user_id', user.id).eq('lang_code', 'en-GB')
+        .eq('date', today).eq('quest_type', 'jeu').maybeSingle()
+      const prevPoints = existing?.points_earned || 0
+      const prevPlayed = ((existing?.content_ref as any)?.games_played as number) || 0
+      const cumulated = prevPoints + p.total
+      const games_played = prevPlayed + 1
       await supabase.from('daily_quests').upsert({
         user_id: user.id, lang_code: 'en-GB', date: today,
-        quest_type: 'jeu', status: 'completed', points_earned: p.total,
+        quest_type: 'jeu', status: 'completed',
+        points_earned: cumulated,
         completed_at: new Date().toISOString(),
-        content_ref: { game_id: id, score: correct, total: results.length },
+        content_ref: {
+          last_game_id: id,
+          last_score: correct,
+          last_total: results.length,
+          games_played,
+          total_points: cumulated,
+        },
       }, { onConflict: 'user_id,lang_code,date,quest_type' })
       await supabase.rpc('increment_user_points', { p_user: user.id, p_lang: 'en-GB', p_amount: p.total })
     }
@@ -108,13 +124,13 @@ export default function GamePage() {
     // v1.5 — Encouragement dynamique selon le score
     const ratio = stats.total > 0 ? stats.correct / stats.total : 1
     let mascotPose: 'champion' | 'happy' | 'study' | 'idle' = 'happy'
-    let mascotAnim: 'pop' | 'bounce' | 'breathe' = 'bounce'
+    let mascotAnim: 'bounce' | 'breathe' = 'bounce'
     let title = 'Bien joué !'
     let subtitle = ''
     let bgGradient = 'from-primary-50 to-white'
 
     if (ratio >= 0.9) {
-      mascotPose = 'champion'; mascotAnim = 'pop'
+      mascotPose = 'champion'; mascotAnim = 'bounce'
       const cheers = ['Excellent !', 'Parfait !', 'Tu es au top !', 'Génial !', 'Champion(ne) !']
       title = cheers[Math.floor(Math.random() * cheers.length)]
       subtitle = 'Score parfait ou presque — continue comme ça !'
