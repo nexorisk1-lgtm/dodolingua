@@ -51,6 +51,17 @@ import {
 type Mode = 'tuteur' | 'ami' | 'auto' | 'speaking_pur'
 type CoachState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
+// v3.3 — Scénarios pour le mode speaking_pur
+type Scenario = 'daily' | 'restaurant' | 'hotel' | 'pro' | 'shopping' | 'travel'
+const SCENARIOS_UI: { key: Scenario; emoji: string; label: string }[] = [
+  { key: 'daily',      emoji: '👋', label: 'Quotidien' },
+  { key: 'restaurant', emoji: '🍽️', label: 'Restaurant' },
+  { key: 'hotel',      emoji: '🏨', label: 'Hôtel' },
+  { key: 'pro',        emoji: '💼', label: 'Pro' },
+  { key: 'shopping',   emoji: '🛍️', label: 'Shopping' },
+  { key: 'travel',     emoji: '✈️', label: 'Voyage' },
+]
+
 interface Msg {
   role: 'user' | 'model'
   text: string
@@ -166,6 +177,8 @@ export default function CoachPage() {
     ami: [], auto: [], tuteur: [], speaking_pur: [],
   })
   const [activeMode, setActiveMode] = useState<Mode>('auto')
+  // v3.3 — scénario sélectionné en mode speaking_pur
+  const [scenario, setScenario] = useState<Scenario>('daily')
   const messages = threads[activeMode]
 
   const [val, setVal] = useState('')
@@ -217,13 +230,13 @@ export default function CoachPage() {
     })()
   }, [])
 
-  // Greeting initial (UNE FOIS PAR MODE)
+  // Greeting initial (UNE FOIS PAR MODE — sauf en speaking_pur où on re-greet quand le scénario change)
   useEffect(() => {
     if (!voiceReady) return
     if (greetedRef.current[activeMode]) return
     greetedRef.current[activeMode] = true
     sendInitialGreeting(activeMode)
-  }, [voiceReady, activeMode])
+  }, [voiceReady, activeMode, scenario])
 
   // v3.2.1 — Scroll uniquement sur l'arrivée d'un NOUVEAU message (pas sur update d'un existant
   // comme la correction qui passe de loading à ready). Évite le bouncing qui interrompait le
@@ -338,7 +351,11 @@ export default function CoachPage() {
     try {
       const res = await fetch('/api/coach', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', text: '__START__' }], mode }),
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: '__START__' }],
+          mode,
+          scenario: mode === 'speaking_pur' ? scenario : undefined,
+        }),
       })
       const data = await res.json()
       if (res.ok && data.reply) {
@@ -390,6 +407,7 @@ export default function CoachPage() {
         body: JSON.stringify({
           messages: next.map(m => ({ role: m.role, text: m.text })),
           mode: currentMode,
+          scenario: currentMode === 'speaking_pur' ? scenario : undefined,
         }),
       })
       const data = await res.json()
@@ -595,6 +613,21 @@ export default function CoachPage() {
     userHasScrolledUpRef.current = false
   }
 
+  /** v3.3 — Change le scénario speaking_pur. Reset le fil et re-greet pour basculer le contexte. */
+  function changeScenario(s: Scenario) {
+    if (s === scenario) return
+    if (state === 'listening') stopMic()
+    try { window.speechSynthesis.cancel() } catch {}
+    ttsActiveRef.current = false
+    setScenario(s)
+    setVal('')
+    setError(null)
+    setState('idle')
+    // Reset le fil speaking_pur pour démarrer le nouveau scénario à zéro
+    setThreads(prev => ({ ...prev, speaking_pur: [] }))
+    greetedRef.current.speaking_pur = false  // permet le re-greeting via useEffect
+  }
+
   async function requestCorrection(msgIndex: number) {
     const thread = threads[activeMode]
     const target = thread[msgIndex]
@@ -708,8 +741,25 @@ export default function CoachPage() {
           {activeMode === 'ami' && '💬 Comme avec un pote anglophone : on parle, on rigole, je corrige rarement.'}
           {activeMode === 'auto' && '🎯 Mix idéal : conversation fluide + 1-2 corrections quand c&apos;est utile.'}
           {activeMode === 'tuteur' && '🎓 Mode tuteur : conversation pédagogique. Pas de correction automatique — clique sur 💡 sur tes messages pour en demander une.'}
-          {activeMode === 'speaking_pur' && '🎙️ Mode speaking pur : focus prononciation. Parle au micro, ta phrase est comparée à la phrase cible. Réécoute-toi avec ▶️.'}
+          {activeMode === 'speaking_pur' && '🎙️ Mode speaking pur : focus prononciation. Choisis un scénario ci-dessous pour bosser des phrases ciblées.'}
         </div>
+        {activeMode === 'speaking_pur' && (
+          <div className="mt-3 pt-3 border-t border-rule">
+            <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">Scénario à pratiquer</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {SCENARIOS_UI.map(s => {
+                const active = scenario === s.key
+                return (
+                  <button key={s.key} onClick={() => changeScenario(s.key)}
+                    className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg text-center transition ${active ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}>
+                    <span className="text-base leading-none">{s.emoji}</span>
+                    <span className="text-[10px] font-bold">{s.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </Card>
 
       <button onClick={toggleVoiceConvMode}

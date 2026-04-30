@@ -15,6 +15,9 @@ export async function POST(req: NextRequest) {
   const messages: GroqMessage[] = body.messages || []
   // v1.5 — mode coach : 'tuteur' | 'ami' | 'auto'
   const mode = (body.mode === 'tuteur' || body.mode === 'ami' || body.mode === 'auto' || body.mode === 'speaking_pur') ? body.mode : 'auto'
+  // v3.3 — scénario optionnel (mode speaking_pur)
+  const VALID_SCENARIOS = ['daily', 'restaurant', 'hotel', 'pro', 'shopping', 'travel']
+  const scenario = (typeof body.scenario === 'string' && VALID_SCENARIOS.includes(body.scenario)) ? body.scenario : 'daily'
 
   const today = new Date().toISOString().slice(0, 10)
   const { count } = await supabase.from('audit_log').select('*', { count: 'exact', head: true })
@@ -37,6 +40,7 @@ export async function POST(req: NextRequest) {
     langCode: prefs?.lang_code || 'en-GB',
     displayName: profile?.display_name || null,
     mode,  // v1.5
+    scenario,  // v3.3 — scénario speaking_pur
   })
 
   let reply: string

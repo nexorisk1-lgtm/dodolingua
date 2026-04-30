@@ -3,12 +3,27 @@ import type { CefrLevel } from '@/types/database'
 // v3 — 4 modes : 3 historiques + speaking_pur (focus prononciation/fluidité)
 export type CoachModeV15 = 'tuteur' | 'ami' | 'auto' | 'speaking_pur'
 
+// v3.3 — Scénarios pour le mode speaking_pur (axes Speak/Praktika/TalkPal)
+export type SpeakingScenario =
+  | 'daily' | 'restaurant' | 'hotel' | 'pro' | 'shopping' | 'travel'
+
+const SCENARIOS: Record<SpeakingScenario, string> = {
+  daily: 'Daily life conversations: greetings, weather, hobbies, feelings, weekend plans, family.',
+  restaurant: 'At a restaurant. Drill phrases like: ordering food, asking for the menu, asking for recommendations, paying the bill, dietary restrictions, complaints.',
+  hotel: 'At a hotel. Drill phrases like: making a reservation, checking in, asking for amenities (wifi, breakfast, gym), requesting a wake-up call, late checkout, room issues.',
+  pro: 'Professional context. Drill phrases like: introducing yourself in a meeting, scheduling, presenting an idea briefly, agreeing/disagreeing politely, job interview questions and answers.',
+  shopping: 'Shopping. Drill phrases like: asking the price, trying clothes on, asking about sizes/colors, asking for refunds, paying with card, ordering online by phone.',
+  travel: 'Traveling and transport. Drill phrases like: airport check-in, security, asking for directions, public transport, missed connections, lost luggage.',
+}
+
 interface CoachContext {
   cefr?: CefrLevel | null
   themes?: string[]
   langCode: string
   displayName?: string | null
   mode?: CoachModeV15 | null
+  // v3.3 — scénario optionnel (uniquement pris en compte en mode speaking_pur)
+  scenario?: SpeakingScenario | null
   // legacy fields kept for compat
   goals?: any
   modeOverride?: any
@@ -87,6 +102,10 @@ After each user utterance:
 
 Replies must be 1-2 sentences max. Grammar mistakes by ${name} are not your concern in this mode —
 that is the Tutor's job, not yours.
+
+${ctx.scenario && ctx.scenario !== 'daily' ? `# Scenario context (v3.3) — focus all target phrases on this situation
+${SCENARIOS[ctx.scenario as SpeakingScenario]}
+Make sure the next target phrase you propose is RELEVANT to this scenario, not a random everyday sentence.` : ''}
 
 # FRENCH TRANSLATION — MANDATORY (v3.2)
 ${name} is learning to PRONOUNCE phrases she may not fully understand.
