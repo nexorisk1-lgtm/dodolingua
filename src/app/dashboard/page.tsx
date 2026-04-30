@@ -120,7 +120,13 @@ export default async function DashboardPage() {
             const inProgress = status === 'in_progress'
             // v1.3 — Calcul progression : lit content_ref.progress si disponible,
             // sinon dérive depuis le statut (in_progress = 1, completed = target).
-            const refProgress = (dq?.content_ref as any)?.progress
+            // v1.7 — progression : lit content_ref.progress (apprentissage/revision)
+            // ou content_ref.games_played (jeu) ou content_ref.messages_count (pratique)
+            const ref = (dq?.content_ref as any) || {}
+            const refProgress = (typeof ref.progress === 'number' ? ref.progress
+              : q.type === 'jeu' ? ref.games_played
+              : q.type === 'pratique' ? ref.messages_count
+              : null) as number | null
             const current = done ? q.target
               : typeof refProgress === 'number' ? Math.min(refProgress, q.target)
               : inProgress ? Math.max(1, Math.floor(q.target * 0.3))
@@ -128,56 +134,56 @@ export default async function DashboardPage() {
             const progressPct = Math.round((current / q.target) * 100)
             return (
               <Link key={q.type} href={q.href as any}>
-                <div className={`p-3 rounded-xl border flex items-center gap-3 transition ${
+                <div className={`p-3 rounded-xl border transition ${
                   done ? 'bg-green-50 border-green-200' :
-                  inProgress ? 'bg-yellow-50 border-yellow-200' :
+                  inProgress ? 'bg-amber-50 border-amber-200' :
                   'bg-white border-rule hover:border-primary-300'
                 }`}>
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
-                    done ? 'bg-ok text-white' : 'bg-primary-50'
-                  }`}>
-                    {done ? '✓' : q.emoji}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <div className="font-bold text-sm text-primary-900">{q.title}</div>
-                      {/* v1.3 — Compteur X/Y visible sur quêtes en cours */}
-                      {!done && q.target > 1 && (
-                        <div className="text-[11px] font-bold text-primary-700 whitespace-nowrap">
-                          {current}/{q.target} {q.unit}
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${
+                      done ? 'bg-ok text-white' : 'bg-primary-50'
+                    }`}>
+                      {done ? '✓' : q.emoji}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <div className="font-bold text-sm text-primary-900">{q.title}</div>
+                        <div className="text-[11px] font-bold whitespace-nowrap">
+                          {done ? (
+                            <span className="text-ok">+{earned} pts ✨</span>
+                          ) : (
+                            <span className="text-primary-700">{q.reward}</span>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-600 truncate">
-                      {done ? (
-                        <span className="text-ok font-semibold">
-                          +{earned} pts ✨
-                          {q.type === 'jeu' && (dq?.content_ref as any)?.games_played
-                            ? ` · ${(dq?.content_ref as any).games_played} jeu${((dq?.content_ref as any).games_played > 1) ? 'x' : ''}`
-                            : ''}
-                          {q.type === 'pratique' && (dq?.content_ref as any)?.messages_count
-                            ? ` · ${(dq?.content_ref as any).messages_count} msg`
-                            : ''}
-                        </span>
-                      ) : q.description}
-                    </div>
-                    {/* v1.3 — Barre de progression visible si quête multi-étapes */}
-                    {!done && q.target > 1 && (
-                      <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full transition-all ${inProgress ? 'bg-warn' : 'bg-primary-300'}`}
-                          style={{ width: `${progressPct}%` }} />
                       </div>
-                    )}
+                      <div className="text-xs text-gray-600 truncate">
+                        {done ? (
+                          <>
+                            {q.type === 'jeu' && ref.games_played
+                              ? `${ref.games_played} jeu${ref.games_played > 1 ? 'x' : ''} joué${ref.games_played > 1 ? 's' : ''} · ${earned} pts cumulés`
+                              : q.type === 'pratique' && ref.messages_count
+                              ? `${ref.messages_count} échange${ref.messages_count > 1 ? 's' : ''} avec Dodo`
+                              : `${q.target} ${q.unit} validés ✨`}
+                          </>
+                        ) : q.description}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    {done ? (
-                      <span className="text-xs font-bold text-ok">⭐</span>
-                    ) : (
-                      <>
-                        <div className="text-xs font-bold text-primary-700">{q.reward}</div>
-                        <div className="text-primary-500 text-lg">→</div>
-                      </>
-                    )}
+                  {/* v1.7 — Barre de progression FULL WIDTH, gris→bleu */}
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className={`h-full transition-all ${
+                        done ? 'bg-ok' :
+                        progressPct > 0 ? 'bg-primary-500' :
+                        'bg-gray-200'
+                      }`}
+                        style={{ width: `${progressPct}%` }} />
+                    </div>
+                    <span className={`text-[11px] font-bold whitespace-nowrap ${
+                      done ? 'text-ok' : progressPct > 0 ? 'text-primary-700' : 'text-gray-400'
+                    }`}>
+                      {current}/{q.target} {q.unit}
+                    </span>
                   </div>
                 </div>
               </Link>

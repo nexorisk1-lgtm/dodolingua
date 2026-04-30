@@ -124,6 +124,26 @@ export default function CoachPage() {
     }
   }, [voiceReady])
 
+  // v1.7 — Reset conversation au changement de mode (Auto/Tuteur/Ami)
+  // L'utilisateur veut tester chaque mode séparément. On vide les messages
+  // et on relance un greeting frais dans le nouveau mode.
+  const prevModeRef = useRef<typeof mode | null>(null)
+  useEffect(() => {
+    if (!voiceReady) return
+    if (prevModeRef.current === null) {
+      prevModeRef.current = mode
+      return
+    }
+    if (prevModeRef.current !== mode) {
+      prevModeRef.current = mode
+      setMessages([])
+      setError(null)
+      setVal('')
+      // Relance un greeting dans le nouveau mode
+      sendInitialGreeting()
+    }
+  }, [mode, voiceReady])
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages])

@@ -73,6 +73,30 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       })
       .eq('id', params.id)
 
+    // v1.7 — Suivi progression incrémentale Apprentissage/Révision pour la barre du dashboard
+    // On compte les mots uniques traités dans cette session.
+    try {
+      const uniqueWords = new Set(results.map((r: any) => r.word_id)).size
+      const today = new Date().toISOString().slice(0, 10)
+      const isReview = (new URL(req.url).searchParams.get('mode') === 'revision')
+      const questType = isReview ? 'revision' : 'apprentissage'
+      const { data: q } = await supabase.from('daily_quests')
+        .select('status, points_earned, content_ref')
+        .eq('user_id', user.id).eq('lang_code', lang)
+        .eq('date', today).eq('quest_type', questType).maybeSingle()
+      // Ne touche pas si déjà completed
+      if (q?.status !== 'completed') {
+        await supabase.from('daily_quests').upsert({
+          user_id: user.id, lang_code: lang, date: today,
+          quest_type: questType, status: 'in_progress',
+          content_ref: { session_id: params.id, progress: uniqueWords },
+        }, { onConflict: 'user_id,lang_code,date,quest_type' })
+      }
+    } catch (e) {
+      // log mais ne casse pas la requête
+      console.warn('quest progress update failed', e)
+    }
+
     return NextResponse.json({ ok: true, next_review: next.due })
   }
 
@@ -98,15 +122,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     const today = new Date().toISOString().slice(0, 10)
 
+    // v1.7 — Distingue Révision vs Apprentissage selon le mode de session
+    const isReviewMode = (new URL(req.url).searchParams.get('mode') === 'revision')
+    const finalQuestType = isReviewMode ? 'revision' : 'apprentissage'
+    const wordsCovered = new Set(results.map((r: any) => r.word_id)).size
     await supabase.from('daily_quests').upsert({
       user_id: user.id,
       lang_code: session.lang_code,
       date: today,
-      quest_type: 'apprentissage',
+      quest_type: finalQuestType,
       status: 'completed',
       points_earned: pts.total,
       completed_at: new Date().toISOString(),
-      content_ref: { session_id: params.id },
+      content_ref: { session_id: params.id, progress: wordsCovered },
     }, {
       onConflict: 'user_id,lang_code,date,quest_type'
     })
