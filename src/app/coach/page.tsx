@@ -92,6 +92,7 @@ function cleanForVoice(text: string): string {
     .filter(l => l.length > 0)
     .filter(l => !/^Correction\s*:/i.test(l))
     .filter(l => !/^Better\s*:/i.test(l))
+    .filter(l => !/^\[FR\]/i.test(l))  // v3.2 — ne lis pas la trad française à voix haute
     .join('. ')
 
   return conversationalLines
@@ -137,6 +138,15 @@ function MessageContent({ text }: { text: string }) {
               {corr.reason && (
                 <div className="text-xs italic text-gray-600 mt-1">📖 {corr.reason}</div>
               )}
+            </div>
+          )
+        }
+        // v3.2 — Ligne de traduction FR : rendu en italique gris, plus petit
+        if (/^\[FR\]\s*/i.test(line)) {
+          const french = line.replace(/^\[FR\]\s*/i, '')
+          return (
+            <div key={i} className="text-[12px] italic text-gray-500 leading-snug pl-1">
+              🇫🇷 {french}
             </div>
           )
         }
