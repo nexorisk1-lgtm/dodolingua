@@ -7,26 +7,45 @@ import { Button } from '@/components/ui/Button'
 import { Mascot } from '@/components/Mascot'
 import { createClient } from '@/lib/supabase/client'
 import { speak, getBestVoice, waitForVoices } from '@/components/games/utils'
-import { PronunciationBadge, extractWordScores, type WordScore } from '@/components/coach/PronunciationBadge'
+import {
+  PronunciationBadge,
+  extractWordScores,
+  scoreAgainstTarget,
+  extractTargetPhrase,
+  type WordScore,
+} from '@/components/coach/PronunciationBadge'
 
 /**
- * v3 — Coach Speaking refondu.
+ * v3.1 — Coach Speaking refondu.
  *
  * Patterns benchmarkés (sources : ELSA, Praktika, Langua, Babbel, Loora) :
- *  - Axe 1 (ELSA) : surlignage prononciation vert/jaune/rouge en mode speaking_pur
- *  - Axe 2 (Praktika) : bouton 💡 "Voir correction" à la demande sur les messages user
- *      en mode tuteur (PAS de correction automatique)
- *  - Axe 3 : isolation stricte des fils de conversation par mode (étanchéité)
- *  - Axe 4 (Babbel) : "breathing cue" sur le bouton micro à l'état idle
- *  - Axe 5 : espace libre toujours disponible (mode "auto" / "ami")
- *  - Axe 9 (Pimsleur/ELSA) : mode speaking_pur avec drill (bouton 🔁 Refaire)
+ *  - Axe 1 (ELSA) : surlignage prononciation vert/rouge en mode speaking_pur,
+ *    BASÉ SUR LA PHRASE CIBLE (pas la confidence brute).
+ *  - Axe 2 (Praktika) : bouton 💡 corrections à la demande sur messages user
+ *    en mode tuteur (PAS de correction automatique).
+ *  - Axe 3 : isolation stricte des fils de conversation par mode (étanchéité).
+ *  - Axe 4 (Babbel) : "breathing cue" sur le bouton micro à l'état idle.
+ *  - Axe 5 : espace libre toujours disponible.
+ *  - Axe 9 (Pimsleur/ELSA) : mode speaking_pur avec drill (bouton 🔁 Refaire).
  *
  * Bugs corrigés :
- *  - Bug 1 : threads par mode → switcher de mode ne mélange plus les conversations
- *  - Bug 2 : speakClean stoppe le micro AVANT TTS, redémarre après onend
+ *  - Bug 1 (v3) : threads par mode → switcher de mode ne mélange plus les conversations
+ *  - Bug 2 (v3) : speakClean stoppe le micro AVANT TTS, redémarre après onend
  *
- * Tout est non destructif : Mascot, voice conv mode, greeting, MessageContent
- * et parseCorrection (mode auto/ami) sont préservés.
+ * Nouveautés v3.1 :
+ *  - Score Speaking pur fiable : extrait la phrase cible du dernier message
+ *    du coach et compare la transcription. Vert si match, rouge sinon.
+ *  - Enregistrement audio en parallèle du STT en mode speaking_pur. Bouton
+ *    "▶️ Réécouter ma voix" pour s'auto-évaluer.
+ *  - Hauteur de conversation augmentée (60 → 70vh) + scroll moins agressif :
+ *    si l'utilisateur a scrollé manuellement, on n'auto-scroll plus tant qu'il
+ *    n'est pas revenu en bas.
+ *
+ * TODO v3.2 :
+ *  - Capter les corrections du Tuteur (endpoint /api/coach/correct) pour les
+ *    injecter dans le module Révisions de l'app (idée Raïssa du 30/04/2026).
+ *  - Persistance des threads en BDD (Supabase) pour retrouver l'historique
+ *    entre sessions.
  */
 
 type Mode = 'tuteur' | 'ami' | 'auto' | 'speaking_pur'
@@ -35,9 +54,13 @@ type CoachState = 'idle' | 'listening' | 'thinking' | 'speaking'
 interface Msg {
   role: 'user' | 'model'
   text: string
-  /** v3 axe 1 — scores de prononciation par mot (mode speaking_pur uniquement) */
+  /** v3.1 — scores de prononciation par mot (mode speaking_pur uniquement) */
   wordScores?: WordScore[]
-  /** v3 axe 2 — correction à la demande pour les messages user en mode tuteur */
+  /** v3.1 — true si scoring basé sur match phrase cible */
+  hasTarget?: boolean
+  /** v3.1 — Blob URL de l'enregistrement audio de l'utilisateur (mode speaking_pur) */
+  audioUrl?: string
+  /** v3 — correction à la demande (mode tuteur) */
   correction?: { state: 'loading' | 'ready' | 'error'; text?: string }
 }
 
@@ -63,7 +86,6 @@ const STATE_BADGE: Record<CoachState, { label: string; cls: string }> = {
 }
 
 function cleanForVoice(text: string): string {
-  // Ne lit QUE les lignes conversationnelles à voix haute.
   const conversationalLines = text
     .split('\n')
     .map(l => l.trim())
@@ -129,7 +151,7 @@ function hasCorrection(text: string): boolean {
 }
 
 export default function CoachPage() {
-  // v3 — un fil par mode (étanchéité, axe 3)
+  // v3 — un fil par mode
   const [threads, setThreads] = useState<Record<Mode, Msg[]>>({
     ami: [], auto: [], tuteur: [], speaking_pur: [],
   })
@@ -140,10 +162,7 @@ export default function CoachPage() {
   const [voiceName, setVoiceName] = useState<string | null>(null)
   const [voiceOn, setVoiceOn] = useState(true)
   const [voiceConvMode, setVoiceConvMode] = useState(false)
-
-  // v3 — machine à 4 états unifiée (Lot 3)
   const [state, setState] = useState<CoachState>('idle')
-
   const [error, setError] = useState<string | null>(null)
   const [voiceReady, setVoiceReady] = useState(false)
 
@@ -153,17 +172,23 @@ export default function CoachPage() {
   const lastTranscriptRef = useRef('')
   const lastConfidenceRef = useRef<number>(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // v3.1 — Track si l'user a scrollé manuellement vers le haut
+  const userHasScrolledUpRef = useRef(false)
   const recRef = useRef<any>(null)
   const greetedRef = useRef<Record<Mode, boolean>>({ ami: false, auto: false, tuteur: false, speaking_pur: false })
 
+  // v3.1 — Audio recording (parallèle au SpeechRecognition)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const lastAudioUrlRef = useRef<string | null>(null)
+
   useEffect(() => { voiceConvModeRef.current = voiceConvMode }, [voiceConvMode])
 
-  // v3 — état dérivé pour ergonomie
   const loading = state === 'thinking'
   const recording = state === 'listening'
   const micDisabled = state === 'thinking' || state === 'speaking'
 
-  // Bootstrap : auth + voix
   useEffect(() => {
     (async () => {
       const supabase = createClient()
@@ -182,7 +207,7 @@ export default function CoachPage() {
     })()
   }, [])
 
-  // Greeting initial du mode actif (UNE FOIS PAR MODE — chaque mode a son greeting)
+  // Greeting initial (UNE FOIS PAR MODE)
   useEffect(() => {
     if (!voiceReady) return
     if (greetedRef.current[activeMode]) return
@@ -190,31 +215,77 @@ export default function CoachPage() {
     sendInitialGreeting(activeMode)
   }, [voiceReady, activeMode])
 
-  // Auto-scroll du fil actif
+  // v3.1 — Scroll moins agressif : seulement si user n'a PAS scrollé manuellement
   useEffect(() => {
+    if (userHasScrolledUpRef.current) return
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
-  /** Stoppe proprement le micro si actif. */
+  // Détecter le scroll manuel de l'utilisateur
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onScroll = () => {
+      if (!el) return
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      // Si on est à plus de 50px du bas, l'user veut lire l'historique
+      userHasScrolledUpRef.current = distFromBottom > 50
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
   function stopMic() {
     try { recRef.current?.stop() } catch {}
     recRef.current = null
     if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
+    // Arrêter aussi l'enregistrement audio s'il tourne
+    stopAudioRecording()
   }
 
-  /**
-   * v3 — speakClean instrumentée (anti-boucle micro/parleur, Lot 2).
-   * Coupe le micro AVANT de parler, le redémarre 300 ms après onend
-   * (évite que le micro capte la queue audio synthétique).
-   * Conserve l'option onEnd existante du mode conv vocale.
-   */
+  // v3.1 — Audio recording lifecycle
+  async function startAudioRecording() {
+    if (typeof window === 'undefined' || !navigator.mediaDevices) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioStreamRef.current = stream
+      audioChunksRef.current = []
+      const mr = new MediaRecorder(stream)
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+      mr.onstop = () => {
+        if (audioChunksRef.current.length === 0) return
+        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' })
+        const url = URL.createObjectURL(blob)
+        lastAudioUrlRef.current = url
+        // Cleanup stream
+        try { audioStreamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
+        audioStreamRef.current = null
+      }
+      mr.start()
+      mediaRecorderRef.current = mr
+    } catch (e) {
+      // Microphone refusé ou indisponible — on ne bloque pas le STT pour autant
+      mediaRecorderRef.current = null
+    }
+  }
+
+  function stopAudioRecording() {
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+      }
+    } catch {}
+    mediaRecorderRef.current = null
+  }
+
   function speakClean(text: string, onEnd?: () => void) {
     if (!voiceOn) { onEnd?.(); return }
     const cleanText = cleanForVoice(text)
     if (!cleanText) { onEnd?.(); return }
     if (typeof window === 'undefined' || !window.speechSynthesis) { onEnd?.(); return }
 
-    // Anti-boucle : on coupe le micro AVANT le TTS
     stopMic()
     ttsActiveRef.current = true
     setState('speaking')
@@ -242,8 +313,6 @@ export default function CoachPage() {
     }
     u.onend = fire
     u.onerror = fire
-
-    // Timeout de sécurité (iOS Safari peut ne pas appeler onend)
     const safetyMs = Math.min(30_000, cleanText.length * 60 + 500)
     window.setTimeout(fire, safetyMs)
 
@@ -273,7 +342,17 @@ export default function CoachPage() {
     }
   }
 
-  async function send(text?: string, wordScores?: WordScore[]) {
+  /**
+   * v3.1 — Récupère la phrase cible à comparer pour le scoring speaking_pur.
+   * On la cherche dans le DERNIER message du coach.
+   */
+  function getCurrentTargetPhrase(): string | null {
+    const lastModel = [...threads.speaking_pur].reverse().find(m => m.role === 'model')
+    if (!lastModel) return null
+    return extractTargetPhrase(lastModel.text)
+  }
+
+  async function send(text?: string, wordScores?: WordScore[], audioUrl?: string, hasTarget?: boolean) {
     const message = (text ?? val).trim()
     if (!message || loading || state === 'speaking') return
     setError(null)
@@ -281,11 +360,15 @@ export default function CoachPage() {
     const currentMode = activeMode
     const userMsg: Msg = { role: 'user', text: message }
     if (wordScores && wordScores.length) userMsg.wordScores = wordScores
+    if (hasTarget) userMsg.hasTarget = true
+    if (audioUrl) userMsg.audioUrl = audioUrl
     const next: Msg[] = [...threads[currentMode], userMsg]
     setThreads(prev => ({ ...prev, [currentMode]: next }))
     setVal('')
     stopMic()
     setState('thinking')
+    // L'user vient d'envoyer, on revient en bas du fil
+    userHasScrolledUpRef.current = false
 
     try {
       const res = await fetch('/api/coach', {
@@ -326,8 +409,14 @@ export default function CoachPage() {
     rec.continuous = true
     rec.interimResults = true
     lastConfidenceRef.current = 0
+
+    // v3.1 — Démarre l'enregistrement audio en parallèle (mode speaking_pur uniquement)
+    if (activeMode === 'speaking_pur') {
+      startAudioRecording()
+    }
+
     rec.onstart = () => setState('listening')
-    rec.onerror = (e: any) => { setError('Erreur micro : ' + e.error); setState('idle') }
+    rec.onerror = (e: any) => { setError('Erreur micro : ' + e.error); setState('idle'); stopAudioRecording() }
     rec.onend = () => setState(s => s === 'listening' ? 'idle' : s)
     rec.onresult = (e: any) => {
       let transcript = ''
@@ -355,15 +444,22 @@ export default function CoachPage() {
     rec.continuous = true
     rec.interimResults = true
     lastConfidenceRef.current = 0
+
+    if (activeMode === 'speaking_pur') {
+      startAudioRecording()
+    }
+
     rec.onstart = () => { setState('listening'); lastTranscriptRef.current = '' }
     rec.onerror = (e: any) => {
       if (e.error === 'no-speech' && voiceConvModeRef.current) {
         setState('idle')
+        stopAudioRecording()
         setTimeout(() => { if (voiceConvModeRef.current) startContinuousRecording() }, 300)
         return
       }
       setError('Erreur micro : ' + e.error)
       setState('idle')
+      stopAudioRecording()
     }
     rec.onend = () => {
       setState(s => s === 'listening' ? 'idle' : s)
@@ -384,13 +480,28 @@ export default function CoachPage() {
       silenceTimerRef.current = setTimeout(() => {
         const finalText = lastTranscriptRef.current.trim()
         try { rec.stop() } catch {}
-        if (finalText.length > 0) {
-          const punct = addBasicPunctuation(finalText)
-          const scores = activeMode === 'speaking_pur'
-            ? extractWordScores(punct, lastConfidenceRef.current)
-            : undefined
-          send(punct, scores)
-        }
+        // Stop audio recording → laisse onstop générer le blob URL
+        stopAudioRecording()
+        // Délai court pour que le blob URL soit disponible
+        setTimeout(() => {
+          if (finalText.length > 0) {
+            const punct = addBasicPunctuation(finalText)
+            let scores: WordScore[] | undefined
+            let hasTarget = false
+            if (activeMode === 'speaking_pur') {
+              const target = getCurrentTargetPhrase()
+              if (target) {
+                scores = scoreAgainstTarget(punct, target, lastConfidenceRef.current)
+                hasTarget = true
+              } else {
+                scores = extractWordScores(punct, lastConfidenceRef.current)
+              }
+            }
+            const audioUrl = lastAudioUrlRef.current || undefined
+            lastAudioUrlRef.current = null
+            send(punct, scores, audioUrl, hasTarget)
+          }
+        }, 250)
       }, 1500)
     }
     try { rec.start(); recRef.current = rec } catch (err: any) { setError(err.message) }
@@ -413,8 +524,31 @@ export default function CoachPage() {
   async function stopRecording() {
     stopMic()
     setState('idle')
+    // Bouton stop manuel — si on était en speaking_pur, attache aussi les wordScores et l'audio
     setVal(prev => {
       if (!prev) return prev
+      const punct = prev
+      let scores: WordScore[] | undefined
+      let hasTarget = false
+      let audioUrl: string | undefined
+      if (activeMode === 'speaking_pur') {
+        const target = getCurrentTargetPhrase()
+        if (target) {
+          scores = scoreAgainstTarget(punct, target, lastConfidenceRef.current)
+          hasTarget = true
+        } else {
+          scores = extractWordScores(punct, lastConfidenceRef.current)
+        }
+        audioUrl = lastAudioUrlRef.current || undefined
+        lastAudioUrlRef.current = null
+      }
+      // En mode speaking_pur on auto-envoie ; sinon on garde dans l'input
+      if (activeMode === 'speaking_pur' && punct.trim()) {
+        // Délai pour laisser le blob arriver
+        setTimeout(() => send(punct, scores, audioUrl, hasTarget), 250)
+        return ''
+      }
+      // Sinon, ponctuation Gemini en background
       ;(async () => {
         try {
           const res = await fetch('/api/punctuate', {
@@ -444,15 +578,14 @@ export default function CoachPage() {
     setVal('')
     setError(null)
     setState('idle')
+    userHasScrolledUpRef.current = false
   }
 
-  /** v3 axe 2 — Demande la correction d'un message user (à la demande). */
   async function requestCorrection(msgIndex: number) {
     const thread = threads[activeMode]
     const target = thread[msgIndex]
     if (!target || target.role !== 'user') return
     if (target.correction?.state === 'ready') {
-      // Toggle off
       const updated = [...thread]
       updated[msgIndex] = { ...target, correction: undefined }
       setThreads(prev => ({ ...prev, [activeMode]: updated }))
@@ -494,13 +627,22 @@ export default function CoachPage() {
     setVal(text)
   }
 
+  /** v3.1 — Réécouter l'enregistrement audio d'un message user. */
+  function playUserAudio(audioUrl: string) {
+    try {
+      // Stoppe TTS pour ne pas se chevaucher
+      window.speechSynthesis.cancel()
+    } catch {}
+    const audio = new Audio(audioUrl)
+    audio.play().catch(() => {})
+  }
+
   function clearActiveThread() {
     if (!confirm('Effacer le fil de ce mode ?')) return
     setThreads(prev => ({ ...prev, [activeMode]: [] }))
     greetedRef.current[activeMode] = false
   }
 
-  // Choisir la pose du Mascot selon le dernier message du coach
   const lastModelMsg = [...messages].reverse().find(m => m.role === 'model')
   const dodoPose = lastModelMsg
     ? (hasCorrection(lastModelMsg.text) ? 'study' : 'happy')
@@ -512,7 +654,6 @@ export default function CoachPage() {
 
   return (
     <Container className="max-w-2xl space-y-3 pb-20">
-      {/* Header */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <Mascot pose={dodoPose} size={56} animation="breathe" className="shrink-0" />
@@ -530,10 +671,9 @@ export default function CoachPage() {
         </div>
       </div>
 
-      {/* v3 — Onglets de mode (étanches, axe 3) */}
       <Card className="!p-3">
         <div className="text-xs font-bold text-gray-700 mb-2">Comment veux-tu apprendre aujourd&apos;hui ?</div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {MODE_TABS.map(t => {
             const isActive = activeMode === t.key
             const count = threads[t.key].length
@@ -554,11 +694,10 @@ export default function CoachPage() {
           {activeMode === 'ami' && '💬 Comme avec un pote anglophone : on parle, on rigole, je corrige rarement.'}
           {activeMode === 'auto' && '🎯 Mix idéal : conversation fluide + 1-2 corrections quand c&apos;est utile.'}
           {activeMode === 'tuteur' && '🎓 Mode tuteur : conversation pédagogique. Pas de correction automatique — clique sur 💡 sur tes messages pour en demander une.'}
-          {activeMode === 'speaking_pur' && '🎙️ Mode speaking pur : focus prononciation. Parle au micro, vois ton score par mot. Aucune correction de grammaire ici.'}
+          {activeMode === 'speaking_pur' && '🎙️ Mode speaking pur : focus prononciation. Parle au micro, ta phrase est comparée à la phrase cible. Réécoute-toi avec ▶️.'}
         </div>
       </Card>
 
-      {/* Toggle Mode Conversation Vocale (hands-free) */}
       <button onClick={toggleVoiceConvMode}
         className={`w-full p-3 rounded-2xl border-2 transition-all ${
           voiceConvMode
@@ -587,9 +726,9 @@ export default function CoachPage() {
         </div>
       </button>
 
-      {/* Conversation */}
       <Card className="!p-3">
-        <div ref={scrollRef} className="h-[60vh] overflow-y-auto space-y-2 px-1 py-2">
+        {/* v3.1 — Hauteur augmentée 60vh → 70vh */}
+        <div ref={scrollRef} className="h-[70vh] overflow-y-auto space-y-2 px-1 py-2">
           {messages.length === 0 && !loading && (
             <div className="text-center py-12">
               <Mascot pose="idle" size={140} animation="wave" />
@@ -612,7 +751,7 @@ export default function CoachPage() {
                   </>
                 ) : (
                   m.wordScores
-                    ? <PronunciationBadge words={m.wordScores} />
+                    ? <PronunciationBadge words={m.wordScores} hasTarget={!!m.hasTarget} />
                     : <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
                 )}
               </div>
@@ -641,14 +780,23 @@ export default function CoachPage() {
                 </div>
               )}
 
-              {/* v3 axe 9 — Bouton Refaire en mode speaking_pur */}
-              {m.role === 'user' && isSpeakingPurMode && m.wordScores && (
-                <div className="mt-1 text-right">
-                  <button
-                    onClick={() => redoUtterance(m.text)}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
-                    🔁 Refaire cette phrase
-                  </button>
+              {/* v3.1 — Boutons spécifiques speaking_pur (Refaire + Réécouter ma voix) */}
+              {m.role === 'user' && isSpeakingPurMode && (
+                <div className="mt-1 text-right space-x-2">
+                  {m.audioUrl && (
+                    <button
+                      onClick={() => playUserAudio(m.audioUrl!)}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200">
+                      ▶️ Réécouter ma voix
+                    </button>
+                  )}
+                  {m.wordScores && (
+                    <button
+                      onClick={() => redoUtterance(m.text)}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
+                      🔁 Refaire cette phrase
+                    </button>
+                  )}
                 </div>
               )}
             </div>
