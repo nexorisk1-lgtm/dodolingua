@@ -225,11 +225,14 @@ export default function CoachPage() {
     sendInitialGreeting(activeMode)
   }, [voiceReady, activeMode])
 
-  // v3.1 — Scroll moins agressif : seulement si user n'a PAS scrollé manuellement
+  // v3.2.1 — Scroll uniquement sur l'arrivée d'un NOUVEAU message (pas sur update d'un existant
+  // comme la correction qui passe de loading à ready). Évite le bouncing qui interrompait le
+  // scroll manuel en mode Tuteur. Scroll instant ('auto') pour ne pas interférer avec le scroll
+  // de l'utilisateur.
   useEffect(() => {
     if (userHasScrolledUpRef.current) return
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages])
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'auto' })
+  }, [messages.length])
 
   // Détecter le scroll manuel de l'utilisateur
   useEffect(() => {
@@ -238,8 +241,9 @@ export default function CoachPage() {
     const onScroll = () => {
       if (!el) return
       const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-      // Si on est à plus de 50px du bas, l'user veut lire l'historique
-      userHasScrolledUpRef.current = distFromBottom > 50
+      // v3.2.1 — 100px de tolérance (au lieu de 50) pour être plus permissif :
+      // dès que l'user remonte un peu, on coupe l'auto-scroll
+      userHasScrolledUpRef.current = distFromBottom > 100
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
