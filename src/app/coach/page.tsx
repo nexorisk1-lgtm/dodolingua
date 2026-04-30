@@ -51,15 +51,31 @@ import {
 type Mode = 'tuteur' | 'ami' | 'auto' | 'speaking_pur'
 type CoachState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
-// v3.3 — Scénarios pour le mode speaking_pur
-type Scenario = 'daily' | 'restaurant' | 'hotel' | 'pro' | 'shopping' | 'travel'
-const SCENARIOS_UI: { key: Scenario; emoji: string; label: string }[] = [
+// v3.3.1 — Scénarios étendus : situations + thèmes vocabulaire
+type Scenario =
+  | 'daily' | 'meeting' | 'restaurant' | 'hotel' | 'travel' | 'shopping' | 'pro' | 'health'
+  | 'colors' | 'clothes' | 'food' | 'family' | 'weather' | 'hobbies'
+
+interface ScenarioOpt { key: Scenario; emoji: string; label: string }
+
+const SCENARIOS_SITUATIONS: ScenarioOpt[] = [
   { key: 'daily',      emoji: '👋', label: 'Quotidien' },
+  { key: 'meeting',    emoji: '🤝', label: 'Présentations' },
   { key: 'restaurant', emoji: '🍽️', label: 'Restaurant' },
   { key: 'hotel',      emoji: '🏨', label: 'Hôtel' },
-  { key: 'pro',        emoji: '💼', label: 'Pro' },
-  { key: 'shopping',   emoji: '🛍️', label: 'Shopping' },
   { key: 'travel',     emoji: '✈️', label: 'Voyage' },
+  { key: 'shopping',   emoji: '🛍️', label: 'Shopping' },
+  { key: 'pro',        emoji: '💼', label: 'Pro' },
+  { key: 'health',     emoji: '🏥', label: 'Santé' },
+]
+
+const SCENARIOS_THEMES: ScenarioOpt[] = [
+  { key: 'colors',  emoji: '🎨', label: 'Couleurs' },
+  { key: 'clothes', emoji: '👕', label: 'Vêtements' },
+  { key: 'food',    emoji: '🍎', label: 'Nourriture' },
+  { key: 'family',  emoji: '👨‍👩‍👧', label: 'Famille' },
+  { key: 'weather', emoji: '🌦️', label: 'Météo' },
+  { key: 'hobbies', emoji: '⚽', label: 'Loisirs' },
 ]
 
 interface Msg {
@@ -744,19 +760,36 @@ export default function CoachPage() {
           {activeMode === 'speaking_pur' && '🎙️ Mode speaking pur : focus prononciation. Choisis un scénario ci-dessous pour bosser des phrases ciblées.'}
         </div>
         {activeMode === 'speaking_pur' && (
-          <div className="mt-3 pt-3 border-t border-rule">
-            <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">Scénario à pratiquer</div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {SCENARIOS_UI.map(s => {
-                const active = scenario === s.key
-                return (
-                  <button key={s.key} onClick={() => changeScenario(s.key)}
-                    className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg text-center transition ${active ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}>
-                    <span className="text-base leading-none">{s.emoji}</span>
-                    <span className="text-[10px] font-bold">{s.label}</span>
-                  </button>
-                )
-              })}
+          <div className="mt-3 pt-3 border-t border-rule space-y-3">
+            <div>
+              <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">📍 Situations</div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {SCENARIOS_SITUATIONS.map(s => {
+                  const active = scenario === s.key
+                  return (
+                    <button key={s.key} onClick={() => changeScenario(s.key)}
+                      className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg text-center transition ${active ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}>
+                      <span className="text-base leading-none">{s.emoji}</span>
+                      <span className="text-[10px] font-bold">{s.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">🧠 Thèmes vocabulaire</div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                {SCENARIOS_THEMES.map(s => {
+                  const active = scenario === s.key
+                  return (
+                    <button key={s.key} onClick={() => changeScenario(s.key)}
+                      className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg text-center transition ${active ? 'bg-purple-600 text-white shadow-sm' : 'bg-purple-50 text-purple-800 hover:bg-purple-100'}`}>
+                      <span className="text-base leading-none">{s.emoji}</span>
+                      <span className="text-[10px] font-bold">{s.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
         )}

@@ -3,17 +3,30 @@ import type { CefrLevel } from '@/types/database'
 // v3 — 4 modes : 3 historiques + speaking_pur (focus prononciation/fluidité)
 export type CoachModeV15 = 'tuteur' | 'ami' | 'auto' | 'speaking_pur'
 
-// v3.3 — Scénarios pour le mode speaking_pur (axes Speak/Praktika/TalkPal)
+// v3.3.1 — Scénarios étendus : 8 situations + 6 thèmes (axes Speak/Praktika/TalkPal/ELSA)
 export type SpeakingScenario =
-  | 'daily' | 'restaurant' | 'hotel' | 'pro' | 'shopping' | 'travel'
+  // Situations (vie courante + pro)
+  | 'daily' | 'meeting' | 'restaurant' | 'hotel' | 'travel' | 'shopping' | 'pro' | 'health'
+  // Thèmes vocabulaire
+  | 'colors' | 'clothes' | 'food' | 'family' | 'weather' | 'hobbies'
 
 const SCENARIOS: Record<SpeakingScenario, string> = {
-  daily: 'Daily life conversations: greetings, weather, hobbies, feelings, weekend plans, family.',
-  restaurant: 'At a restaurant. Drill phrases like: ordering food, asking for the menu, asking for recommendations, paying the bill, dietary restrictions, complaints.',
-  hotel: 'At a hotel. Drill phrases like: making a reservation, checking in, asking for amenities (wifi, breakfast, gym), requesting a wake-up call, late checkout, room issues.',
-  pro: 'Professional context. Drill phrases like: introducing yourself in a meeting, scheduling, presenting an idea briefly, agreeing/disagreeing politely, job interview questions and answers.',
-  shopping: 'Shopping. Drill phrases like: asking the price, trying clothes on, asking about sizes/colors, asking for refunds, paying with card, ordering online by phone.',
-  travel: 'Traveling and transport. Drill phrases like: airport check-in, security, asking for directions, public transport, missed connections, lost luggage.',
+  // === Situations ===
+  daily: 'Daily life conversations: greetings, weather, hobbies, feelings, weekend plans, family. Mix everyday phrases naturally.',
+  meeting: 'Meeting someone new (introductions, small talk, networking). Drill: "Nice to meet you", "Where are you from?", "What do you do for a living?", "Have a good one!". Tone: friendly and curious.',
+  restaurant: 'At a restaurant. Drill phrases like: ordering food, asking for the menu, asking for recommendations, paying the bill, dietary restrictions, complaints, asking for the chef\'s special.',
+  hotel: 'At a hotel. Drill phrases like: making a reservation, checking in, asking for amenities (wifi, breakfast, gym), requesting a wake-up call, late checkout, room issues, asking for tourist tips.',
+  travel: 'Traveling and transport. Drill phrases like: airport check-in, security, asking for directions, public transport, missed connections, lost luggage, taxi rides, train tickets.',
+  shopping: 'Shopping. Drill phrases like: asking the price, trying clothes on, asking about sizes/colors/availability, asking for refunds, paying with card, comparing options.',
+  pro: 'Professional context. Drill phrases like: introducing yourself in a meeting, scheduling, presenting an idea briefly, agreeing/disagreeing politely, job interview questions, networking events, replying to emails verbally.',
+  health: 'At the doctor or pharmacy. Drill phrases like: describing symptoms, scheduling an appointment, asking about side effects, getting a prescription, emergencies, basic body parts.',
+  // === Thèmes vocabulaire ===
+  colors: 'Vocabulary theme: COLORS. Drill phrases that USE color words naturally ("My car is dark blue", "I love that bright red dress", "The sky turns orange at sunset"). Vary usage : describing objects, preferences, nature, fashion.',
+  clothes: 'Vocabulary theme: CLOTHES. Drill phrases that USE clothing words naturally ("I am wearing a white shirt and jeans", "Do you have this jumper in size M?", "Her dress is gorgeous"). Vary usage: shopping, describing outfits, weather-appropriate clothing.',
+  food: 'Vocabulary theme: FOOD. Drill phrases that USE food/cooking words naturally ("I love spicy curry", "Could I have a glass of orange juice?", "The pasta is too salty"). Vary usage: ordering, describing taste, cooking, healthy eating.',
+  family: 'Vocabulary theme: FAMILY. Drill phrases that USE family relationship words naturally ("My older sister lives in London", "I have two cousins on my mum\'s side", "My grandfather used to play guitar"). Vary usage: introductions, family events, descriptions.',
+  weather: 'Vocabulary theme: WEATHER. Drill phrases that USE weather and seasonal words naturally ("It is pouring rain outside", "I love crisp autumn mornings", "The forecast says it will be sunny"). Vary usage: small talk, planning activities.',
+  hobbies: 'Vocabulary theme: HOBBIES & SPORTS. Drill phrases that USE leisure activity words naturally ("I play tennis every Sunday", "I am really into gardening", "Have you ever tried surfing?"). Vary usage: introducing yourself, weekends, asking about interests.',
 }
 
 interface CoachContext {
