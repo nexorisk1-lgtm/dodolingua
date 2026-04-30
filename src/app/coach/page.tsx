@@ -18,13 +18,22 @@ declare global {
 }
 
 function cleanForVoice(text: string): string {
-  return text
+  // v1.8 — Ne lit QUE les lignes conversationnelles à voix haute.
+  // Skip les lignes "Correction: ..." et "Better: ..." qui sont visuelles, pas auditives.
+  const conversationalLines = text
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .filter(l => !/^Correction\s*:/i.test(l))
+    .filter(l => !/^Better\s*:/i.test(l))
+    .join('. ')
+
+  return conversationalLines
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F2FF}\u{FE00}-\u{FE0F}\u{1F100}-\u{1F1FF}]/gu, '')
     .replace(/\*\*/g, '')
     .replace(/\*/g, '')
     .replace(/->/g, ' ')
     .replace(/→/g, ' ')
-    .replace(/Correction:/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -87,13 +96,38 @@ export default function CoachPage() {
   // v1.5 — mode coach : 'tuteur' | 'ami' | 'auto'
   const [mode, setMode] = useState<'tuteur' | 'ami' | 'auto'>('auto')
   const [recording, setRecording] = useState(false)
+  // v1.8 — Mode Conversation Vocale en continu (auto-écoute, auto-envoi sur silence)
+  const [voiceConvMode, setVoiceConvMode] = useState(false)
+  const voiceConvModeRef = useRef(false)
+  const recordingRef = useRef(false)
+  const silenceTimerRef = useRef<any>(null)
+  const lastTranscriptRef = useRef('')
+  useEffect(() => { voiceConvModeRef.current = voiceConvMode }, [voiceConvMode])
+  useEffect(() => { recordingRef.current = recording }, [recording])
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const recRef = useRef<any>(null)
   const greetedRef = useRef(false)
 
-  function speakClean(text: string) {
-    if (voiceOn) speak(cleanForVoice(text), voiceName, 0.85)
+  // v1.8 — speakClean qui supporte un callback onEnd (utilisé en mode conv vocale)
+  function speakClean(text: string, onEnd?: () => void) {
+    if (!voiceOn) { onEnd?.(); return }
+    const cleanText = cleanForVoice(text)
+    if (!cleanText) { onEnd?.(); return }
+    if (typeof window === 'undefined' || !window.speechSynthesis) { onEnd?.(); return }
+    window.speechSynthesis.cancel()
+    const u = new SpeechSynthesisUtterance(cleanText)
+    if (voiceName) {
+      const v = window.speechSynthesis.getVoices().find((vc: SpeechSynthesisVoice) => vc.name === voiceName)
+      if (v) { u.voice = v; u.lang = v.lang }
+    } else {
+      u.lang = 'en-GB'
+    }
+    u.rate = 0.85
+    u.pitch = 1
+    u.onend = () => onEnd?.()
+    u.onerror = () => onEnd?.()
+    window.speechSynthesis.speak(u)
   }
 
   // v1.6 — Étape 1 : bootstrap (auth + lock voix)
@@ -158,7 +192,12 @@ export default function CoachPage() {
       const data = await res.json()
       if (res.ok && data.reply) {
         setMessages([{ role: 'model', text: data.reply }])
-        speakClean(data.reply)
+        // v1.8 — En mode conv vocale : démarre le micro après le greeting
+        speakClean(data.reply, () => {
+          if (voiceConvModeRef.current && !recordingRef.current) {
+            setTimeout(() => startContinuousRecording(), 400)
+          }
+        })
       }
     } catch {} finally { setLoading(false) }
   }
@@ -177,7 +216,12 @@ export default function CoachPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Erreur'); setLoading(false); return }
       setMessages([...next, { role: 'model', text: data.reply }])
-      speakClean(data.reply)
+      // v1.8 — En mode conv vocale : après TTS, relance le micro automatiquement
+      speakClean(data.reply, () => {
+        if (voiceConvModeRef.current && !recordingRef.current) {
+          setTimeout(() => startContinuousRecording(), 400)
+        }
+      })
     } catch (e: any) {
       setError(e.message || 'Erreur réseau')
     } finally { setLoading(false) }
@@ -204,6 +248,74 @@ export default function CoachPage() {
       setVal(transcript.trim())
     }
     try { rec.start(); recRef.current = rec } catch (err: any) { setError(err.message) }
+  }
+
+  // v1.8 — Mode Conversation Vocale : reconnaissance continue + auto-envoi sur silence
+  function startContinuousRecording() {
+    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
+    if (!SR) {
+      setError('Reconnaissance vocale non disponible. Utilise Chrome.')
+      setVoiceConvMode(false)
+      return
+    }
+    if (recordingRef.current) return // déjà en écoute
+    const rec = new SR()
+    rec.lang = 'en-GB'
+    rec.continuous = true
+    rec.interimResults = true
+    rec.onstart = () => { setRecording(true); lastTranscriptRef.current = '' }
+    rec.onerror = (e: any) => {
+      // 'no-speech' est attendu : on relance silencieusement
+      if (e.error === 'no-speech' && voiceConvModeRef.current) {
+        setRecording(false)
+        setTimeout(() => { if (voiceConvModeRef.current) startContinuousRecording() }, 300)
+        return
+      }
+      setError('Erreur micro : ' + e.error)
+      setRecording(false)
+    }
+    rec.onend = () => {
+      setRecording(false)
+      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
+    }
+    rec.onresult = (e: any) => {
+      let transcript = ''
+      for (let i = 0; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript
+      }
+      transcript = transcript.trim()
+      lastTranscriptRef.current = transcript
+      setVal(transcript)
+      // Reset le timer de silence à chaque nouveau résultat
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = setTimeout(() => {
+        // 1.5s sans nouveau résultat → on stoppe et on envoie
+        const finalText = lastTranscriptRef.current.trim()
+        try { rec.stop() } catch {}
+        if (finalText.length > 0) {
+          send(addBasicPunctuation(finalText))
+        }
+      }, 1500)
+    }
+    try { rec.start(); recRef.current = rec } catch (err: any) { setError(err.message) }
+  }
+
+  // v1.8 — Toggle voice conv mode
+  function toggleVoiceConvMode() {
+    const next = !voiceConvMode
+    setVoiceConvMode(next)
+    if (next) {
+      // Active : démarre l'écoute si rien d'autre en cours
+      if (!loading && !recordingRef.current) {
+        setTimeout(() => startContinuousRecording(), 200)
+      }
+    } else {
+      // Désactive : stoppe tout
+      try { recRef.current?.stop() } catch {}
+      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
+      try { window.speechSynthesis.cancel() } catch {}
+      setRecording(false)
+    }
   }
 
   async function stopRecording() {
@@ -284,6 +396,35 @@ export default function CoachPage() {
           {mode === 'tuteur' && '🎓 Mode prof : je repère TOUTES les erreurs et je t&apos;explique pourquoi.'}
         </div>
       </Card>
+
+      {/* v1.8 — Toggle Mode Conversation Vocale (hands-free) */}
+      <button onClick={toggleVoiceConvMode}
+        className={`w-full p-3 rounded-2xl border-2 transition-all ${
+          voiceConvMode
+            ? 'bg-gradient-to-r from-primary-700 to-primary-500 text-white border-primary-700 shadow-lg'
+            : 'bg-white border-rule hover:border-primary-300 text-gray-700'
+        }`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`text-2xl ${voiceConvMode ? 'animate-pulse' : ''}`}>
+              {voiceConvMode ? '🎙️' : '🎤'}
+            </div>
+            <div className="text-left">
+              <div className="font-bold text-sm">
+                {voiceConvMode ? 'Conversation vocale ACTIVE' : 'Mode Conversation Vocale'}
+              </div>
+              <div className={`text-[11px] ${voiceConvMode ? 'text-white/80' : 'text-gray-500'}`}>
+                {voiceConvMode
+                  ? recording ? '🟢 Je t&apos;écoute… parle' : loading ? '⏳ Dodo réfléchit…' : '🔊 Dodo parle'
+                  : 'Active pour parler en continu, mains libres'}
+              </div>
+            </div>
+          </div>
+          <div className={`w-11 h-6 rounded-full p-0.5 transition ${voiceConvMode ? 'bg-white/30' : 'bg-gray-200'}`}>
+            <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${voiceConvMode ? 'translate-x-5' : ''}`} />
+          </div>
+        </div>
+      </button>
 
       <Card className="!p-3">
         <div ref={scrollRef} className="h-[60vh] overflow-y-auto space-y-2 px-1 py-2">
