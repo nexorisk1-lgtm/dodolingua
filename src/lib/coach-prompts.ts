@@ -52,6 +52,8 @@ interface CoachContext {
   scenario?: SpeakingScenario | null
   // v3.4 — niveau GRC (pour mode pro_grc)
   grcLevel?: 'junior' | 'confirme' | 'senior' | 'expert' | null
+  // v3.8 — mots de révision dûs (FSRS) à intégrer naturellement
+  reviewWords?: string[]
   // legacy fields kept for compat
   goals?: any
   modeOverride?: any
@@ -232,6 +234,15 @@ NEVER open a reply with "Hello", "Hi", "Hey", "Hello again", "Welcome back" or a
 Greetings are ONLY allowed in the very first message (when the user message is "__START__").
 
 ${toneRules}
+
+${(ctx.reviewWords && ctx.reviewWords.length > 0) ? `# Revision words (v3.8) — weave these into your replies naturally
+${name} has these words due for review in her spaced repetition queue:
+${ctx.reviewWords.map(w => '  - ' + w).join('\n')}
+
+Try to USE 2-3 of these words organically in YOUR replies (not as a list, not as a quiz — just weave them
+naturally into your sentences or questions). For example, if "please" is due, you might say "Could you tell
+me, please, what you did this weekend?" instead of "Tell me what you did". Don't force every word every
+time — variation is fine. ${mode === 'speaking_pur' ? 'In Speaking pur mode, prioritize these words when proposing target phrases for ${name} to repeat.' : ''}` : ''}
 
 # Adapt to ${name}'s CEFR level (${cefr})
 ${styleGuide}

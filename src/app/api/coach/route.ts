@@ -40,6 +40,31 @@ export async function POST(req: NextRequest) {
   const { data: lang } = await supabase.from('user_languages')
     .select('cefr_global').eq('user_id', user.id).eq('is_current', true).maybeSingle()
 
+  // v3.8 — Si mode = tuteur ou speaking_pur, on pioche les 5 mots les plus en retard
+  // dans la queue FSRS pour que le coach les intègre naturellement dans la conversation
+  // ou dans les phrases cibles. Pas de tracking strict, juste exposition contextuelle.
+  let reviewWords: string[] = []
+  if (effectiveMode === 'tuteur' || effectiveMode === 'speaking_pur') {
+    const nowIso = new Date().toISOString()
+    const { data: due } = await supabase
+      .from('user_progress')
+      .select('concept_id')
+      .eq('user_id', user.id)
+      .eq('lang_code', prefs?.lang_code || 'en-GB')
+      .lte('next_review', nowIso)
+      .order('next_review', { ascending: true })
+      .limit(5)
+    if (due && due.length > 0) {
+      const ids = due.map((d: any) => d.concept_id)
+      const { data: trs } = await supabase
+        .from('translations')
+        .select('lemma')
+        .eq('lang_code', prefs?.lang_code || 'en-GB')
+        .in('concept_id', ids)
+      reviewWords = (trs || []).map((t: any) => t.lemma).filter(Boolean)
+    }
+  }
+
   const systemPrompt = buildCoachSystemPrompt({
     cefr: lang?.cefr_global || null,
     themes: prefs?.themes || [],
@@ -48,6 +73,7 @@ export async function POST(req: NextRequest) {
     mode: effectiveMode,  // v3.4 — pro_grc forcé en auto si non-admin
     scenario,  // v3.3
     grcLevel: (prefs as any)?.grc_level || null,  // v3.4
+    reviewWords,  // v3.8 — mots dûs en révision
   })
 
   let reply: string
@@ -68,7 +94,7 @@ export async function POST(req: NextRequest) {
 
   await supabase.from('audit_log').insert({
     user_id: user.id, action: 'coach_message',
-    payload_json: { user_msg: messages[messages.length - 1]?.text?.slice(0, 200), provider },
+    payload_json: { user_msg: messages[messages.length - 1]?.text?.slice(0, 200), provider, review_words: reviewWords.length },
   })
 
   // v1.4 — Gestion de la quête "Pratique" :
@@ -112,5 +138,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ reply, provider, remaining: DAILY_LIMIT - (count || 0) - 1 })
+  return NextResponse.json({ reply, provider, remaining: DAILY_LIMIT - (count || 0) - 1, reviewWords })
 }

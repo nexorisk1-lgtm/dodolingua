@@ -222,8 +222,10 @@ export default function CoachPage() {
   const [state, setState] = useState<CoachState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [voiceReady, setVoiceReady] = useState(false)
-  // v3.5 — persistance : true quand on a chargé les threads depuis la BDD (évite race avec le greeting initial)
+  // v3.5 — persistance : true quand on a chargé les threads depuis la BDD
   const [threadsLoaded, setThreadsLoaded] = useState(false)
+  // v3.8 — mots de révision dûs intégrés au coach (tuteur/speaking_pur)
+  const [reviewWords, setReviewWords] = useState<string[]>([])
 
   const voiceConvModeRef = useRef(false)
   // v3.5 — debounce de la sauvegarde des threads (un timer par mode)
@@ -454,6 +456,7 @@ export default function CoachPage() {
       })
       const data = await res.json()
       if (res.ok && data.reply) {
+        if (Array.isArray(data.reviewWords)) setReviewWords(data.reviewWords)
         setThreads(prev => ({ ...prev, [mode]: [{ role: 'model', text: data.reply }] }))
         speakClean(data.reply, () => {
           if (voiceConvModeRef.current && state !== 'listening') {
@@ -511,6 +514,8 @@ export default function CoachPage() {
         setState('idle')
         return
       }
+      // v3.8 — capte les mots de révision pour afficher le bandeau
+      if (Array.isArray(data.reviewWords)) setReviewWords(data.reviewWords)
       const updated: Msg[] = [...next, { role: 'model', text: data.reply }]
       setThreads(prev => ({ ...prev, [currentMode]: updated }))
       speakClean(data.reply, () => {
@@ -874,6 +879,22 @@ export default function CoachPage() {
           </div>
         )}
       </Card>
+
+            {/* v3.8 — Bandeau mots de révision intégrés (tuteur/speaking_pur) */}
+      {reviewWords.length > 0 && (activeMode === 'tuteur' || activeMode === 'speaking_pur') && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[12px]">
+          <div className="font-bold text-amber-700 flex items-center gap-2">
+            <span>🔁 Mots de ta révision intégrés</span>
+            <span className="text-[10px] bg-amber-200 px-1.5 py-0.5 rounded-full">{reviewWords.length}</span>
+          </div>
+          <div className="text-amber-700 mt-0.5">
+            Aujourd&apos;hui, on retrouve : <b>{reviewWords.slice(0, 5).join(', ')}</b>{reviewWords.length > 5 ? '…' : ''}
+          </div>
+          <div className="text-[10px] text-amber-600 italic mt-0.5">
+            Le coach va les utiliser naturellement dans la conversation pour t&apos;aider à les fixer.
+          </div>
+        </div>
+      )}
 
       <button onClick={toggleVoiceConvMode}
         className={`w-full p-3 rounded-2xl border-2 transition-all ${
