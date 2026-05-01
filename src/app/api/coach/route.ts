@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const messages: GroqMessage[] = body.messages || []
   // v1.5 — mode coach : 'tuteur' | 'ami' | 'auto'
-  const mode = (body.mode === 'tuteur' || body.mode === 'ami' || body.mode === 'auto' || body.mode === 'speaking_pur') ? body.mode : 'auto'
+  const mode = (body.mode === 'tuteur' || body.mode === 'ami' || body.mode === 'auto' || body.mode === 'speaking_pur' || body.mode === 'pro_grc') ? body.mode : 'auto'
   // v3.3 — scénario optionnel (mode speaking_pur)
   const VALID_SCENARIOS = ['daily', 'meeting', 'restaurant', 'cafe', 'hotel', 'travel', 'shopping', 'pro', 'phone', 'health', 'park', 'info', 'colors', 'clothes', 'food', 'family', 'weather', 'hobbies', 'animals', 'house', 'numbers', 'calendar', 'emotions', 'irregular_verbs']
   const scenario = (typeof body.scenario === 'string' && VALID_SCENARIOS.includes(body.scenario)) ? body.scenario : 'daily'
@@ -28,9 +28,15 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: profile } = await supabase.from('profiles')
-    .select('display_name').eq('id', user.id).single()
+    .select('display_name, is_admin').eq('id', user.id).single()
   const { data: prefs } = await supabase.from('user_preferences')
-    .select('themes, lang_code').eq('user_id', user.id).single()
+    .select('themes, lang_code, grc_level, grc_enabled').eq('user_id', user.id).single()
+
+  // v3.4 — Mode Pro GRC : réservé aux admins
+  let effectiveMode = mode
+  if (mode === 'pro_grc' && !profile?.is_admin) {
+    effectiveMode = 'auto'
+  }
   const { data: lang } = await supabase.from('user_languages')
     .select('cefr_global').eq('user_id', user.id).eq('is_current', true).maybeSingle()
 
@@ -39,8 +45,9 @@ export async function POST(req: NextRequest) {
     themes: prefs?.themes || [],
     langCode: prefs?.lang_code || 'en-GB',
     displayName: profile?.display_name || null,
-    mode,  // v1.5
-    scenario,  // v3.3 — scénario speaking_pur
+    mode: effectiveMode,  // v3.4 — pro_grc forcé en auto si non-admin
+    scenario,  // v3.3
+    grcLevel: (prefs as any)?.grc_level || null,  // v3.4
   })
 
   let reply: string

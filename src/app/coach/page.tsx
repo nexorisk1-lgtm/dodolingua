@@ -48,7 +48,7 @@ import {
  *    entre sessions.
  */
 
-type Mode = 'tuteur' | 'ami' | 'auto' | 'speaking_pur'
+type Mode = 'tuteur' | 'ami' | 'auto' | 'speaking_pur' | 'pro_grc'
 type CoachState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
 // v3.3.2 — Scénarios étendus : 12 situations + 12 thèmes
@@ -110,12 +110,16 @@ declare global {
   }
 }
 
-const MODE_TABS: { key: Mode; emoji: string; label: string; sub: string }[] = [
+const MODE_TABS_BASE: { key: Mode; emoji: string; label: string; sub: string }[] = [
   { key: 'ami',          emoji: '💬', label: 'Ami',           sub: 'Discute librement' },
   { key: 'auto',         emoji: '🎯', label: 'Auto',          sub: 'Équilibré' },
   { key: 'tuteur',       emoji: '🎓', label: 'Tuteur',        sub: '💡 à la demande' },
   { key: 'speaking_pur', emoji: '🎙️', label: 'Speaking pur',  sub: 'Prononciation' },
 ]
+
+// v3.4 — Mode Pro GRC visible UNIQUEMENT pour les admins
+const MODE_TAB_PRO_GRC: { key: Mode; emoji: string; label: string; sub: string } =
+  { key: 'pro_grc', emoji: '🛡️', label: 'Pro GRC', sub: 'Mentor métier' }
 
 const STATE_BADGE: Record<CoachState, { label: string; cls: string }> = {
   idle:      { label: '○ Prêt',          cls: 'bg-gray-100 text-gray-600' },
@@ -202,9 +206,11 @@ function hasCorrection(text: string): boolean {
 export default function CoachPage() {
   // v3 — un fil par mode
   const [threads, setThreads] = useState<Record<Mode, Msg[]>>({
-    ami: [], auto: [], tuteur: [], speaking_pur: [],
+    ami: [], auto: [], tuteur: [], speaking_pur: [], pro_grc: [],
   })
   const [activeMode, setActiveMode] = useState<Mode>('auto')
+  // v3.4 — admin status (pour afficher le mode Pro GRC)
+  const [isAdmin, setIsAdmin] = useState(false)
   // v3.3 — scénario sélectionné en mode speaking_pur
   const [scenario, setScenario] = useState<Scenario>('daily')
   const messages = threads[activeMode]
@@ -226,7 +232,7 @@ export default function CoachPage() {
   // v3.1 — Track si l'user a scrollé manuellement vers le haut
   const userHasScrolledUpRef = useRef(false)
   const recRef = useRef<any>(null)
-  const greetedRef = useRef<Record<Mode, boolean>>({ ami: false, auto: false, tuteur: false, speaking_pur: false })
+  const greetedRef = useRef<Record<Mode, boolean>>({ ami: false, auto: false, tuteur: false, speaking_pur: false, pro_grc: false })
 
   // v3.1 — Audio recording (parallèle au SpeechRecognition)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -245,6 +251,10 @@ export default function CoachPage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      // v3.4 — admin status (pour afficher le mode Pro GRC)
+      const { data: prof } = await supabase.from('profiles')
+        .select('is_admin').eq('id', user.id).single()
+      if (prof?.is_admin) setIsAdmin(true)
       const { data: v } = await supabase.from('user_voice_pref')
         .select('voice_name').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle()
       await waitForVoices(2000)
@@ -748,8 +758,8 @@ export default function CoachPage() {
 
       <Card className="!p-3">
         <div className="text-xs font-bold text-gray-700 mb-2">Comment veux-tu apprendre aujourd&apos;hui ?</div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {MODE_TABS.map(t => {
+        <div className={`grid grid-cols-2 ${isAdmin ? "sm:grid-cols-5" : "sm:grid-cols-4"} gap-2`}>
+          {[...MODE_TABS_BASE, ...(isAdmin ? [MODE_TAB_PRO_GRC] : [])].map(t => {
             const isActive = activeMode === t.key
             const count = threads[t.key].length
             return (
@@ -770,6 +780,7 @@ export default function CoachPage() {
           {activeMode === 'auto' && '🎯 Mix idéal : conversation fluide + 1-2 corrections quand c&apos;est utile.'}
           {activeMode === 'tuteur' && '🎓 Mode tuteur : conversation pédagogique. Pas de correction automatique — clique sur 💡 sur tes messages pour en demander une.'}
           {activeMode === 'speaking_pur' && '🎙️ Mode speaking pur : focus prononciation. Choisis un scénario ci-dessous pour bosser des phrases ciblées.'}
+          {activeMode === 'pro_grc' && '🛡️ Mode Pro GRC : mentor métier en anglais (audit, KYC, AML, three lines of defense…). Voice-first. Pour des notes écrites, dis "Write that down" ou "Recap in writing".'}
         </div>
         {activeMode === 'speaking_pur' && (
           <div className="mt-3 pt-3 border-t border-rule space-y-3">
