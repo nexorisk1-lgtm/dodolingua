@@ -1,31 +1,41 @@
 /**
- * Moteur de session entrelacée — version concise.
- * Pour 5 mots : ~16 items au total (3-4 par mot), réparti en 3 phases.
+ * v3.7 — Moteur de session apprentissage à 5 phases par mot.
+ *
+ * Pour chaque mot, on génère 5 PlanItems exécutés dans l'ordre :
+ *   1. discovery       — Voir/écouter le mot pour la 1re fois (image, IPA, traduction, exemple)
+ *   2. pronunciation   — Enregistrer sa voix, comparer à la cible, score
+ *   3. flashcard       — Rappel actif FR→EN avec FSRS (3 boutons savais/hesite/pas_su)
+ *   4. qcm             — Reconnaissance EN→FR avec 4 choix
+ *   5. cloze           — Mise en contexte : phrase à compléter avec 3 options
+ *
+ * Pour 5 mots → 25 items, ~3-4 min par mot, ~20 min de session.
+ * Future evolution : mode "révision" peut sauter la phase discovery.
  */
 
-export type Modality =
-  | 'discovery' | 'audio' | 'ipa' | 'micro' | 'translation' | 'example'
-  | 'quiz' | 'sentence_builder' | 'listening_cloze' | 'speaking_cloze'
-  | 'association' | 'memory' | 'phonetic'
-
-export type Phase = 'discovery' | 'interleaved' | 'mix' | 'anchor'
+export type Phase =
+  | 'discovery' | 'pronunciation' | 'flashcard' | 'qcm' | 'cloze'
 
 export interface PlanItem {
   phase: Phase
-  type: 'practice' | 'recall' | 'discovery' | 'mix_quiz' | 'anchor'
   word_id: string
-  modality: Modality
   est_seconds: number
-  recall_count?: number
 }
 
 interface BuildOpts {
+  /** Mode 'oral' : skip flashcard et qcm (focus prononciation/exemple).
+   *  Mode 'complet' (défaut) : 5 phases. */
   mode?: 'oral' | 'complet'
-  hasImageMap?: Record<string, boolean>
+  /** Si true (mode révision), on saute discovery (mot déjà connu). */
+  skipDiscovery?: boolean
 }
 
-const ORAL_MODS: Modality[] = ['audio', 'micro', 'speaking_cloze', 'listening_cloze']
-const FULL_MODS: Modality[] = ['translation', 'micro', 'quiz', 'listening_cloze']
+const PHASE_DURATION: Record<Phase, number> = {
+  discovery: 30,      // lecture + clic
+  pronunciation: 45,  // enregistrement + scoring
+  flashcard: 20,      // 3-5s reflexion + reveal + grade
+  qcm: 15,            // QCM rapide
+  cloze: 25,          // lire la phrase + choisir
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -41,30 +51,24 @@ export function buildInterleavedPlan(
   opts: BuildOpts = {}
 ): PlanItem[] {
   const mode = opts.mode || 'complet'
-  const hasImage = opts.hasImageMap || {}
   const items: PlanItem[] = []
-  const pool = mode === 'oral' ? ORAL_MODS : FULL_MODS
 
-  for (const id of wordIds) {
-    items.push({ phase: 'discovery', type: 'discovery', word_id: id, modality: 'discovery', est_seconds: 6 })
+  // Pour chaque mot, on enchaîne les 5 phases.
+  // L'utilisateur fait UN mot complet (5 phases) avant de passer au suivant.
+  // Plus pédagogique que l'interleaved fatiguant pour un débutant.
+  const order = shuffle(wordIds)
+  for (const id of order) {
+    const phasesForWord: Phase[] = opts.skipDiscovery
+      ? ['pronunciation', 'flashcard', 'qcm', 'cloze']
+      : ['discovery', 'pronunciation', 'flashcard', 'qcm', 'cloze']
+    // Mode oral : skip flashcard + qcm (focus prononciation et contexte)
+    const filtered = mode === 'oral'
+      ? phasesForWord.filter(p => p !== 'flashcard' && p !== 'qcm')
+      : phasesForWord
+    for (const ph of filtered) {
+      items.push({ phase: ph, word_id: id, est_seconds: PHASE_DURATION[ph] })
+    }
   }
-
-  const queue = shuffle(wordIds)
-  let idx = 0
-  for (const id of queue) {
-    items.push({ phase: 'interleaved', type: 'practice', word_id: id, modality: pool[idx % pool.length], est_seconds: 14 })
-    idx++
-  }
-
-  for (const id of shuffle(wordIds)) {
-    const useImage = mode === 'complet' && hasImage[id]
-    items.push({ phase: 'interleaved', type: 'recall', word_id: id, modality: useImage ? 'association' : 'quiz', est_seconds: 10, recall_count: 1 })
-  }
-
-  for (const id of shuffle(wordIds)) {
-    items.push({ phase: 'mix', type: 'mix_quiz', word_id: id, modality: mode === 'oral' ? 'speaking_cloze' : 'quiz', est_seconds: 10 })
-  }
-
   return items
 }
 
@@ -74,5 +78,21 @@ export function planDurationMin(plan: PlanItem[]): number {
 }
 
 export function phaseLabel(p: Phase): string {
-  return ({ discovery: 'Découverte', interleaved: 'Pratique', mix: 'Validation', anchor: 'Ancrage' })[p]
+  return ({
+    discovery: 'Découverte',
+    pronunciation: 'Prononciation',
+    flashcard: 'Flashcard',
+    qcm: 'Traduction',
+    cloze: 'Mise en contexte',
+  } as Record<Phase, string>)[p]
+}
+
+export function phaseEmoji(p: Phase): string {
+  return ({
+    discovery: '🔍',
+    pronunciation: '🎙️',
+    flashcard: '🃏',
+    qcm: '📝',
+    cloze: '💬',
+  } as Record<Phase, string>)[p]
 }

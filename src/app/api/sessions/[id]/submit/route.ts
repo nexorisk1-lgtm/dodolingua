@@ -24,11 +24,29 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
-  // ===== SOUMISSION D'UN MOT =====
-  if (body.word_id && body.grade) {
+  // ===== SOUMISSION D'UNE PHASE (v3.7) =====
+  // Body : { word_id, phase, ...payload }
+  // phase = 'discovery' | 'pronunciation' | 'flashcard' | 'qcm' | 'cloze'
+  // Selon la phase, on dérive ou non un grade FSRS pour user_progress.
+  if (body.word_id && body.phase) {
     const wordId = body.word_id as string
-    const grade = buttonToGrade(body.grade as ButtonGrade)
+    const phase = body.phase as string
     const lang = session.lang_code
+
+    // Dérive le grade FSRS selon la phase
+    let derivedButton: ButtonGrade | null = null
+    if (phase === 'flashcard' && body.grade) {
+      derivedButton = body.grade as ButtonGrade
+    } else if (phase === 'qcm') {
+      derivedButton = body.qcm_correct ? 'savais' : 'pas_su'
+    } else if (phase === 'cloze') {
+      derivedButton = body.cloze_correct ? 'savais' : 'pas_su'
+    }
+    // discovery, pronunciation : pas de grade FSRS, on enregistre juste la complétion
+
+    // Si on a un grade dérivé, applique FSRS
+    if (derivedButton) {
+      const grade = buttonToGrade(derivedButton)
 
     const { data: prog } = await supabase
       .from('user_progress')
@@ -55,14 +73,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       onConflict: 'user_id,lang_code,concept_id'
     })
 
+    } // end if(derivedButton)
+
     const results = [...(session.results_json || []), {
       word_id: wordId,
-      grade: body.grade,
+      phase,
+      grade: body.grade || (body.qcm_correct !== undefined ? (body.qcm_correct ? 'savais' : 'pas_su') : undefined),
+      pronunciation_score: body.pronunciation_score,
+      qcm_correct: body.qcm_correct,
+      cloze_correct: body.cloze_correct,
       at: new Date().toISOString()
     }]
 
     const hesitation = (session.hesitation_count || 0) + (body.grade === 'hesite' ? 1 : 0)
-    const fail = (session.fail_count || 0) + (body.grade === 'pas_su' ? 1 : 0)
+    const failFromGrade = body.grade === 'pas_su'
+    const failFromQcm = body.qcm_correct === false
+    const failFromCloze = body.cloze_correct === false
+    const fail = (session.fail_count || 0) + ((failFromGrade || failFromQcm || failFromCloze) ? 1 : 0)
 
     await supabase
       .from('learning_sessions')
@@ -97,13 +124,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       console.warn('quest progress update failed', e)
     }
 
-    return NextResponse.json({ ok: true, next_review: next.due })
+    return NextResponse.json({ ok: true })
   }
 
   // ===== FINALISATION =====
   if (finalize) {
     const results: any[] = session.results_json || []
-    const failures = results.filter(r => r.grade === 'pas_su').length
+    // v3.7 — failures peuvent venir de grade=pas_su, qcm_correct=false, cloze_correct=false
+    const failures = results.filter(r =>
+      r.grade === 'pas_su'
+      || r.qcm_correct === false
+      || r.cloze_correct === false
+    ).length
     const perfect = failures === 0 && results.length > 0
 
     const start = new Date(session.started_at).getTime()
