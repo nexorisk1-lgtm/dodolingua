@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   // v1.5 — mode coach : 'tuteur' | 'ami' | 'auto'
   const mode = (body.mode === 'tuteur' || body.mode === 'ami' || body.mode === 'auto' || body.mode === 'speaking_pur') ? body.mode : 'auto'
   // v3.3 — scénario optionnel (mode speaking_pur)
-  const VALID_SCENARIOS = ['daily', 'meeting', 'restaurant', 'hotel', 'travel', 'shopping', 'pro', 'health', 'colors', 'clothes', 'food', 'family', 'weather', 'hobbies']
+  const VALID_SCENARIOS = ['daily', 'meeting', 'restaurant', 'cafe', 'hotel', 'travel', 'shopping', 'pro', 'phone', 'health', 'park', 'info', 'colors', 'clothes', 'food', 'family', 'weather', 'hobbies', 'animals', 'house', 'numbers', 'calendar', 'emotions', 'irregular_verbs']
   const scenario = (typeof body.scenario === 'string' && VALID_SCENARIOS.includes(body.scenario)) ? body.scenario : 'daily'
 
   const today = new Date().toISOString().slice(0, 10)

@@ -3,31 +3,44 @@ import type { CefrLevel } from '@/types/database'
 // v3 — 4 modes : 3 historiques + speaking_pur (focus prononciation/fluidité)
 export type CoachModeV15 = 'tuteur' | 'ami' | 'auto' | 'speaking_pur'
 
-// v3.3.1 — Scénarios étendus : 8 situations + 6 thèmes (axes Speak/Praktika/TalkPal/ELSA)
+// v3.3.2 — Scénarios étendus : 12 situations + 12 thèmes
 export type SpeakingScenario =
   // Situations (vie courante + pro)
-  | 'daily' | 'meeting' | 'restaurant' | 'hotel' | 'travel' | 'shopping' | 'pro' | 'health'
-  // Thèmes vocabulaire
+  | 'daily' | 'meeting' | 'restaurant' | 'cafe' | 'hotel' | 'travel'
+  | 'shopping' | 'pro' | 'phone' | 'health' | 'park' | 'info'
+  // Thèmes (vocabulaire + grammaire)
   | 'colors' | 'clothes' | 'food' | 'family' | 'weather' | 'hobbies'
+  | 'animals' | 'house' | 'numbers' | 'calendar' | 'emotions' | 'irregular_verbs'
 
 const SCENARIOS: Record<SpeakingScenario, string> = {
-  // === Situations ===
+  // === Situations (12) ===
   daily: 'Daily life conversations: greetings, weather, hobbies, feelings, weekend plans, family. Mix everyday phrases naturally.',
-  meeting: 'Meeting someone new (introductions, small talk, networking). Drill: "Nice to meet you", "Where are you from?", "What do you do for a living?", "Have a good one!". Tone: friendly and curious.',
-  restaurant: 'At a restaurant. Drill phrases like: ordering food, asking for the menu, asking for recommendations, paying the bill, dietary restrictions, complaints, asking for the chef\'s special.',
+  meeting: 'Meeting someone new (introductions, small talk, networking). Drill: "Nice to meet you", "Where are you from?", "What do you do for a living?". Tone: friendly and curious.',
+  restaurant: 'At a restaurant. Drill phrases like: ordering food, asking for the menu, asking for recommendations, paying the bill, dietary restrictions, complaints.',
+  cafe: 'At a coffee shop or cafe (lighter context than restaurant). Drill phrases: ordering coffee/tea, takeaway vs eat-in, sizes, payment, finding a seat, asking for wifi, casual chitchat with the barista.',
   hotel: 'At a hotel. Drill phrases like: making a reservation, checking in, asking for amenities (wifi, breakfast, gym), requesting a wake-up call, late checkout, room issues, asking for tourist tips.',
   travel: 'Traveling and transport. Drill phrases like: airport check-in, security, asking for directions, public transport, missed connections, lost luggage, taxi rides, train tickets.',
   shopping: 'Shopping. Drill phrases like: asking the price, trying clothes on, asking about sizes/colors/availability, asking for refunds, paying with card, comparing options.',
-  pro: 'Professional context. Drill phrases like: introducing yourself in a meeting, scheduling, presenting an idea briefly, agreeing/disagreeing politely, job interview questions, networking events, replying to emails verbally.',
+  pro: 'Professional context. Drill phrases like: introducing yourself in a meeting, scheduling, presenting an idea briefly, agreeing/disagreeing politely, job interview questions, networking events.',
+  phone: 'On the phone (formal call). Drill phrases like: "Could I speak to ...?", leaving a voicemail, taking a message, dealing with a bad line, scheduling over the phone, polite phone forms.',
   health: 'At the doctor or pharmacy. Drill phrases like: describing symptoms, scheduling an appointment, asking about side effects, getting a prescription, emergencies, basic body parts.',
-  // === Thèmes vocabulaire ===
-  colors: 'Vocabulary theme: COLORS. Drill phrases that USE color words naturally ("My car is dark blue", "I love that bright red dress", "The sky turns orange at sunset"). Vary usage : describing objects, preferences, nature, fashion.',
-  clothes: 'Vocabulary theme: CLOTHES. Drill phrases that USE clothing words naturally ("I am wearing a white shirt and jeans", "Do you have this jumper in size M?", "Her dress is gorgeous"). Vary usage: shopping, describing outfits, weather-appropriate clothing.',
-  food: 'Vocabulary theme: FOOD. Drill phrases that USE food/cooking words naturally ("I love spicy curry", "Could I have a glass of orange juice?", "The pasta is too salty"). Vary usage: ordering, describing taste, cooking, healthy eating.',
-  family: 'Vocabulary theme: FAMILY. Drill phrases that USE family relationship words naturally ("My older sister lives in London", "I have two cousins on my mum\'s side", "My grandfather used to play guitar"). Vary usage: introductions, family events, descriptions.',
-  weather: 'Vocabulary theme: WEATHER. Drill phrases that USE weather and seasonal words naturally ("It is pouring rain outside", "I love crisp autumn mornings", "The forecast says it will be sunny"). Vary usage: small talk, planning activities.',
-  hobbies: 'Vocabulary theme: HOBBIES & SPORTS. Drill phrases that USE leisure activity words naturally ("I play tennis every Sunday", "I am really into gardening", "Have you ever tried surfing?"). Vary usage: introducing yourself, weekends, asking about interests.',
+  park: 'At a park or outdoor outing. Drill phrases like: "Lets have a picnic", talking to other parents, kids playground rules, asking about opening hours, sports gear, describing nature.',
+  info: 'Asking for information / directions. Drill phrases like: "Excuse me, could you tell me ...?", asking the way, opening hours, train schedules, finding a place, reformulating a question politely.',
+  // === Thèmes (12) ===
+  colors: 'Vocabulary theme: COLORS. Drill phrases that USE color words naturally ("My car is dark blue", "I love that bright red dress", "The sky turns orange at sunset"). Vary usage: describing objects, preferences, nature, fashion.',
+  clothes: 'Vocabulary theme: CLOTHES. Drill phrases that USE clothing words naturally ("I am wearing a white shirt and jeans", "Do you have this jumper in size M?"). Vary usage: shopping, describing outfits, weather-appropriate clothing.',
+  food: 'Vocabulary theme: FOOD. Drill phrases that USE food/cooking words naturally ("I love spicy curry", "Could I have a glass of orange juice?", "The pasta is too salty"). Vary usage: ordering, taste, cooking.',
+  family: 'Vocabulary theme: FAMILY. Drill phrases that USE family relationship words naturally ("My older sister lives in London", "I have two cousins on my mums side"). Vary usage: introductions, family events, descriptions.',
+  weather: 'Vocabulary theme: WEATHER. Drill phrases that USE weather and seasonal words naturally ("It is pouring rain outside", "I love crisp autumn mornings", "The forecast says it will be sunny").',
+  hobbies: 'Vocabulary theme: HOBBIES & SPORTS. Drill phrases that USE leisure activity words naturally ("I play tennis every Sunday", "I am really into gardening", "Have you ever tried surfing?").',
+  animals: 'Vocabulary theme: ANIMALS. Drill phrases that USE animal names naturally ("I have a small dog called Max", "Did you see that lion at the zoo?", "Birds wake me up every morning"). Pets, wildlife, descriptions.',
+  house: 'Vocabulary theme: HOUSE (rooms + furniture). Drill phrases that USE words for rooms (bedroom, kitchen, bathroom, living room, garage) AND furniture (sofa, table, bed, fridge, lamp) naturally. Describing your home, household chores.',
+  numbers: 'Vocabulary theme: NUMBERS. Drill phrases that USE numbers naturally — prices, time, dates, ages ("It costs forty-five pounds", "I will be there at half past seven", "My flight is on the twenty-third"). Cardinals, ordinals.',
+  calendar: 'Vocabulary theme: CALENDAR (days, months, seasons, holidays). Drill phrases that USE day/month/season words naturally ("Lets meet on Monday at noon", "My birthday is in November", "In summer the days are longer").',
+  emotions: 'Vocabulary theme: EMOTIONS. Drill phrases that EXPRESS feelings naturally ("I feel really proud of you", "He looks a bit upset today", "I am thrilled about the new job"). Positive, negative, subtle nuances.',
+  irregular_verbs: 'Grammar theme: IRREGULAR VERBS in PAST tense. Drill phrases that USE common irregular forms naturally ("I went to Paris last summer", "She took the bus this morning", "They have eaten already"). Use go/went/gone, take/took/taken, eat/ate/eaten, see/saw/seen, write/wrote/written.',
 }
+
 
 interface CoachContext {
   cefr?: CefrLevel | null

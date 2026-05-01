@@ -51,31 +51,43 @@ import {
 type Mode = 'tuteur' | 'ami' | 'auto' | 'speaking_pur'
 type CoachState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
-// v3.3.1 — Scénarios étendus : situations + thèmes vocabulaire
+// v3.3.2 — Scénarios étendus : 12 situations + 12 thèmes
 type Scenario =
-  | 'daily' | 'meeting' | 'restaurant' | 'hotel' | 'travel' | 'shopping' | 'pro' | 'health'
+  | 'daily' | 'meeting' | 'restaurant' | 'cafe' | 'hotel' | 'travel'
+  | 'shopping' | 'pro' | 'phone' | 'health' | 'park' | 'info'
   | 'colors' | 'clothes' | 'food' | 'family' | 'weather' | 'hobbies'
+  | 'animals' | 'house' | 'numbers' | 'calendar' | 'emotions' | 'irregular_verbs'
 
 interface ScenarioOpt { key: Scenario; emoji: string; label: string }
 
 const SCENARIOS_SITUATIONS: ScenarioOpt[] = [
-  { key: 'daily',      emoji: '👋', label: 'Quotidien' },
-  { key: 'meeting',    emoji: '🤝', label: 'Présentations' },
+  { key: 'daily',      emoji: '👋',  label: 'Quotidien' },
+  { key: 'meeting',    emoji: '🤝',  label: 'Présentations' },
   { key: 'restaurant', emoji: '🍽️', label: 'Restaurant' },
-  { key: 'hotel',      emoji: '🏨', label: 'Hôtel' },
-  { key: 'travel',     emoji: '✈️', label: 'Voyage' },
+  { key: 'cafe',       emoji: '☕',  label: 'Café' },
+  { key: 'hotel',      emoji: '🏨',  label: 'Hôtel' },
+  { key: 'travel',     emoji: '✈️',  label: 'Voyage' },
   { key: 'shopping',   emoji: '🛍️', label: 'Shopping' },
-  { key: 'pro',        emoji: '💼', label: 'Pro' },
-  { key: 'health',     emoji: '🏥', label: 'Santé' },
+  { key: 'pro',        emoji: '💼',  label: 'Pro' },
+  { key: 'phone',      emoji: '📞',  label: 'Téléphone' },
+  { key: 'health',     emoji: '🏥',  label: 'Santé' },
+  { key: 'park',       emoji: '🌳',  label: 'Parc' },
+  { key: 'info',       emoji: '❓',  label: 'Renseignement' },
 ]
 
 const SCENARIOS_THEMES: ScenarioOpt[] = [
-  { key: 'colors',  emoji: '🎨', label: 'Couleurs' },
-  { key: 'clothes', emoji: '👕', label: 'Vêtements' },
-  { key: 'food',    emoji: '🍎', label: 'Nourriture' },
-  { key: 'family',  emoji: '👨‍👩‍👧', label: 'Famille' },
-  { key: 'weather', emoji: '🌦️', label: 'Météo' },
-  { key: 'hobbies', emoji: '⚽', label: 'Loisirs' },
+  { key: 'colors',          emoji: '🎨', label: 'Couleurs' },
+  { key: 'clothes',         emoji: '👕', label: 'Vêtements' },
+  { key: 'food',            emoji: '🍎', label: 'Nourriture' },
+  { key: 'family',          emoji: '👨‍👩‍👧', label: 'Famille' },
+  { key: 'weather',         emoji: '🌦️', label: 'Météo' },
+  { key: 'hobbies',         emoji: '⚽', label: 'Loisirs' },
+  { key: 'animals',         emoji: '🐾', label: 'Animaux' },
+  { key: 'house',           emoji: '🏠', label: 'Maison' },
+  { key: 'numbers',         emoji: '🔢', label: 'Chiffres' },
+  { key: 'calendar',        emoji: '📅', label: 'Calendrier' },
+  { key: 'emotions',        emoji: '😊', label: 'Émotions' },
+  { key: 'irregular_verbs', emoji: '🔁', label: 'Verbes irrég.' },
 ]
 
 interface Msg {
@@ -763,7 +775,7 @@ export default function CoachPage() {
           <div className="mt-3 pt-3 border-t border-rule space-y-3">
             <div>
               <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">📍 Situations</div>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                 {SCENARIOS_SITUATIONS.map(s => {
                   const active = scenario === s.key
                   return (
@@ -777,7 +789,7 @@ export default function CoachPage() {
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">🧠 Thèmes vocabulaire</div>
+              <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">🧠 Thèmes</div>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                 {SCENARIOS_THEMES.map(s => {
                   const active = scenario === s.key
