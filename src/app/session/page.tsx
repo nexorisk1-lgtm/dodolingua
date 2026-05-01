@@ -19,6 +19,7 @@ import { createClient } from '@/lib/supabase/client'
 import { phaseLabel, phaseEmoji, type PlanItem, type Phase } from '@/lib/session-engine'
 import { speak, getBestVoice, waitForVoices } from '@/components/games/utils'
 import { extractWordScores, scoreAgainstTarget, type WordScore } from '@/components/coach/PronunciationBadge'
+import { Mascot } from '@/components/Mascot'
 
 interface WordData {
   id: string
@@ -132,7 +133,7 @@ export default function SessionRunner() {
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
         <Card className="max-w-md text-center space-y-4">
-          <div className="text-5xl">🎉</div>
+          <div className="flex justify-center"><Mascot pose="champion" size={120} animation="bounce" /></div>
           <h1 className="text-2xl font-bold text-primary-900">Session terminée</h1>
           <div className="text-3xl font-extrabold text-primary-700">+{points?.total ?? 10} pts</div>
           <p className="text-sm text-gray-600">À demain pour la suite !</p>
@@ -352,36 +353,50 @@ function PronunciationPhase({ word, voiceName, onNext, busy }: { word: WordData;
 }
 
 function FlashcardPhase({ word, voiceName, onGrade, busy }: { word: WordData; voiceName: string | null; onGrade: (g: 'savais' | 'hesite' | 'pas_su') => void; busy: boolean }) {
-  // v3.7.1 — Inversion : EN → FR (reconnaissance passive, plus naturelle après la découverte)
+  // v3.7.3 — Vraie flashcard 3D : tu cliques sur la carte, elle se retourne (rotateY).
   const [revealed, setRevealed] = useState(false)
-  // v3.7.2 — Délai 600ms après clic pour voir le feedback couleur avant de passer au suivant
   const [fsrsPicked, setFsrsPicked] = useState<'savais' | 'hesite' | 'pas_su' | null>(null)
   function pickGrade(g: 'savais' | 'hesite' | 'pas_su') {
     if (fsrsPicked !== null) return
     setFsrsPicked(g)
     setTimeout(() => onGrade(g), 600)
   }
-  function speakWord() { speak(word.lemma, voiceName, 0.9) }
+  function speakWord(e: any) {
+    e.stopPropagation()  // évite de flipper la carte en cliquant sur le bouton 🔊
+    speak(word.lemma, voiceName, 0.9)
+  }
   return (
     <div className="space-y-4 text-center">
-      <div className="text-[10px] uppercase font-bold text-gray-500">Tu te souviens du sens ?</div>
-      <div className="bg-emerald-50 rounded-xl p-5">
-        <div className="text-[10px] uppercase font-bold text-emerald-700 mb-1">🇬🇧 Mot anglais</div>
-        <div className="text-3xl font-extrabold text-emerald-900">{word.lemma}</div>
-        {word.ipa && <div className="font-mono text-emerald-700 text-sm mt-1">{word.ipa}</div>}
-        <button onClick={speakWord} className="mt-2 text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-semibold">🔊 Écouter</button>
-      </div>
-      {!revealed ? (
-        <>
-          <div className="text-xs text-gray-500 italic">Essaie de te rappeler le sens en français dans ta tête, puis vérifie.</div>
-          <Button block onClick={() => setRevealed(true)}>Voir la réponse</Button>
-        </>
-      ) : (
-        <>
-          <div className="bg-purple-50 rounded-xl p-5">
-            <div className="text-[10px] uppercase font-bold text-purple-700 mb-1">🇫🇷 Traduction</div>
-            <div className="text-2xl font-extrabold text-purple-900">{word.gloss_fr || '(traduction manquante)'}</div>
+      <div className="text-[10px] uppercase font-bold text-gray-500">Tu te souviens du sens ? Clique la carte pour la retourner.</div>
+
+      <div className="flip-perspective" style={{ minHeight: 220 }}>
+        <div
+          className={`flip-3d cursor-pointer ${revealed ? 'flipped' : ''}`}
+          style={{ minHeight: 220 }}
+          onClick={() => !revealed && setRevealed(true)}>
+          {/* FRONT : mot anglais */}
+          <div className="flip-face bg-emerald-50 rounded-xl p-5 border-2 border-emerald-200">
+            <div className="w-full">
+              <div className="text-[10px] uppercase font-bold text-emerald-700 mb-2">🇬🇧 Mot anglais</div>
+              <div className="text-3xl font-extrabold text-emerald-900">{word.lemma}</div>
+              {word.ipa && <div className="font-mono text-emerald-700 text-sm mt-1">{word.ipa}</div>}
+              <button onClick={speakWord} className="mt-3 text-xs bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full font-semibold hover:bg-emerald-200">🔊 Écouter</button>
+              <div className="text-[11px] text-gray-500 italic mt-3">↻ Touche la carte pour voir la traduction</div>
+            </div>
           </div>
+          {/* BACK : traduction française */}
+          <div className="flip-face flip-back bg-purple-50 rounded-xl p-5 border-2 border-purple-200">
+            <div className="w-full">
+              <div className="text-[10px] uppercase font-bold text-purple-700 mb-2">🇫🇷 Traduction</div>
+              <div className="text-3xl font-extrabold text-purple-900">{word.gloss_fr || '(traduction manquante)'}</div>
+              <div className="text-[11px] text-purple-600 italic mt-3">en anglais : <b>{word.lemma}</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {revealed && (
+        <>
           <div className="text-[10px] uppercase font-bold text-gray-500 mt-2">Comment tu te débrouilles ?</div>
           <div className="grid grid-cols-3 gap-2">
             <FsrsButton color="red"     emoji="😖" label="Je ne savais pas" picked={fsrsPicked === 'pas_su'} disabled={busy || fsrsPicked !== null} onClick={() => pickGrade('pas_su')} />
@@ -456,8 +471,11 @@ function QcmPhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct
         })}
       </div>
       {picked !== null && (
-        <div className={`text-sm font-bold ${picked === correctOpt ? 'text-emerald-600' : 'text-red-600'}`}>
-          {picked === correctOpt ? '🎯 Bonne réponse !' : `❌ La bonne réponse était : ${correctOpt}`}
+        <div className="flex items-center justify-center gap-3 mt-2">
+          <Mascot pose={picked === correctOpt ? 'champion' : 'sad'} size={48} animation={picked === correctOpt ? 'pop' : 'shake'} />
+          <div className={`text-sm font-bold ${picked === correctOpt ? 'text-emerald-600' : 'text-red-600'}`}>
+            {picked === correctOpt ? '🎯 Bonne réponse !' : `❌ La bonne réponse était : ${correctOpt}`}
+          </div>
         </div>
       )}
     </div>
@@ -512,8 +530,11 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
         })}
       </div>
       {picked !== null && (
-        <div className={`text-sm font-bold ${picked === cloze.correct ? 'text-emerald-600' : 'text-red-600'}`}>
-          {picked === cloze.correct ? '🎯 Parfait !' : `❌ La bonne réponse était : ${cloze.correct}`}
+        <div className="flex items-center justify-center gap-3 mt-2">
+          <Mascot pose={picked === cloze.correct ? 'champion' : 'sad'} size={48} animation={picked === cloze.correct ? 'pop' : 'shake'} />
+          <div className={`text-sm font-bold ${picked === cloze.correct ? 'text-emerald-600' : 'text-red-600'}`}>
+            {picked === cloze.correct ? '🎯 Parfait !' : `❌ La bonne réponse était : ${cloze.correct}`}
+          </div>
         </div>
       )}
     </div>
