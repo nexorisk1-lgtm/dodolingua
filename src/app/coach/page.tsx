@@ -291,10 +291,18 @@ export default function CoachPage() {
   }, [])
 
   // Greeting initial (UNE FOIS PAR MODE — sauf en speaking_pur où on re-greet quand le scénario change)
-  // v3.5 — attend aussi que les threads BDD soient chargés (sinon on greete avant de découvrir un fil existant)
+  // v3.5 — attend aussi que les threads BDD soient chargés
+  // v3.5.1 — garde-fou : si le fil a déjà du contenu (chargé depuis BDD ou suite à un envoi),
+  //          on NE re-greete PAS, peu importe l'état de greetedRef. Évite le bug "Hello en milieu de conv".
   useEffect(() => {
     if (!voiceReady || !threadsLoaded) return
     if (greetedRef.current[activeMode]) return
+    const currentThread = threads[activeMode]
+    if (currentThread && currentThread.length > 0) {
+      // Le fil n'est pas vide → on considère le greeting déjà fait
+      greetedRef.current[activeMode] = true
+      return
+    }
     greetedRef.current[activeMode] = true
     sendInitialGreeting(activeMode)
   }, [voiceReady, threadsLoaded, activeMode, scenario])
