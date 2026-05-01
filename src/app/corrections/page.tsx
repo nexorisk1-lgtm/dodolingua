@@ -15,6 +15,7 @@ interface CorrectionItem {
   id: string
   original_text: string
   corrected_text: string
+  corrected_fr: string | null  // v3.8.1
   reason: string | null
   source_mode: string
   next_review: string
@@ -36,14 +37,16 @@ export default function CorrectionsPage() {
     setLoading(true)
     try {
       const res = await fetch('/api/corrections/due')
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Erreur')
+      const txt = await res.text()
+      let data: any = {}
+      if (txt) { try { data = JSON.parse(txt) } catch {} }
+      if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`)
       setItems(data.items || [])
       setCounts(data.counts || { due: 0, total: 0 })
       setIdx(0)
       setShowAnswer(false)
     } catch (e: any) {
-      setError(e.message)
+      setError(e.message || 'Erreur réseau')
     } finally {
       setLoading(false)
     }
@@ -59,20 +62,23 @@ export default function CorrectionsPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: cur.id, button }),
       })
+      // v3.8.1 — parse safe : on lit text() puis on tente JSON pour éviter
+      // 'Unexpected end of JSON input' quand la réponse est vide.
+      const txt = await res.text()
+      let data: any = {}
+      if (txt) { try { data = JSON.parse(txt) } catch {} }
       if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Erreur')
+        throw new Error(data.error || `Erreur ${res.status}`)
       }
       // Avance à la suivante
       setShowAnswer(false)
       if (idx + 1 < items.length) {
         setIdx(idx + 1)
       } else {
-        // Plus rien dans le batch courant → reload
         await load()
       }
     } catch (e: any) {
-      setError(e.message)
+      setError(e.message || 'Erreur réseau')
     } finally {
       setGrading(false)
     }
@@ -141,6 +147,12 @@ export default function CorrectionsPage() {
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm font-bold text-emerald-900">
                   {current.corrected_text}
                 </div>
+                {current.corrected_fr && (
+                  <div className="mt-2 bg-purple-50 border border-purple-200 rounded-lg p-2.5 text-sm text-purple-900">
+                    <span className="text-[10px] uppercase font-bold text-purple-700 mr-2">🇫🇷 Traduction</span>
+                    <span className="italic">{current.corrected_fr}</span>
+                  </div>
+                )}
                 {current.reason && (
                   <div className="mt-2 text-xs italic text-gray-600">📖 {current.reason}</div>
                 )}

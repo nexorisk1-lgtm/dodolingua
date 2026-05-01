@@ -184,8 +184,13 @@ export default async function DashboardPage() {
                               ? `${ref.messages_count} échange${ref.messages_count > 1 ? 's' : ''} avec Dodo`
                               : `${q.target} ${q.unit} validés ✨`}
                           </>
-                        ) : q.type === 'revision' && (revisionDue || 0) > 0 ? (
-                          <span className="text-amber-700 font-bold">{revisionDue} mot{(revisionDue || 0) > 1 ? 's' : ''} à revoir maintenant</span>
+                        ) : q.type === 'revision' && ((revisionDue || 0) > 0 || (correctionsDue || 0) > 0) ? (
+                          <span className="text-amber-700 font-bold">
+                            {(revisionDue || 0) > 0 && `${revisionDue} mot${(revisionDue || 0) > 1 ? 's' : ''}`}
+                            {(revisionDue || 0) > 0 && (correctionsDue || 0) > 0 && ' + '}
+                            {(correctionsDue || 0) > 0 && `${correctionsDue} correction${(correctionsDue || 0) > 1 ? 's' : ''}`}
+                            {' à revoir maintenant'}
+                          </span>
                         ) : q.description}
                       </div>
                     </div>

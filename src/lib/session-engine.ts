@@ -14,6 +14,7 @@
 
 export type Phase =
   | 'discovery' | 'pronunciation' | 'flashcard' | 'qcm' | 'cloze'
+  | 'correction_review'  // v3.8.1 — révision FSRS d'une correction coach
 
 export interface PlanItem {
   phase: Phase
@@ -30,11 +31,12 @@ interface BuildOpts {
 }
 
 const PHASE_DURATION: Record<Phase, number> = {
-  discovery: 30,      // lecture + clic
-  pronunciation: 45,  // enregistrement + scoring
-  flashcard: 20,      // 3-5s reflexion + reveal + grade
-  qcm: 15,            // QCM rapide
-  cloze: 25,          // lire la phrase + choisir
+  discovery: 30,
+  pronunciation: 45,
+  flashcard: 20,
+  qcm: 15,
+  cloze: 25,
+  correction_review: 25,  // v3.8.1
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -85,6 +87,7 @@ export function phaseLabel(p: Phase): string {
     flashcard: 'Flashcard',
     qcm: 'Traduction',
     cloze: 'Mise en contexte',
+    correction_review: 'Révision corrections',
   } as Record<Phase, string>)[p]
 }
 
@@ -95,5 +98,6 @@ export function phaseEmoji(p: Phase): string {
     flashcard: '🃏',
     qcm: '📝',
     cloze: '💬',
+    correction_review: '✏️',
   } as Record<Phase, string>)[p]
 }

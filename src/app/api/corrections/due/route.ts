@@ -13,7 +13,7 @@ export async function GET() {
   const nowIso = new Date().toISOString()
   const { data, error } = await supabase
     .from('coach_corrections')
-    .select('id, original_text, corrected_text, reason, source_mode, next_review, lapses, consec_correct, created_at')
+    .select('id, original_text, corrected_text, corrected_fr, reason, source_mode, next_review, lapses, consec_correct, created_at')
     .eq('user_id', user.id)
     .lte('next_review', nowIso)
     .order('next_review', { ascending: true })

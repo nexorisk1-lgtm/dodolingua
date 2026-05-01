@@ -167,6 +167,26 @@ export async function POST(req: NextRequest) {
   // 5. Construit le plan
   const plan = buildInterleavedPlan(wordIds, { mode, skipDiscovery: isReview })
 
+  // v3.8.1 — En mode révision, ajoute aussi les corrections coach dûes (FSRS)
+  let corrections: any[] = []
+  if (isReview) {
+    const nowIso = new Date().toISOString()
+    const { data: dueCorr } = await supabase
+      .from('coach_corrections')
+      .select('id, original_text, corrected_text, corrected_fr, reason, source_mode')
+      .eq('user_id', user.id)
+      .lte('next_review', nowIso)
+      .order('next_review', { ascending: true })
+      .limit(10)
+    if (dueCorr && dueCorr.length > 0) {
+      corrections = dueCorr
+      // Ajoute des PlanItems 'correction_review' à la fin du plan
+      for (const c of dueCorr) {
+        plan.push({ phase: 'correction_review' as any, word_id: `corr-${c.id}`, est_seconds: 25 })
+      }
+    }
+  }
+
   const { data: session, error } = await supabase
     .from('learning_sessions').insert({
       user_id: user.id, lang_code, lesson_id,
@@ -175,7 +195,7 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ id: session.id, plan, words })
+  return NextResponse.json({ id: session.id, plan, words, corrections })
 }
 
 function escapeRegex(s: string): string {

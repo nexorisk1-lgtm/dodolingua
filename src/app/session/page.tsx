@@ -56,6 +56,8 @@ export default function SessionRunner() {
   const [results, setResults] = useState<any[]>([])
   const [remediationActive, setRemediationActive] = useState(false)
   const [remediationCount, setRemediationCount] = useState(0)
+  // v3.8.1 — corrections (révision unifiée)
+  const [corrections, setCorrections] = useState<any[]>([])
 
   const current = plan[idx]
   const word = current ? words[current.word_id] : null
@@ -76,6 +78,7 @@ export default function SessionRunner() {
       setSessionId(data.id)
       setPlan(data.plan)
       setWords(data.words || {})
+      setCorrections(data.corrections || [])
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: vp } = await supabase.from('user_voice_pref')
@@ -135,13 +138,26 @@ export default function SessionRunner() {
   async function recordPhase(payload: any) {
     if (!sessionId || !current) return
     setBusy(true)
-    // v3.7.4 — Capture local pour construire la remédiation
     setResults(prev => [...prev, { word_id: current.word_id, phase: current.phase, ...payload }])
     try {
       await fetch(`/api/sessions/${sessionId}/submit`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ word_id: current.word_id, phase: current.phase, ...payload }),
+      })
+    } catch {}
+    setBusy(false)
+    next()
+  }
+
+  // v3.8.1 — Grade une correction et avance (utilise /api/corrections/grade)
+  async function gradeCorrection(id: string, button: 'savais' | 'hesite' | 'pas_su') {
+    setBusy(true)
+    try {
+      await fetch('/api/corrections/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, button }),
       })
     } catch {}
     setBusy(false)
@@ -187,7 +203,9 @@ export default function SessionRunner() {
     )
   }
 
-  if (!current || !word) {
+  // v3.8.1 — correction_review n'a pas de 'word' attaché (c'est un corr-${id})
+  const isCorrectionReview = current?.phase === ('correction_review' as any)
+  if (!current || (!word && !isCorrectionReview)) {
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
         <Card className="max-w-md"><p className="text-center text-gray-500">Préparation de la session…</p></Card>
@@ -229,21 +247,30 @@ export default function SessionRunner() {
 
         {/* Phase content */}
         <Card className="!p-5 space-y-4">
-          {current.phase === 'discovery' && (
+          {current.phase === 'discovery' && word && (
             <DiscoveryPhase key={`d-${idx}`} word={word} voiceName={voiceName} onNext={() => recordPhase({ completed: true })} busy={busy} />
           )}
-          {current.phase === 'pronunciation' && (
+          {current.phase === 'pronunciation' && word && (
             <PronunciationPhase key={`p-${idx}`} word={word} voiceName={voiceName} onNext={(score) => recordPhase({ pronunciation_score: score })} busy={busy} />
           )}
-          {current.phase === 'flashcard' && (
+          {current.phase === 'flashcard' && word && (
             <FlashcardPhase key={`f-${idx}`} word={word} voiceName={voiceName} onGrade={(g) => recordPhase({ grade: g })} busy={busy} />
           )}
-          {current.phase === 'qcm' && (
+          {current.phase === 'qcm' && word && (
             <QcmPhase key={`q-${idx}`} word={word} onAnswer={(correct) => recordPhase({ qcm_correct: correct })} busy={busy} />
           )}
-          {current.phase === 'cloze' && (
+          {current.phase === 'cloze' && word && (
             <ClozePhase key={`c-${idx}`} word={word} onAnswer={(correct) => recordPhase({ cloze_correct: correct })} busy={busy} />
           )}
+          {(current.phase as any) === 'correction_review' && (() => {
+            const corrId = current.word_id.replace(/^corr-/, '')
+            const corr = corrections.find((c: any) => c.id === corrId)
+            return corr ? (
+              <CorrectionReviewPhase key={`cr-${idx}`} corr={corr} onGrade={(g) => gradeCorrection(corr.id, g)} busy={busy} />
+            ) : (
+              <div className="text-center text-sm text-gray-500 italic py-8">Correction introuvable, on passe.</div>
+            )
+          })()}
         </Card>
       </Container>
     </main>
@@ -595,6 +622,54 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
             {picked === cloze.correct ? '🎯 Parfait !' : `❌ La bonne réponse était : ${cloze.correct}`}
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// v3.8.1 — Phase de révision d'une correction coach (flip card style)
+function CorrectionReviewPhase({ corr, onGrade, busy }: {
+  corr: { id: string; original_text: string; corrected_text: string; corrected_fr: string | null; reason: string | null }
+  onGrade: (g: 'savais' | 'hesite' | 'pas_su') => void
+  busy: boolean
+}) {
+  const [revealed, setRevealed] = useState(false)
+  const [picked, setPicked] = useState<'savais' | 'hesite' | 'pas_su' | null>(null)
+  function pickGrade(g: 'savais' | 'hesite' | 'pas_su') {
+    if (picked !== null) return
+    setPicked(g)
+    setTimeout(() => onGrade(g), 600)
+  }
+  return (
+    <div className="space-y-4 text-center">
+      <div className="text-[10px] uppercase font-bold text-gray-500">Tu te souviens de la correction ?</div>
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+        <div className="text-[10px] uppercase font-bold text-gray-500 mb-1">Ta phrase initiale</div>
+        <div className="text-sm">{corr.original_text}</div>
+      </div>
+      {!revealed ? (
+        <Button block onClick={() => setRevealed(true)}>Voir la correction</Button>
+      ) : (
+        <>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <div className="text-[10px] uppercase font-bold text-emerald-700 mb-1">Correction</div>
+            <div className="text-base font-bold text-emerald-900">{corr.corrected_text}</div>
+            {corr.corrected_fr && (
+              <div className="mt-2 bg-purple-50 border border-purple-200 rounded p-2 text-sm text-purple-900 italic">
+                🇫🇷 {corr.corrected_fr}
+              </div>
+            )}
+            {corr.reason && (
+              <div className="mt-2 text-xs italic text-gray-600">📖 {corr.reason}</div>
+            )}
+          </div>
+          <div className="text-[10px] uppercase font-bold text-gray-500 mt-2">Comment tu te débrouilles ?</div>
+          <div className="grid grid-cols-3 gap-2">
+            <FsrsButton color="red"     emoji="😖" label="Je ne savais pas" picked={picked === 'pas_su'} disabled={busy || picked !== null} onClick={() => pickGrade('pas_su')} />
+            <FsrsButton color="amber"   emoji="🤔" label="J&apos;ai hésité"   picked={picked === 'hesite'} disabled={busy || picked !== null} onClick={() => pickGrade('hesite')} />
+            <FsrsButton color="emerald" emoji="✅" label="Je savais"         picked={picked === 'savais'} disabled={busy || picked !== null} onClick={() => pickGrade('savais')} />
+          </div>
+        </>
       )}
     </div>
   )
