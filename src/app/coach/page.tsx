@@ -741,7 +741,7 @@ export default function CoachPage() {
     try {
       const res = await fetch('/api/coach/correct', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ utterance: target.text }),
+        body: JSON.stringify({ utterance: target.text, source_mode: activeMode }),
       })
       const data = await res.json()
       const fresh = threads[activeMode]

@@ -75,6 +75,18 @@ export default async function DashboardPage() {
   const { data: quests } = await supabase.from('daily_quests')
     .select('*').eq('user_id', user.id).eq('date', today)
 
+  // v3.6 — Count des corrections coach à réviser
+  const nowIso = new Date().toISOString()
+  const { count: correctionsDue } = await supabase
+    .from('coach_corrections')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .lte('next_review', nowIso)
+  const { count: correctionsTotal } = await supabase
+    .from('coach_corrections')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+
   const questMap: Record<QuestType, any> = {} as any
   for (const q of quests || []) questMap[q.quest_type as QuestType] = q
 
@@ -191,6 +203,28 @@ export default async function DashboardPage() {
           })}
         </div>
       </div>
+
+      {/* v3.6 — Carte Révision des corrections coach (visible si l'user a déjà au moins 1 correction) */}
+      {(correctionsTotal || 0) > 0 && (
+        <Link href="/corrections">
+          <Card className={`!p-4 transition ${(correctionsDue || 0) > 0 ? 'border-amber-300 bg-amber-50 hover:bg-amber-100' : 'border-rule bg-white hover:border-primary-300'}`}>
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${(correctionsDue || 0) > 0 ? 'bg-amber-200' : 'bg-primary-50'}`}>📝</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-sm text-primary-900">Révision des corrections</div>
+                <div className="text-xs text-gray-600">
+                  {(correctionsDue || 0) > 0
+                    ? `${correctionsDue} correction${correctionsDue! > 1 ? 's' : ''} à revoir maintenant`
+                    : `Tout est à jour — ${correctionsTotal} correction${(correctionsTotal || 0) > 1 ? 's' : ''} archivée${(correctionsTotal || 0) > 1 ? 's' : ''}`}
+                </div>
+              </div>
+              {(correctionsDue || 0) > 0 && (
+                <div className="text-amber-700 font-bold text-lg">→</div>
+              )}
+            </div>
+          </Card>
+        </Link>
+      )}
 
       <Link href="/ligue">
         <Card style={{ background: `linear-gradient(135deg, ${tierInfo.color}, #2E75B6)` }} className="text-white">

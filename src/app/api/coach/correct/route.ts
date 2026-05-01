@@ -69,5 +69,36 @@ export async function POST(req: NextRequest) {
     payload_json: { utterance: utterance.slice(0, 200), provider },
   })
 
-  return NextResponse.json({ correction: correction.trim(), provider })
+  // v3.6 — Captation auto de la correction pour le module Révisions
+  // Format attendu de la correction LLM :
+  //   ✏️ Better: <corrected sentence>
+  //   💡 Why: <one-line reason>
+  // (ou "✅ Looks good — nothing to fix." si rien à corriger)
+  const corrTrim = correction.trim()
+  const isLooksGood = /^✅/.test(corrTrim) || /looks good/i.test(corrTrim.slice(0, 30))
+  if (!isLooksGood) {
+    const betterMatch = corrTrim.match(/✏️?\s*Better\s*:\s*(.+?)(?:\n|$)/i)
+    const whyMatch = corrTrim.match(/💡?\s*Why\s*:\s*(.+?)(?:\n|$)/i)
+    const corrected_text = betterMatch?.[1]?.trim()
+    const reason = whyMatch?.[1]?.trim() || null
+    if (corrected_text && corrected_text !== utterance) {
+      const sourceMode = (typeof body.source_mode === 'string' && ['ami','auto','tuteur','speaking_pur','pro_grc'].includes(body.source_mode))
+        ? body.source_mode : 'tuteur'
+      await supabase.from('coach_corrections').upsert({
+        user_id: user.id,
+        lang_code: 'en-GB',
+        source_mode: sourceMode,
+        original_text: utterance,
+        corrected_text,
+        reason,
+        // FSRS reset à chaque update : on retombe sur 'new' (priorité haute)
+        fsrs_state: {},
+        next_review: new Date().toISOString(),
+        lapses: 0,
+        consec_correct: 0,
+      }, { onConflict: 'user_id,lang_code,original_text' })
+    }
+  }
+
+  return NextResponse.json({ correction: corrTrim, provider })
 }
