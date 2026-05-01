@@ -173,19 +173,19 @@ export default function SessionRunner() {
         {/* Phase content */}
         <Card className="!p-5 space-y-4">
           {current.phase === 'discovery' && (
-            <DiscoveryPhase word={word} voiceName={voiceName} onNext={() => recordPhase({ completed: true })} busy={busy} />
+            <DiscoveryPhase key={`d-${idx}`} word={word} voiceName={voiceName} onNext={() => recordPhase({ completed: true })} busy={busy} />
           )}
           {current.phase === 'pronunciation' && (
-            <PronunciationPhase word={word} voiceName={voiceName} onNext={(score) => recordPhase({ pronunciation_score: score })} busy={busy} />
+            <PronunciationPhase key={`p-${idx}`} word={word} voiceName={voiceName} onNext={(score) => recordPhase({ pronunciation_score: score })} busy={busy} />
           )}
           {current.phase === 'flashcard' && (
-            <FlashcardPhase word={word} voiceName={voiceName} onGrade={(g) => recordPhase({ grade: g })} busy={busy} />
+            <FlashcardPhase key={`f-${idx}`} word={word} voiceName={voiceName} onGrade={(g) => recordPhase({ grade: g })} busy={busy} />
           )}
           {current.phase === 'qcm' && (
-            <QcmPhase word={word} onAnswer={(correct) => recordPhase({ qcm_correct: correct })} busy={busy} />
+            <QcmPhase key={`q-${idx}`} word={word} onAnswer={(correct) => recordPhase({ qcm_correct: correct })} busy={busy} />
           )}
           {current.phase === 'cloze' && (
-            <ClozePhase word={word} onAnswer={(correct) => recordPhase({ cloze_correct: correct })} busy={busy} />
+            <ClozePhase key={`c-${idx}`} word={word} onAnswer={(correct) => recordPhase({ cloze_correct: correct })} busy={busy} />
           )}
         </Card>
       </Container>
@@ -354,6 +354,13 @@ function PronunciationPhase({ word, voiceName, onNext, busy }: { word: WordData;
 function FlashcardPhase({ word, voiceName, onGrade, busy }: { word: WordData; voiceName: string | null; onGrade: (g: 'savais' | 'hesite' | 'pas_su') => void; busy: boolean }) {
   // v3.7.1 — Inversion : EN → FR (reconnaissance passive, plus naturelle après la découverte)
   const [revealed, setRevealed] = useState(false)
+  // v3.7.2 — Délai 600ms après clic pour voir le feedback couleur avant de passer au suivant
+  const [fsrsPicked, setFsrsPicked] = useState<'savais' | 'hesite' | 'pas_su' | null>(null)
+  function pickGrade(g: 'savais' | 'hesite' | 'pas_su') {
+    if (fsrsPicked !== null) return
+    setFsrsPicked(g)
+    setTimeout(() => onGrade(g), 600)
+  }
   function speakWord() { speak(word.lemma, voiceName, 0.9) }
   return (
     <div className="space-y-4 text-center">
@@ -377,13 +384,39 @@ function FlashcardPhase({ word, voiceName, onGrade, busy }: { word: WordData; vo
           </div>
           <div className="text-[10px] uppercase font-bold text-gray-500 mt-2">Comment tu te débrouilles ?</div>
           <div className="grid grid-cols-3 gap-2">
-            <button disabled={busy} onClick={() => onGrade('pas_su')} className="p-3 rounded-xl bg-red-50 text-red-700 text-xs font-bold border-2 border-red-200 hover:bg-red-100">😖 Je ne savais pas</button>
-            <button disabled={busy} onClick={() => onGrade('hesite')} className="p-3 rounded-xl bg-amber-50 text-amber-700 text-xs font-bold border-2 border-amber-200 hover:bg-amber-100">🤔 J&apos;ai hésité</button>
-            <button disabled={busy} onClick={() => onGrade('savais')} className="p-3 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold border-2 border-emerald-200 hover:bg-emerald-100">✅ Je savais</button>
+            <FsrsButton color="red"     emoji="😖" label="Je ne savais pas" picked={fsrsPicked === 'pas_su'} disabled={busy || fsrsPicked !== null} onClick={() => pickGrade('pas_su')} />
+            <FsrsButton color="amber"   emoji="🤔" label="J&apos;ai hésité"   picked={fsrsPicked === 'hesite'} disabled={busy || fsrsPicked !== null} onClick={() => pickGrade('hesite')} />
+            <FsrsButton color="emerald" emoji="✅" label="Je savais"         picked={fsrsPicked === 'savais'} disabled={busy || fsrsPicked !== null} onClick={() => pickGrade('savais')} />
           </div>
         </>
       )}
     </div>
+  )
+}
+
+// v3.7.2 — Bouton FSRS générique : blanc/neutre par défaut, plein de couleur au clic
+function FsrsButton({ color, emoji, label, picked, disabled, onClick }: {
+  color: 'red' | 'amber' | 'emerald'
+  emoji: string
+  label: string
+  picked: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
+  const colorMap = {
+    red:     { picked: 'bg-red-500 border-red-600 text-white scale-[1.05] shadow',         hover: 'hover:bg-red-50 hover:border-red-300' },
+    amber:   { picked: 'bg-amber-500 border-amber-600 text-white scale-[1.05] shadow',     hover: 'hover:bg-amber-50 hover:border-amber-300' },
+    emerald: { picked: 'bg-emerald-500 border-emerald-600 text-white scale-[1.05] shadow', hover: 'hover:bg-emerald-50 hover:border-emerald-300' },
+  } as const
+  const cls = picked
+    ? colorMap[color].picked
+    : `bg-white border-rule text-gray-700 ${colorMap[color].hover}`
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className={`p-3 rounded-xl border-2 text-xs font-bold transition flex flex-col items-center gap-1 ${cls}`}>
+      <span className="text-base leading-none">{emoji}</span>
+      <span dangerouslySetInnerHTML={{ __html: label }} />
+    </button>
   )
 }
 
