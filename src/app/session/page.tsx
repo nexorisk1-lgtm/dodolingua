@@ -52,6 +52,10 @@ export default function SessionRunner() {
   const [points, setPoints] = useState<any>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // v3.7.4 — Track des échecs pour construire un tour de remédiation à la fin
+  const [results, setResults] = useState<any[]>([])
+  const [remediationActive, setRemediationActive] = useState(false)
+  const [remediationCount, setRemediationCount] = useState(0)
 
   const current = plan[idx]
   const word = current ? words[current.word_id] : null
@@ -86,13 +90,52 @@ export default function SessionRunner() {
   }, [])
 
   function next() {
-    if (idx + 1 >= plan.length) finish()
-    else setIdx(idx + 1)
+    if (idx + 1 >= plan.length) {
+      // v3.7.4 — Avant de finir, regarde si on doit lancer un tour de remédiation
+      if (!remediationActive) {
+        const failedItems = computeFailedItems(results)
+        if (failedItems.length > 0 && remediationCount < 1) {
+          // Lance UN tour de remédiation (max 1 itération pour éviter les boucles infinies)
+          setPlan(failedItems)
+          setIdx(0)
+          setRemediationActive(true)
+          setRemediationCount(remediationCount + 1)
+          setResults([])  // reset pour ce tour (on ne reboucle pas dessus)
+          return
+        }
+      }
+      finish()
+    } else {
+      setIdx(idx + 1)
+    }
+  }
+
+  // v3.7.4 — Détermine les items à refaire après un tour standard.
+  // Critères "fail" :
+  //  - pronunciation_score < 90
+  //  - flashcard grade='pas_su' (hésité = pass, savais = pass)
+  //  - qcm_correct === false
+  //  - cloze_correct === false
+  function computeFailedItems(rs: any[]): PlanItem[] {
+    const failed: PlanItem[] = []
+    for (const r of rs) {
+      let isFail = false
+      if (r.phase === 'pronunciation' && typeof r.pronunciation_score === 'number' && r.pronunciation_score < 90) isFail = true
+      if (r.phase === 'flashcard' && r.grade === 'pas_su') isFail = true
+      if (r.phase === 'qcm' && r.qcm_correct === false) isFail = true
+      if (r.phase === 'cloze' && r.cloze_correct === false) isFail = true
+      if (isFail) {
+        failed.push({ phase: r.phase, word_id: r.word_id, est_seconds: 30 })
+      }
+    }
+    return failed
   }
 
   async function recordPhase(payload: any) {
     if (!sessionId || !current) return
     setBusy(true)
+    // v3.7.4 — Capture local pour construire la remédiation
+    setResults(prev => [...prev, { word_id: current.word_id, phase: current.phase, ...payload }])
     try {
       await fetch(`/api/sessions/${sessionId}/submit`, {
         method: 'PATCH',
@@ -160,6 +203,18 @@ export default function SessionRunner() {
   return (
     <main className="min-h-screen flex items-start justify-center p-4 pb-20">
       <Container className="max-w-md space-y-3">
+        {remediationActive && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+            <div className="flex items-center justify-center gap-2">
+              <Mascot pose="study" size={40} animation="breathe" />
+              <div>
+                <div className="text-xs font-extrabold text-amber-700">🔁 Tour de révision</div>
+                <div className="text-[11px] text-amber-700">On revoit les mots qui ont besoin de plus.</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header progress */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-gray-500">
@@ -418,19 +473,22 @@ function FsrsButton({ color, emoji, label, picked, disabled, onClick }: {
   disabled: boolean
   onClick: () => void
 }) {
+  // v3.7.4 — Couleurs PLUS PROFONDES (600/700) + disabled:text-white !important pour bypass
+  // le style natif du navigateur qui grise le texte des boutons disabled.
   const colorMap = {
-    red:     { picked: 'bg-red-500 border-red-600 text-white scale-[1.05] shadow',         hover: 'hover:bg-red-50 hover:border-red-300' },
-    amber:   { picked: 'bg-amber-500 border-amber-600 text-white scale-[1.05] shadow',     hover: 'hover:bg-amber-50 hover:border-amber-300' },
-    emerald: { picked: 'bg-emerald-500 border-emerald-600 text-white scale-[1.05] shadow', hover: 'hover:bg-emerald-50 hover:border-emerald-300' },
+    red:     { picked: 'bg-red-600 border-red-700 text-white scale-[1.05] shadow-lg',         hover: 'hover:bg-red-50 hover:border-red-300' },
+    amber:   { picked: 'bg-amber-600 border-amber-700 text-white scale-[1.05] shadow-lg',     hover: 'hover:bg-amber-50 hover:border-amber-300' },
+    emerald: { picked: 'bg-emerald-600 border-emerald-700 text-white scale-[1.05] shadow-lg', hover: 'hover:bg-emerald-50 hover:border-emerald-300' },
   } as const
   const cls = picked
     ? colorMap[color].picked
     : `bg-white border-rule text-gray-700 ${colorMap[color].hover}`
   return (
     <button onClick={onClick} disabled={disabled}
-      className={`p-3 rounded-xl border-2 text-xs font-bold transition flex flex-col items-center gap-1 ${cls}`}>
+      style={picked ? { color: 'white' } : undefined}
+      className={`p-3 rounded-xl border-2 text-xs font-extrabold transition flex flex-col items-center gap-1 disabled:cursor-not-allowed ${cls}`}>
       <span className="text-base leading-none">{emoji}</span>
-      <span dangerouslySetInnerHTML={{ __html: label }} />
+      <span style={picked ? { color: 'white' } : undefined} dangerouslySetInnerHTML={{ __html: label }} />
     </button>
   )
 }
@@ -471,9 +529,9 @@ function QcmPhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct
         })}
       </div>
       {picked !== null && (
-        <div className="flex items-center justify-center gap-3 mt-2">
-          <Mascot pose={picked === correctOpt ? 'champion' : 'sad'} size={48} animation={picked === correctOpt ? 'pop' : 'shake'} />
-          <div className={`text-sm font-bold ${picked === correctOpt ? 'text-emerald-600' : 'text-red-600'}`}>
+        <div className={`flex flex-col items-center justify-center gap-2 mt-2 p-3 rounded-xl ${picked === correctOpt ? 'bg-emerald-50' : 'bg-red-50'}`}>
+          <Mascot pose={picked === correctOpt ? 'champion' : 'sad'} size={96} animation={picked === correctOpt ? 'bounce' : 'shake'} />
+          <div className={`text-base font-extrabold ${picked === correctOpt ? 'text-emerald-700' : 'text-red-700'}`}>
             {picked === correctOpt ? '🎯 Bonne réponse !' : `❌ La bonne réponse était : ${correctOpt}`}
           </div>
         </div>
@@ -530,9 +588,9 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
         })}
       </div>
       {picked !== null && (
-        <div className="flex items-center justify-center gap-3 mt-2">
-          <Mascot pose={picked === cloze.correct ? 'champion' : 'sad'} size={48} animation={picked === cloze.correct ? 'pop' : 'shake'} />
-          <div className={`text-sm font-bold ${picked === cloze.correct ? 'text-emerald-600' : 'text-red-600'}`}>
+        <div className={`flex flex-col items-center justify-center gap-2 mt-2 p-3 rounded-xl ${picked === cloze.correct ? 'bg-emerald-50' : 'bg-red-50'}`}>
+          <Mascot pose={picked === cloze.correct ? 'champion' : 'sad'} size={96} animation={picked === cloze.correct ? 'bounce' : 'shake'} />
+          <div className={`text-base font-extrabold ${picked === cloze.correct ? 'text-emerald-700' : 'text-red-700'}`}>
             {picked === cloze.correct ? '🎯 Parfait !' : `❌ La bonne réponse était : ${cloze.correct}`}
           </div>
         </div>
