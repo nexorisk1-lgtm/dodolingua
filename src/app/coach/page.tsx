@@ -222,8 +222,12 @@ export default function CoachPage() {
   const [state, setState] = useState<CoachState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [voiceReady, setVoiceReady] = useState(false)
+  // v3.5 — persistance : true quand on a chargé les threads depuis la BDD (évite race avec le greeting initial)
+  const [threadsLoaded, setThreadsLoaded] = useState(false)
 
   const voiceConvModeRef = useRef(false)
+  // v3.5 — debounce de la sauvegarde des threads (un timer par mode)
+  const saveTimersRef = useRef<Partial<Record<Mode, any>>>({})
   const ttsActiveRef = useRef(false)
   const silenceTimerRef = useRef<any>(null)
   const lastTranscriptRef = useRef('')
@@ -264,17 +268,36 @@ export default function CoachPage() {
         const best = getBestVoice('en')
         if (best?.name) setVoiceName(best.name)
       }
+
+      // v3.5 — Charge les threads persistés depuis la BDD
+      try {
+        const res = await fetch('/api/coach/threads')
+        if (res.ok) {
+          const data = await res.json()
+          if (data?.threads) {
+            setThreads(prev => ({ ...prev, ...data.threads }))
+            // Si un thread est déjà rempli, on n'a pas besoin de re-greeter pour ce mode
+            for (const m of ['ami','auto','tuteur','speaking_pur','pro_grc'] as Mode[]) {
+              if ((data.threads[m] || []).length > 0) {
+                greetedRef.current[m] = true
+              }
+            }
+          }
+        }
+      } catch {}
+      setThreadsLoaded(true)
       setVoiceReady(true)
     })()
   }, [])
 
   // Greeting initial (UNE FOIS PAR MODE — sauf en speaking_pur où on re-greet quand le scénario change)
+  // v3.5 — attend aussi que les threads BDD soient chargés (sinon on greete avant de découvrir un fil existant)
   useEffect(() => {
-    if (!voiceReady) return
+    if (!voiceReady || !threadsLoaded) return
     if (greetedRef.current[activeMode]) return
     greetedRef.current[activeMode] = true
     sendInitialGreeting(activeMode)
-  }, [voiceReady, activeMode, scenario])
+  }, [voiceReady, threadsLoaded, activeMode, scenario])
 
   // v3.2.1 — Scroll uniquement sur l'arrivée d'un NOUVEAU message (pas sur update d'un existant
   // comme la correction qui passe de loading à ready). Évite le bouncing qui interrompait le
@@ -284,6 +307,32 @@ export default function CoachPage() {
     if (userHasScrolledUpRef.current) return
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'auto' })
   }, [messages.length])
+
+  // v3.5 — Sauvegarde debouncée du thread du mode actif quand il change
+  useEffect(() => {
+    if (!threadsLoaded) return  // évite de wipe la BDD avec un thread vide pendant le chargement
+    const modeToSave = activeMode
+    const msgs = threads[modeToSave]
+    if (!msgs) return
+    // Annule le timer précédent pour ce mode
+    const existing = saveTimersRef.current[modeToSave]
+    if (existing) clearTimeout(existing)
+    // Reprogramme dans 500ms
+    saveTimersRef.current[modeToSave] = window.setTimeout(() => {
+      // On ne persiste que les champs significatifs (le serveur strip aussi)
+      const clean = msgs.map(m => {
+        const out: any = { role: m.role, text: m.text }
+        if (m.wordScores) out.wordScores = m.wordScores
+        if (m.hasTarget) out.hasTarget = true
+        return out
+      })
+      fetch('/api/coach/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: modeToSave, messages: clean }),
+      }).catch(() => {})
+    }, 500)
+  }, [threads, activeMode, threadsLoaded])
 
   // Détecter le scroll manuel de l'utilisateur
   useEffect(() => {
