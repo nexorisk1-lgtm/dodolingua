@@ -150,11 +150,11 @@ export default function SessionRunner() {
     )
   }
 
-  // Compteur de phases pour ce mot (groupe les phases consécutives du même word_id)
-  const wordPlanIndices: number[] = []
-  for (let i = 0; i < plan.length; i++) if (plan[i].word_id === current.word_id) wordPlanIndices.push(i)
-  const phaseInWord = wordPlanIndices.indexOf(idx) + 1
-  const phasesForThisWord = wordPlanIndices.length
+  // v3.7.1 — Plan groupé par phase : on compte la position dans le groupe courant
+  const groupIndices: number[] = []
+  for (let i = 0; i < plan.length; i++) if (plan[i].phase === current.phase) groupIndices.push(i)
+  const positionInGroup = groupIndices.indexOf(idx) + 1
+  const groupSize = groupIndices.length
 
   return (
     <main className="min-h-screen flex items-start justify-center p-4 pb-20">
@@ -163,7 +163,7 @@ export default function SessionRunner() {
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-gray-500">
             <span className="font-bold text-primary-700">{phaseEmoji(current.phase)} {phaseLabel(current.phase)}</span>
-            <span>{idx + 1} / {plan.length} · mot {phaseInWord}/{phasesForThisWord}</span>
+            <span>{idx + 1} / {plan.length} · {positionInGroup}/{groupSize} de cet exo</span>
           </div>
           <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
             <div className="h-full bg-primary-500 transition-all" style={{ width: `${((idx + 1) / plan.length) * 100}%` }} />
@@ -352,29 +352,34 @@ function PronunciationPhase({ word, voiceName, onNext, busy }: { word: WordData;
 }
 
 function FlashcardPhase({ word, voiceName, onGrade, busy }: { word: WordData; voiceName: string | null; onGrade: (g: 'savais' | 'hesite' | 'pas_su') => void; busy: boolean }) {
+  // v3.7.1 — Inversion : EN → FR (reconnaissance passive, plus naturelle après la découverte)
   const [revealed, setRevealed] = useState(false)
   function speakWord() { speak(word.lemma, voiceName, 0.9) }
   return (
     <div className="space-y-4 text-center">
-      <div className="text-[10px] uppercase font-bold text-gray-500">Rappel : quel est le mot ?</div>
-      <div className="bg-purple-50 rounded-xl p-5">
-        <div className="text-[10px] uppercase font-bold text-purple-700 mb-1">🇫🇷 Traduction</div>
-        <div className="text-2xl font-extrabold text-purple-900">{word.gloss_fr || '(traduction manquante)'}</div>
+      <div className="text-[10px] uppercase font-bold text-gray-500">Tu te souviens du sens ?</div>
+      <div className="bg-emerald-50 rounded-xl p-5">
+        <div className="text-[10px] uppercase font-bold text-emerald-700 mb-1">🇬🇧 Mot anglais</div>
+        <div className="text-3xl font-extrabold text-emerald-900">{word.lemma}</div>
+        {word.ipa && <div className="font-mono text-emerald-700 text-sm mt-1">{word.ipa}</div>}
+        <button onClick={speakWord} className="mt-2 text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-semibold">🔊 Écouter</button>
       </div>
       {!revealed ? (
-        <Button block onClick={() => setRevealed(true)}>Voir la réponse</Button>
+        <>
+          <div className="text-xs text-gray-500 italic">Essaie de te rappeler le sens en français dans ta tête, puis vérifie.</div>
+          <Button block onClick={() => setRevealed(true)}>Voir la réponse</Button>
+        </>
       ) : (
         <>
-          <div className="bg-emerald-50 rounded-xl p-5">
-            <div className="text-[10px] uppercase font-bold text-emerald-700 mb-1">🇬🇧 Mot anglais</div>
-            <div className="text-3xl font-extrabold text-emerald-900">{word.lemma}</div>
-            {word.ipa && <div className="font-mono text-emerald-700 text-sm mt-1">{word.ipa}</div>}
-            <button onClick={speakWord} className="mt-2 text-xs bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-semibold">🔊 Écouter</button>
+          <div className="bg-purple-50 rounded-xl p-5">
+            <div className="text-[10px] uppercase font-bold text-purple-700 mb-1">🇫🇷 Traduction</div>
+            <div className="text-2xl font-extrabold text-purple-900">{word.gloss_fr || '(traduction manquante)'}</div>
           </div>
+          <div className="text-[10px] uppercase font-bold text-gray-500 mt-2">Comment tu te débrouilles ?</div>
           <div className="grid grid-cols-3 gap-2">
-            <button disabled={busy} onClick={() => onGrade('pas_su')} className="p-3 rounded-xl bg-red-50 text-red-700 text-xs font-bold">😖 Je ne savais pas</button>
-            <button disabled={busy} onClick={() => onGrade('hesite')} className="p-3 rounded-xl bg-amber-50 text-amber-700 text-xs font-bold">🤔 J&apos;ai hésité</button>
-            <button disabled={busy} onClick={() => onGrade('savais')} className="p-3 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold">✅ Je savais</button>
+            <button disabled={busy} onClick={() => onGrade('pas_su')} className="p-3 rounded-xl bg-red-50 text-red-700 text-xs font-bold border-2 border-red-200 hover:bg-red-100">😖 Je ne savais pas</button>
+            <button disabled={busy} onClick={() => onGrade('hesite')} className="p-3 rounded-xl bg-amber-50 text-amber-700 text-xs font-bold border-2 border-amber-200 hover:bg-amber-100">🤔 J&apos;ai hésité</button>
+            <button disabled={busy} onClick={() => onGrade('savais')} className="p-3 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold border-2 border-emerald-200 hover:bg-emerald-100">✅ Je savais</button>
           </div>
         </>
       )}
@@ -403,18 +408,25 @@ function QcmPhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct
           const isPicked = picked === opt
           let cls = 'bg-white border-rule text-gray-800 hover:border-primary-300'
           if (picked !== null) {
-            if (isCorrect) cls = 'bg-emerald-100 border-emerald-300 text-emerald-900'
-            else if (isPicked) cls = 'bg-red-100 border-red-300 text-red-900'
-            else cls = 'bg-white border-rule text-gray-400 opacity-60'
+            if (isCorrect) cls = 'bg-emerald-500 border-emerald-600 text-white scale-[1.02] shadow-md'
+            else if (isPicked) cls = 'bg-red-500 border-red-600 text-white'
+            else cls = 'bg-white border-rule text-gray-400 opacity-50'
           }
           return (
             <button key={opt} disabled={picked !== null || busy} onClick={() => pick(opt)}
-              className={`w-full p-3 rounded-xl border-2 text-sm font-semibold transition ${cls}`}>
-              {opt} {picked !== null && isCorrect && '✓'} {picked === opt && !isCorrect && '✗'}
+              className={`w-full p-3 rounded-xl border-2 text-sm font-semibold transition flex items-center justify-between ${cls}`}>
+              <span className="flex-1 text-left">{opt}</span>
+              {picked !== null && isCorrect && <span className="text-xl ml-2">✓</span>}
+              {picked === opt && !isCorrect && <span className="text-xl ml-2">✗</span>}
             </button>
           )
         })}
       </div>
+      {picked !== null && (
+        <div className={`text-sm font-bold ${picked === correctOpt ? 'text-emerald-600' : 'text-red-600'}`}>
+          {picked === correctOpt ? '🎯 Bonne réponse !' : `❌ La bonne réponse était : ${correctOpt}`}
+        </div>
+      )}
     </div>
   )
 }
@@ -452,18 +464,25 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
           const isPicked = picked === opt
           let cls = 'bg-white border-rule text-gray-800 hover:border-primary-300'
           if (picked !== null) {
-            if (isCorrect) cls = 'bg-emerald-100 border-emerald-300 text-emerald-900'
-            else if (isPicked) cls = 'bg-red-100 border-red-300 text-red-900'
-            else cls = 'bg-white border-rule text-gray-400 opacity-60'
+            if (isCorrect) cls = 'bg-emerald-500 border-emerald-600 text-white scale-[1.02] shadow-md'
+            else if (isPicked) cls = 'bg-red-500 border-red-600 text-white'
+            else cls = 'bg-white border-rule text-gray-400 opacity-50'
           }
           return (
             <button key={opt} disabled={picked !== null || busy} onClick={() => pick(opt)}
-              className={`w-full p-3 rounded-xl border-2 text-sm font-semibold transition ${cls}`}>
-              {opt} {picked !== null && isCorrect && '✓'} {picked === opt && !isCorrect && '✗'}
+              className={`w-full p-3 rounded-xl border-2 text-sm font-semibold transition flex items-center justify-between ${cls}`}>
+              <span className="flex-1 text-left">{opt}</span>
+              {picked !== null && isCorrect && <span className="text-xl ml-2">✓</span>}
+              {picked === opt && !isCorrect && <span className="text-xl ml-2">✗</span>}
             </button>
           )
         })}
       </div>
+      {picked !== null && (
+        <div className={`text-sm font-bold ${picked === cloze.correct ? 'text-emerald-600' : 'text-red-600'}`}>
+          {picked === cloze.correct ? '🎯 Parfait !' : `❌ La bonne réponse était : ${cloze.correct}`}
+        </div>
+      )}
     </div>
   )
 }

@@ -53,19 +53,20 @@ export function buildInterleavedPlan(
   const mode = opts.mode || 'complet'
   const items: PlanItem[] = []
 
-  // Pour chaque mot, on enchaîne les 5 phases.
-  // L'utilisateur fait UN mot complet (5 phases) avant de passer au suivant.
-  // Plus pédagogique que l'interleaved fatiguant pour un débutant.
-  const order = shuffle(wordIds)
-  for (const id of order) {
-    const phasesForWord: Phase[] = opts.skipDiscovery
-      ? ['pronunciation', 'flashcard', 'qcm', 'cloze']
-      : ['discovery', 'pronunciation', 'flashcard', 'qcm', 'cloze']
-    // Mode oral : skip flashcard + qcm (focus prononciation et contexte)
-    const filtered = mode === 'oral'
-      ? phasesForWord.filter(p => p !== 'flashcard' && p !== 'qcm')
-      : phasesForWord
-    for (const ph of filtered) {
+  // v3.7.1 — Plan par GROUPE D'EXERCICE (Babbel/Memrise style), pas par mot.
+  // Tu vois la découverte des 5 mots, PUIS tu prononces les 5 mots, PUIS tu fais
+  // les 5 flashcards, etc. Chaque groupe est mélangé indépendamment pour varier
+  // l'ordre des mots à chaque phase.
+  const phasesAll: Phase[] = opts.skipDiscovery
+    ? ['pronunciation', 'flashcard', 'qcm', 'cloze']
+    : ['discovery', 'pronunciation', 'flashcard', 'qcm', 'cloze']
+  // Mode oral : skip flashcard + qcm (focus prononciation et contexte)
+  const phases = mode === 'oral'
+    ? phasesAll.filter(p => p !== 'flashcard' && p !== 'qcm')
+    : phasesAll
+  for (const ph of phases) {
+    const groupOrder = shuffle(wordIds)
+    for (const id of groupOrder) {
       items.push({ phase: ph, word_id: id, est_seconds: PHASE_DURATION[ph] })
     }
   }
