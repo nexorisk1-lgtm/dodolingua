@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 type Pose = 'idle' | 'happy' | 'sad' | 'study' | 'listen' | 'sleep' | 'champion'
 
-type AnimationType = 'breathe' | 'bounce' | 'shake' | 'wave' | 'pop' | 'none'
+type AnimationType = 'breathe' | 'bounce' | 'shake' | 'wave' | 'pop' | 'celebrate' | 'wobble' | 'peek' | 'slideUp' | 'none'
 
 interface MascotProps {
   pose?: Pose
@@ -22,6 +22,10 @@ export function Mascot({ pose = 'idle', size = 120, animation = 'breathe', class
     shake: 'animate-shake',
     wave: 'animate-wave',
     pop: 'animate-pop-in',
+    celebrate: 'animate-celebrate',
+    wobble: 'animate-wobble-strong',
+    peek: 'animate-peek-in',
+    slideUp: 'animate-slide-up-bounce',
     none: '',
   }[animation]
 

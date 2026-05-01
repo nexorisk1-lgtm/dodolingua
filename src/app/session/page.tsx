@@ -65,10 +65,11 @@ export default function SessionRunner() {
       const supabase = createClient()
       const search = new URLSearchParams(window.location.search)
       const isReview = search.get('mode') === 'revision'
+      // v3.7.5 — En mode révision : pioche jusqu'à 15 mots dûs (au lieu de 5 mots fixes)
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lang_code: 'en-GB', word_count: 5, mode: isReview ? 'revision' : undefined }),
+        body: JSON.stringify({ lang_code: 'en-GB', word_count: isReview ? 15 : 5, mode: isReview ? 'revision' : undefined }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Erreur'); return }
@@ -176,7 +177,7 @@ export default function SessionRunner() {
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
         <Card className="max-w-md text-center space-y-4">
-          <div className="flex justify-center"><Mascot pose="champion" size={120} animation="bounce" /></div>
+          <div className="flex justify-center"><Mascot pose="champion" size={140} animation="celebrate" /></div>
           <h1 className="text-2xl font-bold text-primary-900">Session terminée</h1>
           <div className="text-3xl font-extrabold text-primary-700">+{points?.total ?? 10} pts</div>
           <p className="text-sm text-gray-600">À demain pour la suite !</p>
@@ -529,8 +530,8 @@ function QcmPhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct
         })}
       </div>
       {picked !== null && (
-        <div className={`flex flex-col items-center justify-center gap-2 mt-2 p-3 rounded-xl ${picked === correctOpt ? 'bg-emerald-50' : 'bg-red-50'}`}>
-          <Mascot pose={picked === correctOpt ? 'champion' : 'sad'} size={96} animation={picked === correctOpt ? 'bounce' : 'shake'} />
+        <div className={`flex flex-col items-center justify-center gap-2 mt-2 p-3 rounded-xl ${picked === correctOpt ? 'bg-emerald-50' : 'bg-red-50'} animate-pop-in`}>
+          <Mascot pose={picked === correctOpt ? 'champion' : 'sad'} size={120} animation={picked === correctOpt ? 'celebrate' : 'wobble'} />
           <div className={`text-base font-extrabold ${picked === correctOpt ? 'text-emerald-700' : 'text-red-700'}`}>
             {picked === correctOpt ? '🎯 Bonne réponse !' : `❌ La bonne réponse était : ${correctOpt}`}
           </div>
@@ -588,8 +589,8 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
         })}
       </div>
       {picked !== null && (
-        <div className={`flex flex-col items-center justify-center gap-2 mt-2 p-3 rounded-xl ${picked === cloze.correct ? 'bg-emerald-50' : 'bg-red-50'}`}>
-          <Mascot pose={picked === cloze.correct ? 'champion' : 'sad'} size={96} animation={picked === cloze.correct ? 'bounce' : 'shake'} />
+        <div className={`flex flex-col items-center justify-center gap-2 mt-2 p-3 rounded-xl ${picked === cloze.correct ? 'bg-emerald-50' : 'bg-red-50'} animate-pop-in`}>
+          <Mascot pose={picked === cloze.correct ? 'champion' : 'sad'} size={120} animation={picked === cloze.correct ? 'celebrate' : 'wobble'} />
           <div className={`text-base font-extrabold ${picked === cloze.correct ? 'text-emerald-700' : 'text-red-700'}`}>
             {picked === cloze.correct ? '🎯 Parfait !' : `❌ La bonne réponse était : ${cloze.correct}`}
           </div>

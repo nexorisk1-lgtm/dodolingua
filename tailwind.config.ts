@@ -39,6 +39,34 @@ const config: Config = {
         shake: { '0%, 100%': { transform: 'translateX(0)' }, '20%, 60%': { transform: 'translateX(-8px)' }, '40%, 80%': { transform: 'translateX(8px)' } },
         wave: { '0%, 100%': { transform: 'rotate(0deg)' }, '20%': { transform: 'rotate(-8deg)' }, '40%': { transform: 'rotate(8deg)' }, '60%': { transform: 'rotate(-4deg)' } },
         'pop-in': { '0%': { transform: 'scale(0) rotate(-12deg)', opacity: '0' }, '70%': { transform: 'scale(1.1) rotate(4deg)', opacity: '1' }, '100%': { transform: 'scale(1) rotate(0deg)', opacity: '1' } },
+        // v3.7.5 — animations plus vivantes pour Dodo
+        'slide-up-bounce': {
+          '0%':   { transform: 'translateY(120%) scale(0.7)', opacity: '0' },
+          '50%':  { transform: 'translateY(-15%) scale(1.1)', opacity: '1' },
+          '70%':  { transform: 'translateY(8%) scale(0.95)', opacity: '1' },
+          '100%': { transform: 'translateY(0) scale(1)', opacity: '1' },
+        },
+        celebrate: {
+          '0%, 100%': { transform: 'translateY(0) rotate(0deg) scale(1)' },
+          '15%':      { transform: 'translateY(-18px) rotate(-8deg) scale(1.08)' },
+          '30%':      { transform: 'translateY(0) rotate(8deg) scale(1)' },
+          '45%':      { transform: 'translateY(-12px) rotate(-4deg) scale(1.05)' },
+          '60%':      { transform: 'translateY(0) rotate(4deg) scale(1)' },
+          '75%':      { transform: 'translateY(-6px) rotate(0deg) scale(1.02)' },
+        },
+        'wobble-strong': {
+          '0%, 100%': { transform: 'translateX(0) rotate(0deg)' },
+          '15%':      { transform: 'translateX(-12px) rotate(-6deg)' },
+          '30%':      { transform: 'translateX(10px) rotate(5deg)' },
+          '45%':      { transform: 'translateX(-8px) rotate(-4deg)' },
+          '60%':      { transform: 'translateX(6px) rotate(3deg)' },
+          '75%':      { transform: 'translateX(-3px) rotate(-1deg)' },
+        },
+        'peek-in': {
+          '0%':   { transform: 'translateY(100%) scale(0.5)', opacity: '0' },
+          '60%':  { transform: 'translateY(-10%) scale(1.05) rotate(8deg)', opacity: '1' },
+          '100%': { transform: 'translateY(0) scale(1) rotate(0deg)', opacity: '1' },
+        },
       },
       animation: {
         breathe: 'breathe 3s ease-in-out infinite',
@@ -46,6 +74,11 @@ const config: Config = {
         shake: 'shake 0.4s ease-in-out',
         wave: 'wave 1.6s ease-in-out',
         'pop-in': 'pop-in 0.5s cubic-bezier(.34,1.56,.64,1)',
+        // v3.7.5
+        'slide-up-bounce': 'slide-up-bounce 0.7s cubic-bezier(.34,1.56,.64,1)',
+        celebrate: 'celebrate 1.4s ease-in-out infinite',
+        'wobble-strong': 'wobble-strong 0.7s ease-in-out',
+        'peek-in': 'peek-in 0.6s cubic-bezier(.34,1.56,.64,1)',
       },
     },
   },

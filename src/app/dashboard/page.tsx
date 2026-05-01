@@ -87,6 +87,13 @@ export default async function DashboardPage() {
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
 
+  // v3.7.5 — Count des mots dûs en révision (FSRS)
+  const { count: revisionDue } = await supabase
+    .from('user_progress')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .lte('next_review', nowIso)
+
   const questMap: Record<QuestType, any> = {} as any
   for (const q of quests || []) questMap[q.quest_type as QuestType] = q
 
@@ -177,6 +184,8 @@ export default async function DashboardPage() {
                               ? `${ref.messages_count} échange${ref.messages_count > 1 ? 's' : ''} avec Dodo`
                               : `${q.target} ${q.unit} validés ✨`}
                           </>
+                        ) : q.type === 'revision' && (revisionDue || 0) > 0 ? (
+                          <span className="text-amber-700 font-bold">{revisionDue} mot{(revisionDue || 0) > 1 ? 's' : ''} à revoir maintenant</span>
                         ) : q.description}
                       </div>
                     </div>
@@ -224,6 +233,34 @@ export default async function DashboardPage() {
             </div>
           </Card>
         </Link>
+      )}
+
+      {/* v3.7.5 — Carte explicative du cycle de révision (visible si l'user a au moins 5 mots étudiés) */}
+      {(revisionDue || 0) > 0 && (
+        <details className="bg-white border border-rule rounded-xl p-3">
+          <summary className="cursor-pointer text-xs font-bold text-gray-700">ℹ️ Comment fonctionne le cycle de révision ?</summary>
+          <div className="mt-2 text-[12px] text-gray-600 space-y-1.5">
+            <div>Tes mots reviennent à des intervalles calculés selon ta confiance :</div>
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              <div className="bg-red-50 rounded p-2 text-center">
+                <div className="text-base">😖</div>
+                <div className="font-bold text-red-700 text-[11px]">Pas su</div>
+                <div className="text-[10px] text-gray-600">Revu dans ~10 min</div>
+              </div>
+              <div className="bg-amber-50 rounded p-2 text-center">
+                <div className="text-base">🤔</div>
+                <div className="font-bold text-amber-700 text-[11px]">Hésité</div>
+                <div className="text-[10px] text-gray-600">Revu demain</div>
+              </div>
+              <div className="bg-emerald-50 rounded p-2 text-center">
+                <div className="text-base">✅</div>
+                <div className="font-bold text-emerald-700 text-[11px]">Savais</div>
+                <div className="text-[10px] text-gray-600">+4j, +12j, +30j…</div>
+              </div>
+            </div>
+            <div className="text-[11px] italic mt-2">Pas de limite quotidienne — tu fais autant de révisions que tu veux selon le cycle.</div>
+          </div>
+        </details>
       )}
 
       <Link href="/ligue">

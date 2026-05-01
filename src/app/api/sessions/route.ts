@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
   const lang_code = body.lang_code || 'en-GB'
-  const wordCount = Math.min(Math.max(body.word_count || 5, 3), 8)
+  const wordCount = Math.min(Math.max(body.word_count || 5, 3), 30)
   const lesson_id = body.lesson_id || null
   const isReview = body.mode === 'revision'
 
