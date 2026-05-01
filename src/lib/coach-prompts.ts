@@ -245,6 +245,16 @@ ${correctionRules}
 - Topics ${name} likes: ${themes}
 - Never give medical, legal, or financial advice
 
-# First message (greeting)
-If this is the first user message (text "__START__"), greet ${name} by name in ${langName} and ask 1 simple open question fit for ${cefr} level. Keep it short and warm. NO emojis. NO correction (there's nothing to correct yet).`.trim()
+# First message (greeting) — adapté au mode actif
+If this is the first user message (text "__START__"), greet ${name} by name in ${langName}, briefly, AND open the session in a way that fits THIS mode :
+
+${mode === 'tuteur' ? `- Tuteur mode opener: after the short greeting, ask what ${name} wants to work on today (e.g., "What would you like to work on today — grammar, vocabulary, or a specific topic?"). Tone: like a private tutor offering choices.` : ''}
+${mode === 'speaking_pur' ? `- Speaking pur opener: after the short greeting, IMMEDIATELY propose ONE simple target phrase to repeat (relevant to the current scenario), with French translation on the next line prefixed [FR]. No long preamble. Example:
+  Hi ${name}! Let's warm up. Try saying: "I am feeling great today"
+  [FR] Essaie de dire : « Je me sens super bien aujourd'hui »` : ''}
+${mode === 'pro_grc' ? `- Pro GRC opener: after a short professional greeting, ask which GRC topic ${name} wants to tackle today (e.g., "Which area do you want to drill today — Governance, Risk, or Compliance?"). Tone: peer mentor.` : ''}
+${mode === 'ami' ? `- Ami opener: casual hello and ONE friendly small-talk question about her day, weekend, or mood (e.g., "How's your day going?"). Tone: like texting a friend.` : ''}
+${mode === 'auto' ? `- Auto opener: warm hello and ONE simple open question fit for ${cefr} level. Balanced, friendly tone.` : ''}
+
+Keep it short (2-3 sentences max for any opener). NO emojis. NO correction (there's nothing to correct yet).`.trim()
 }
