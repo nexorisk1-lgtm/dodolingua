@@ -1,4 +1,8 @@
 import Link from 'next/link'
+
+// v3.8.2 — Force le re-render à chaque visite (compteurs FSRS doivent être frais)
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 import { createClient } from '@/lib/supabase/server'
 import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
@@ -218,30 +222,10 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* v3.6 — Carte Révision des corrections coach (visible si l'user a déjà au moins 1 correction) */}
-      {(correctionsTotal || 0) > 0 && (
-        <Link href="/corrections">
-          <Card className={`!p-4 transition ${(correctionsDue || 0) > 0 ? 'border-amber-300 bg-amber-50 hover:bg-amber-100' : 'border-rule bg-white hover:border-primary-300'}`}>
-            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${(correctionsDue || 0) > 0 ? 'bg-amber-200' : 'bg-primary-50'}`}>📝</div>
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm text-primary-900">Révision des corrections</div>
-                <div className="text-xs text-gray-600">
-                  {(correctionsDue || 0) > 0
-                    ? `${correctionsDue} correction${correctionsDue! > 1 ? 's' : ''} à revoir maintenant`
-                    : `Tout est à jour — ${correctionsTotal} correction${(correctionsTotal || 0) > 1 ? 's' : ''} archivée${(correctionsTotal || 0) > 1 ? 's' : ''}`}
-                </div>
-              </div>
-              {(correctionsDue || 0) > 0 && (
-                <div className="text-amber-700 font-bold text-lg">→</div>
-              )}
-            </div>
-          </Card>
-        </Link>
-      )}
+      {/* v3.8.1 — Carte standalone supprimée : intégrée dans la quête Révision */}
 
-      {/* v3.7.5 — Carte explicative du cycle de révision (visible si l'user a au moins 5 mots étudiés) */}
-      {(revisionDue || 0) > 0 && (
+      {/* v3.7.5 — Carte explicative du cycle de révision */}
+      {((revisionDue || 0) > 0 || (correctionsDue || 0) > 0) && (
         <details className="bg-white border border-rule rounded-xl p-3">
           <summary className="cursor-pointer text-xs font-bold text-gray-700">ℹ️ Comment fonctionne le cycle de révision ?</summary>
           <div className="mt-2 text-[12px] text-gray-600 space-y-1.5">

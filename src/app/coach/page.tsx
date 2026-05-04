@@ -542,10 +542,9 @@ export default function CoachPage() {
     rec.interimResults = true
     lastConfidenceRef.current = 0
 
-    // v3.1 — Démarre l'enregistrement audio en parallèle (mode speaking_pur uniquement)
-    if (activeMode === 'speaking_pur') {
-      startAudioRecording()
-    }
+    // v3.8.2 — Démarre l'enregistrement audio dans TOUS les modes (pas que speaking_pur)
+    // Permet 'Réécouter ma voix' partout
+    startAudioRecording()
 
     rec.onstart = () => setState('listening')
     rec.onerror = (e: any) => { setError('Erreur micro : ' + e.error); setState('idle'); stopAudioRecording() }
@@ -577,9 +576,8 @@ export default function CoachPage() {
     rec.interimResults = true
     lastConfidenceRef.current = 0
 
-    if (activeMode === 'speaking_pur') {
-      startAudioRecording()
-    }
+    // v3.8.2 — Audio capturé dans tous les modes
+    startAudioRecording()
 
     rec.onstart = () => { setState('listening'); lastTranscriptRef.current = '' }
     rec.onerror = (e: any) => {
@@ -978,17 +976,16 @@ export default function CoachPage() {
                 </div>
               )}
 
-              {/* v3.1 — Boutons spécifiques speaking_pur (Refaire + Réécouter ma voix) */}
-              {m.role === 'user' && isSpeakingPurMode && (
+              {/* v3.8.2 — Bouton 'Réécouter ma voix' visible dans TOUS les modes si audio capturé */}
+              {m.role === 'user' && m.audioUrl && (
                 <div className="mt-1 text-right space-x-2">
-                  {m.audioUrl && (
-                    <button
-                      onClick={() => playUserAudio(m.audioUrl!)}
-                      className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200">
-                      ▶️ Réécouter ma voix
-                    </button>
-                  )}
-                  {m.wordScores && (
+                  <button
+                    onClick={() => playUserAudio(m.audioUrl!)}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200">
+                    ▶️ Réécouter ma voix
+                  </button>
+                  {/* Refaire reste réservé à speaking_pur (drill) */}
+                  {isSpeakingPurMode && m.wordScores && (
                     <button
                       onClick={() => redoUtterance(m.text)}
                       className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
