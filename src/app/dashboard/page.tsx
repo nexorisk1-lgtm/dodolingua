@@ -157,11 +157,16 @@ export default async function DashboardPage() {
               : q.type === 'jeu' ? ref.games_played
               : q.type === 'pratique' ? ref.messages_count
               : null) as number | null
-            const current = done ? q.target
-              : typeof refProgress === 'number' ? Math.min(refProgress, q.target)
-              : inProgress ? Math.max(1, Math.floor(q.target * 0.3))
+            // v3.13 — Pour la quête révision, target dynamique = items dûs au moment du chargement
+            // (au lieu de 5 hardcodé). Permet de refléter l'état réel.
+            const dynTarget = q.type === 'revision'
+              ? Math.max(1, ((revisionDue || 0) + (correctionsDue || 0) + (refProgress || 0)))
+              : q.target
+            const current = done ? dynTarget
+              : typeof refProgress === 'number' ? Math.min(refProgress, dynTarget)
+              : inProgress ? Math.max(1, Math.floor(dynTarget * 0.3))
               : 0
-            const progressPct = Math.round((current / q.target) * 100)
+            const progressPct = Math.round((current / dynTarget) * 100)
             return (
               <Link key={q.type} href={q.href as any}>
                 <div className={`p-3 rounded-xl border transition ${
@@ -218,7 +223,7 @@ export default async function DashboardPage() {
                     <span className={`text-[11px] font-bold whitespace-nowrap ${
                       done ? 'text-ok' : progressPct > 0 ? 'text-primary-700' : 'text-gray-400'
                     }`}>
-                      {current}/{q.target} {q.unit}
+                      {current}/{dynTarget} {q.unit}
                     </span>
                   </div>
                 </div>
@@ -230,59 +235,65 @@ export default async function DashboardPage() {
 
       {/* v3.8.1 — Carte standalone supprimée : intégrée dans la quête Révision */}
 
-      {/* v3.7.5 — Carte explicative du cycle de révision */}
-      {((revisionDue || 0) > 0 || (correctionsDue || 0) > 0) && (
-        <details className="bg-white border border-rule rounded-xl p-3">
-          <summary className="cursor-pointer text-xs font-bold text-gray-700">ℹ️ Comment fonctionne le cycle de révision ?</summary>
-          <div className="mt-2 text-[12px] text-gray-600 space-y-1.5">
-            <div>Tes mots reviennent à des intervalles calculés selon ta confiance :</div>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              <div className="bg-red-50 rounded p-2 text-center">
-                <div className="text-base">😖</div>
-                <div className="font-bold text-red-700 text-[11px]">Pas su</div>
-                <div className="text-[10px] text-gray-600">Revu dans ~10 min</div>
-              </div>
-              <div className="bg-amber-50 rounded p-2 text-center">
-                <div className="text-base">🤔</div>
-                <div className="font-bold text-amber-700 text-[11px]">Hésité</div>
-                <div className="text-[10px] text-gray-600">Revu demain</div>
-              </div>
-              <div className="bg-emerald-50 rounded p-2 text-center">
-                <div className="text-base">✅</div>
-                <div className="font-bold text-emerald-700 text-[11px]">Savais</div>
-                <div className="text-[10px] text-gray-600">+4j, +12j, +30j…</div>
+      {/* v3.13 — Carte cycle révision supprimée du dashboard (redondant avec /revision) */}
+
+      {/* v3.13 — Parcours CEFR : progression vers le prochain niveau + test de passage */}
+      {(() => {
+        // Seuils de mots maîtrisés requis pour chaque niveau CEFR
+        const LEVEL_THRESHOLDS: Record<string, number> = {
+          A1: 50, A2: 150, B1: 300, B2: 600, C1: 1000, C2: 1500
+        }
+        const LEVEL_ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+        const currentLevel = lang?.cefr_global || 'A1'
+        const currentIdx = LEVEL_ORDER.indexOf(currentLevel)
+        const nextLevel = currentIdx >= 0 && currentIdx < 5 ? LEVEL_ORDER[currentIdx + 1] : null
+        const targetMastered = nextLevel ? LEVEL_THRESHOLDS[currentLevel] : LEVEL_THRESHOLDS['C2']
+        const masteredNum = masteredCount || 0
+        const pctToNext = Math.min(100, Math.round((masteredNum / targetMastered) * 100))
+        const canTest = masteredNum >= targetMastered && nextLevel !== null
+
+        return (
+          <Card className="!p-4 bg-gradient-to-br from-emerald-50 to-blue-50 border-emerald-200">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="font-bold text-primary-900">🎯 Ton parcours CEFR</div>
+                <div className="text-xs text-gray-600 mt-0.5">
+                  Niveau actuel : <b>{currentLevel}</b>
+                  {nextLevel && <> → prochain : <b>{nextLevel}</b></>}
+                </div>
               </div>
             </div>
-            <div className="text-[11px] italic mt-2">Pas de limite quotidienne — tu fais autant de révisions que tu veux selon le cycle.</div>
-          </div>
-        </details>
-      )}
-
-      {/* v3.12 — Checkpoints / Parcours */}
-      <Card className="!p-4 bg-gradient-to-br from-emerald-50 to-blue-50 border-emerald-200">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <div className="font-bold text-primary-900">🎯 Ton parcours</div>
-            <div className="text-xs text-gray-600">{masteredCount || 0} mot{(masteredCount || 0) > 1 ? 's' : ''} maîtrisé{(masteredCount || 0) > 1 ? 's' : ''}</div>
-          </div>
-        </div>
-        <div className="grid grid-cols-6 gap-1 mt-2">
-          {[5, 10, 25, 50, 100, 250].map(milestone => {
-            const reached = (masteredCount || 0) >= milestone
-            return (
-              <div key={milestone} className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg text-center ${reached ? 'bg-emerald-100 border-2 border-emerald-400' : 'bg-white border-2 border-rule opacity-60'}`}>
-                <div className="text-base">{reached ? '✓' : '○'}</div>
-                <div className={`text-[10px] font-bold ${reached ? 'text-emerald-700' : 'text-gray-500'}`}>{milestone}</div>
+            {nextLevel ? (
+              <>
+                <div className="text-[11px] text-gray-700 mt-2 mb-1">
+                  Mots maîtrisés : <b>{masteredNum}</b> / {targetMastered} pour passer en {nextLevel}
+                </div>
+                <div className="h-3 bg-white rounded-full overflow-hidden border border-emerald-200">
+                  <div className={`h-full transition-all ${canTest ? 'bg-emerald-500' : 'bg-emerald-400'}`} style={{ width: `${pctToNext}%` }} />
+                </div>
+                {canTest ? (
+                  <Link href="/profile">
+                    <span className="mt-3 block w-full px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm text-center cursor-pointer hover:bg-emerald-700">
+                      🎓 Passer le test de niveau {nextLevel} →
+                    </span>
+                  </Link>
+                ) : (
+                  <div className="text-[11px] text-gray-500 italic mt-2 text-center">
+                    Encore {targetMastered - masteredNum} mot{targetMastered - masteredNum > 1 ? 's' : ''} à maîtriser pour débloquer le test {nextLevel}.
+                    <br />Un mot est <b>maîtrisé</b> quand tu le valides ✅ 2 fois de suite en révision.
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center mt-2">
+                <div className="text-2xl">🏆</div>
+                <div className="text-sm font-bold text-emerald-700 mt-1">Niveau C2 atteint !</div>
+                <div className="text-[11px] text-gray-600">Tu maîtrises l'anglais au plus haut niveau.</div>
               </div>
-            )
-          })}
-        </div>
-        {(masteredCount || 0) === 0 && (
-          <div className="text-[11px] text-gray-600 italic mt-2 text-center">
-            Maîtrise un mot en le validant 2 fois de suite (✅ Je savais).
-          </div>
-        )}
-      </Card>
+            )}
+          </Card>
+        )
+      })()}
 
       <Link href="/ligue">
         <Card style={{ background: `linear-gradient(135deg, ${tierInfo.color}, #2E75B6)` }} className="text-white">
