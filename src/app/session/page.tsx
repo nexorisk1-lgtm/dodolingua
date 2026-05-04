@@ -325,6 +325,8 @@ function DiscoveryPhase({ word, voiceName, onNext, busy }: { word: WordData; voi
 }
 
 function PronunciationPhase({ word, voiceName, onNext, busy }: { word: WordData; voiceName: string | null; onNext: (score: number | null) => void; busy: boolean }) {
+  // v3.11 — Afficher traduction FR + bouton Voir/Cacher pour rappel pendant pratique
+  const [showFr, setShowFr] = useState(false)
   const [recording, setRecording] = useState(false)
   const [scores, setScores] = useState<WordScore[] | null>(null)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -392,6 +394,21 @@ function PronunciationPhase({ word, voiceName, onNext, busy }: { word: WordData;
       <div className="text-3xl font-extrabold text-primary-900">{word.lemma}</div>
       {word.ipa && <div className="font-mono text-primary-500">{word.ipa}</div>}
       <button onClick={speakWord} className="bg-primary-50 text-primary-700 font-semibold px-4 py-2 rounded-full text-sm">🔊 Écouter le modèle</button>
+      {/* v3.11 — Traduction FR (cachée par défaut, dévoilable si besoin) */}
+      {word.gloss_fr && (
+        <div>
+          {showFr ? (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 inline-block">
+              <span className="text-[10px] uppercase font-bold text-purple-700 mr-2">🇫🇷</span>
+              <span className="text-sm font-bold text-purple-900">{word.gloss_fr}</span>
+            </div>
+          ) : (
+            <button onClick={() => setShowFr(true)} className="text-xs text-purple-600 underline">
+              Voir la traduction française
+            </button>
+          )}
+        </div>
+      )}
 
       {!scores && (
         <>

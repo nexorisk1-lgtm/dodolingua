@@ -35,11 +35,11 @@ const QUESTS: QuestDef[] = [
     type: 'revision',
     emoji: '🔄',
     title: 'Révision',
-    description: 'Consolide tes mots à revoir',
+    description: 'Consolide ton vocabulaire et ta grammaire',
     reward: '+10 pts',
     href: '/session?mode=revision',
     target: 5,
-    unit: 'mots',
+    unit: 'items',
   },
   {
     type: 'pratique',
@@ -190,10 +190,9 @@ export default async function DashboardPage() {
                           </>
                         ) : q.type === 'revision' && ((revisionDue || 0) > 0 || (correctionsDue || 0) > 0) ? (
                           <span className="text-amber-700 font-bold">
-                            {(revisionDue || 0) > 0 && `${revisionDue} mot${(revisionDue || 0) > 1 ? 's' : ''}`}
+                            Révise {(revisionDue || 0) > 0 && `tes ${revisionDue} vocabulaire${(revisionDue || 0) > 1 ? 's' : ''}`}
                             {(revisionDue || 0) > 0 && (correctionsDue || 0) > 0 && ' + '}
-                            {(correctionsDue || 0) > 0 && `${correctionsDue} correction${(correctionsDue || 0) > 1 ? 's' : ''}`}
-                            {' à revoir maintenant'}
+                            {(correctionsDue || 0) > 0 && `tes ${correctionsDue} règle${(correctionsDue || 0) > 1 ? 's' : ''} de grammaire`}
                           </span>
                         ) : q.description}
                       </div>
