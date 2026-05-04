@@ -64,15 +64,46 @@ export default function AdminVocabPage() {
     if (!csv.trim()) return
     setImporting(true)
     setImportResult(null)
+    setError(null)
     try {
-      const res = await fetch('/api/admin/vocab/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csv, source_list: sourceList }),
+      // Découpage auto en chunks de 1000 lignes pour éviter timeout Vercel
+      const lines = csv.split(/\r?\n/).filter(l => l.trim())
+      const hasHeader = /^(lemma|word|term)/i.test(lines[0])
+      const header = hasHeader ? lines[0] : 'lemma,cefr_level,frequency_rank,source_list'
+      const dataLines = hasHeader ? lines.slice(1) : lines
+      const CHUNK = 1000
+
+      let totalInserted = 0, totalSkipped = 0, totalErrors: string[] = []
+      const totalChunks = Math.ceil(dataLines.length / CHUNK)
+
+      for (let i = 0; i < dataLines.length; i += CHUNK) {
+        const chunkLines = dataLines.slice(i, i + CHUNK)
+        const chunkCsv = header + '\n' + chunkLines.join('\n')
+        const chunkNum = Math.floor(i / CHUNK) + 1
+        setImportResult({ progress: `Chunk ${chunkNum}/${totalChunks}…`, inserted: totalInserted, skipped: totalSkipped })
+
+        const res = await fetch('/api/admin/vocab/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csv: chunkCsv, source_list: sourceList }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          totalErrors.push(`Chunk ${chunkNum}: ${data.error || 'erreur inconnue'}`)
+          continue
+        }
+        totalInserted += data.inserted || 0
+        totalSkipped += data.skipped || 0
+        if (data.errors?.length) totalErrors.push(...data.errors)
+      }
+
+      setImportResult({
+        inserted: totalInserted,
+        skipped: totalSkipped,
+        pending_enrichment: totalInserted,
+        errors: totalErrors,
+        total_chunks: totalChunks,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Erreur')
-      setImportResult(data)
       await loadStats()
     } catch (e: any) {
       setError(e.message)
@@ -162,12 +193,16 @@ export default function AdminVocabPage() {
             {importing ? '⏳ Import en cours…' : '⬆️ Importer'}
           </Button>
           {importResult && (
-            <div className="text-xs bg-emerald-50 border border-emerald-200 rounded p-2 mt-2">
-              ✅ {importResult.inserted} mots insérés · {importResult.skipped} déjà existants · {importResult.pending_enrichment} à enrichir
+            <div className={`text-xs rounded p-2 mt-2 border ${importResult.progress ? 'bg-blue-50 border-blue-200' : 'bg-emerald-50 border-emerald-200'}`}>
+              {importResult.progress ? (
+                <div>⏳ <b>{importResult.progress}</b> — {importResult.inserted} insérés · {importResult.skipped} déjà existants jusqu'ici</div>
+              ) : (
+                <div>✅ <b>{importResult.inserted}</b> mots insérés · {importResult.skipped} déjà existants · {importResult.pending_enrichment || 0} à enrichir{importResult.total_chunks ? ` (${importResult.total_chunks} chunks)` : ''}</div>
+              )}
               {importResult.errors?.length > 0 && (
                 <details className="mt-1">
                   <summary className="text-warn cursor-pointer">{importResult.errors.length} erreurs</summary>
-                  <pre className="text-[10px] mt-1">{importResult.errors.join('\n')}</pre>
+                  <pre className="text-[10px] mt-1 max-h-40 overflow-auto">{importResult.errors.join('\n')}</pre>
                 </details>
               )}
             </div>
