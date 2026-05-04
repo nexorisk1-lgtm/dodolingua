@@ -26,17 +26,18 @@ export default function AdminVocabPage() {
     try {
       const supabase = createClient()
       const { data: byLevel } = await supabase
-        .from('concepts').select('cefr_min, enrichment_status')
-      const byLevelStats: Record<string, { total: number; pending: number; enriched: number }> = {}
+        .from('concepts').select('cefr_min, enrichment_status, image_url')
+      const byLevelStats: Record<string, { total: number; pending: number; enriched: number; without_image: number }> = {}
       for (const c of (byLevel || [])) {
         const lvl = (c as any).cefr_min || 'A1'
-        if (!byLevelStats[lvl]) byLevelStats[lvl] = { total: 0, pending: 0, enriched: 0 }
+        if (!byLevelStats[lvl]) byLevelStats[lvl] = { total: 0, pending: 0, enriched: 0, without_image: 0 }
         byLevelStats[lvl].total++
         if ((c as any).enrichment_status === 'pending' || (c as any).enrichment_status === 'enriching') {
           byLevelStats[lvl].pending++
         } else if ((c as any).enrichment_status === 'enriched') {
           byLevelStats[lvl].enriched++
         }
+        if (!(c as any).image_url) byLevelStats[lvl].without_image++
       }
       setStats(byLevelStats)
     } catch (e: any) {
@@ -90,6 +91,7 @@ export default function AdminVocabPage() {
   const totalPending = stats ? Object.values(stats as any).reduce((s: number, v: any) => s + v.pending, 0) : 0
   const totalEnriched = stats ? Object.values(stats as any).reduce((s: number, v: any) => s + v.enriched, 0) : 0
   const totalAll = stats ? Object.values(stats as any).reduce((s: number, v: any) => s + v.total, 0) : 0
+  const totalWithoutImage = stats ? Object.values(stats as any).reduce((s: number, v: any) => s + (v.without_image || 0), 0) : 0
 
   return (
     <Container className="space-y-4 max-w-3xl pb-20">
@@ -103,7 +105,7 @@ export default function AdminVocabPage() {
         {stats ? (
           <div className="space-y-2">
             <div className="text-sm text-gray-700 mb-2">
-              Total : <b>{totalAll}</b> mots · <b className="text-emerald-700">{totalEnriched}</b> enrichis · <b className="text-amber-700">{totalPending}</b> en attente
+              Total : <b>{totalAll}</b> mots · <b className="text-emerald-700">{totalEnriched}</b> avec FR · <b className="text-amber-700">{totalPending}</b> sans FR · <b className="text-blue-700">📷 {totalWithoutImage}</b> sans image
             </div>
             <div className="grid grid-cols-6 gap-2">
               {['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].map(lvl => {
@@ -112,7 +114,8 @@ export default function AdminVocabPage() {
                   <div key={lvl} className="bg-gray-50 rounded-lg p-2 text-center">
                     <div className="text-xs font-bold text-primary-900">{lvl}</div>
                     <div className="text-lg font-extrabold">{s.total}</div>
-                    {s.pending > 0 && <div className="text-[10px] text-amber-700">{s.pending} en attente</div>}
+                    {s.pending > 0 && <div className="text-[10px] text-amber-700">{s.pending} sans FR</div>}
+                    {s.without_image > 0 && <div className="text-[10px] text-blue-700">📷 {s.without_image} sans image</div>}
                   </div>
                 )
               })}
