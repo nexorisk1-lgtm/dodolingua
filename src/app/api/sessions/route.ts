@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
     const nowIso = new Date().toISOString()
     const { data: dueCorr } = await supabase
       .from('coach_corrections')
-      .select('id, original_text, corrected_text, corrected_fr, reason, grammar_rule, source_mode')
+      .select('id, original_text, corrected_text, corrected_fr, reason, grammar_rule, source_mode, is_drill_variant')
       .eq('user_id', user.id)
       .lte('next_review', nowIso)
       .order('next_review', { ascending: true })

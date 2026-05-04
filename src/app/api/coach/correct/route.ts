@@ -102,7 +102,8 @@ export async function POST(req: NextRequest) {
     if (corrected_text && corrected_text !== utterance) {
       const sourceMode = (typeof body.source_mode === 'string' && ['ami','auto','tuteur','speaking_pur','pro_grc'].includes(body.source_mode))
         ? body.source_mode : 'tuteur'
-      await supabase.from('coach_corrections').upsert({
+      // Upsert et récupère l'id pour générer des variantes
+      const { data: upserted } = await supabase.from('coach_corrections').upsert({
         user_id: user.id,
         lang_code: 'en-GB',
         source_mode: sourceMode,
@@ -110,12 +111,69 @@ export async function POST(req: NextRequest) {
         corrected_text,
         reason,
         corrected_fr,
-        grammar_rule,  // v3.9
+        grammar_rule,
         fsrs_state: {},
         next_review: new Date().toISOString(),
         lapses: 0,
         consec_correct: 0,
+        is_drill_variant: false,
       }, { onConflict: 'user_id,lang_code,original_text' })
+        .select('id')
+        .single()
+
+      // v3.10 — Génère 3 variantes de drilling (Speak Premium Plus style)
+      // Les variantes sont insérées comme des coach_corrections séparées avec
+      // parent_correction_id et is_drill_variant=true. Elles entrent dans la
+      // queue de révision normale.
+      if (upserted?.id && grammar_rule) {
+        try {
+          const variantPrompt = `You are a language tutor. Generate exactly 3 short variants in ${'en-GB'.startsWith('en') ? 'British English' : 'the target language'} that practise the SAME grammar rule as the original correction.
+
+Original mistake: "${utterance}"
+Corrected: "${corrected_text}"
+Grammar rule: "${grammar_rule}"
+
+Output STRICT format (3 lines, no preamble):
+1. <variant 1 — different context, same rule>
+2. <variant 2 — different context, same rule>
+3. <variant 3 — short challenge question using the same rule>
+
+Each variant must be 5-12 words max, natural-sounding, and showcase the rule.`
+
+          const variantsRaw = await askGroq(
+            [{ role: 'user', text: 'Generate variants now.' }],
+            { systemPrompt: variantPrompt, temperature: 0.7, maxOutputTokens: 200 },
+          )
+          const variantLines = variantsRaw.split('\n')
+            .map(l => l.replace(/^\d+\.\s*/, '').trim())
+            .filter(l => l.length > 4 && l.length < 200)
+            .slice(0, 3)
+
+          if (variantLines.length > 0) {
+            const variantRows = variantLines.map(v => ({
+              user_id: user.id,
+              lang_code: 'en-GB',
+              source_mode: sourceMode,
+              original_text: v,           // for drilling, "original" IS the target practice phrase
+              corrected_text: v,          // identical (it's a target, not an error)
+              reason,
+              corrected_fr: null,
+              grammar_rule,
+              fsrs_state: {},
+              next_review: new Date(Date.now() + 60 * 60 * 1000).toISOString(),  // due in 1h
+              lapses: 0,
+              consec_correct: 0,
+              parent_correction_id: upserted.id,
+              is_drill_variant: true,
+            }))
+            // upsert avec onConflict pour éviter doublons si la même phrase apparaît
+            await supabase.from('coach_corrections').upsert(variantRows, { onConflict: 'user_id,lang_code,original_text', ignoreDuplicates: true })
+          }
+        } catch (e) {
+          // Generation des variants échoue silencieusement, la correction principale est sauvée
+          console.warn('drilling variants generation failed', e)
+        }
+      }
     }
   }
 

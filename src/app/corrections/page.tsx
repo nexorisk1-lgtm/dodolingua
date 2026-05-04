@@ -19,6 +19,8 @@ interface CorrectionItem {
   reason: string | null
   grammar_rule: string | null  // v3.9
   source_mode: string
+  is_drill_variant?: boolean  // v3.10
+  parent_correction_id?: string | null  // v3.10
   next_review: string
   lapses: number
   consec_correct: number
@@ -126,7 +128,12 @@ export default function CorrectionsPage() {
         <Card className="!p-5 space-y-4">
           <div className="flex items-center justify-between text-[11px] text-gray-500">
             <span>{idx + 1} / {items.length}</span>
-            <span>Source : {current.source_mode}</span>
+            <div className="flex items-center gap-2">
+              {current.is_drill_variant && (
+                <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-[10px] font-bold">🎯 Variante drilling</span>
+              )}
+              <span>Source : {current.source_mode}</span>
+            </div>
           </div>
 
           {current.grammar_rule && (

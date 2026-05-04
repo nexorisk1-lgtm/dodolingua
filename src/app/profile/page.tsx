@@ -5,6 +5,7 @@ import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
 import { tierMeta } from '@/lib/leagues'
 import { VoicePicker } from '@/components/profile/VoicePicker'
+import { CefrEvalCard } from '@/components/profile/CefrEvalCard'
 
 export default async function ProfilePage() {
   const supabase = createClient()
@@ -107,6 +108,16 @@ export default async function ProfilePage() {
       <Card>
         <div className="font-bold text-primary-900 mb-2">🔊 Voix du coach</div>
         <VoicePicker initialVoice={voicePref?.voice_name || null} />
+      </Card>
+
+      <Card>
+        <div className="font-bold text-primary-900 mb-2">📊 Niveau CEFR estimé</div>
+        <CefrEvalCard 
+          declared={current?.cefr_global || 'A1'} 
+          estimated={(current as any)?.cefr_estimated || null}
+          estimatedAt={(current as any)?.cefr_estimated_at || null}
+          breakdown={(current as any)?.cefr_breakdown || null}
+        />
       </Card>
 
       <form action="/api/auth/signout" method="post">
