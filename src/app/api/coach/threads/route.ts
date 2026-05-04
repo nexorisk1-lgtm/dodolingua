@@ -40,7 +40,7 @@ export async function GET() {
 
   // Initialize all modes empty, then fill from DB
   const threads: Record<Mode, PersistedMsg[]> = {
-    ami: [], auto: [], tuteur: [], speaking_pur: [], pro_grc: [],
+    ami: [], auto: [], tuteur: [], speaking_pur: [], pro_grc: [], debutant: [],
   }
   for (const row of (data || [])) {
     if (VALID_MODES.includes(row.mode as Mode)) {
