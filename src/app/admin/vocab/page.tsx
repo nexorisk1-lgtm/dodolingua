@@ -25,8 +25,21 @@ export default function AdminVocabPage() {
   async function loadStats() {
     try {
       const supabase = createClient()
-      const { data: byLevel } = await supabase
-        .from('concepts').select('cefr_min, enrichment_status, image_url')
+      // Pagination pour contourner la limite Supabase de 1000 lignes
+      const allRows: any[] = []
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        const { data: page, error } = await supabase
+          .from('concepts')
+          .select('cefr_min, enrichment_status, image_url')
+          .range(from, from + pageSize - 1)
+        if (error || !page || page.length === 0) break
+        allRows.push(...page)
+        if (page.length < pageSize) break
+        from += pageSize
+      }
+      const byLevel = allRows
       const byLevelStats: Record<string, { total: number; pending: number; enriched: number; without_image: number }> = {}
       for (const c of (byLevel || [])) {
         const lvl = (c as any).cefr_min || 'A1'
