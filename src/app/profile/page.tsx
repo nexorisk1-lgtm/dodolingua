@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
 import { tierMeta } from '@/lib/leagues'
+import { VoicePicker } from '@/components/profile/VoicePicker'
 
 export default async function ProfilePage() {
   const supabase = createClient()
@@ -13,6 +14,8 @@ export default async function ProfilePage() {
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
   const { data: langs } = await supabase.from('user_languages').select('*').eq('user_id', user.id)
   const { data: prefs } = await supabase.from('user_preferences').select('*').eq('user_id', user.id).maybeSingle()
+  const { data: voicePref } = await supabase.from('user_voice_pref')
+    .select('voice_name').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle()
   const { data: badges } = await supabase.from('user_badges')
     .select('badge_id, unlocked_at, badges(code, label, icon)').eq('user_id', user.id).limit(8)
 
@@ -99,6 +102,11 @@ export default async function ProfilePage() {
             ))}
           </div>
         )}
+            </Card>
+
+      <Card>
+        <div className="font-bold text-primary-900 mb-2">🔊 Voix du coach</div>
+        <VoicePicker initialVoice={voicePref?.voice_name || null} />
       </Card>
 
       <form action="/api/auth/signout" method="post">

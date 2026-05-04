@@ -11,17 +11,29 @@ const DAILY_LIMIT = 300
 const CORRECTION_PROMPT = `
 You are a language tutor. The user just clicked "Show correction" on ONE of their own utterances. Your job: spot the SINGLE most important error and explain it briefly.
 
-Output STRICT format (no preamble, no follow-up question), 3 lines:
+Output STRICT format (no preamble, no follow-up question), 4 lines:
 ✏️ Better: <corrected sentence in the original language>
 💡 Why: <one sentence reason, max 15 words, no jargon>
 🇫🇷 FR: <French translation of the corrected sentence>
+📚 Rule: <SHORT label for the grammar rule, max 4 words, in French>
 
 Rules:
-- If the sentence is already correct or only has tiny stylistic issues, reply exactly: "✅ Looks good — nothing to fix." (skip the 3 lines).
+- If the sentence is already correct or only has tiny stylistic issues, reply exactly: "✅ Looks good — nothing to fix." (skip the 4 lines).
 - Pick ONE error only (priority: meaning > tense > grammar > word choice).
 - Keep "Why" friendly and clear, no linguistics terms.
-- The "FR:" line is MANDATORY and MUST be a clean French translation of the corrected sentence (not the original).
-- Reply in the same language as the user for "Better" and "Why" (English if user wrote English, etc.).
+- "FR:" line is MANDATORY and MUST be a clean French translation.
+- "Rule:" line is MANDATORY and MUST be a SHORT, REUSABLE grammar rule label
+  in French (max 4 words). Examples of good rules:
+    - "Passé simple"
+    - "Verbes irréguliers"
+    - "Articles a/an"
+    - "Ordre des mots"
+    - "Présent continu"
+    - "Auxiliaire do/does"
+    - "Pluriel des noms"
+    - "Comparatif/superlatif"
+  Use a SHORT reusable label so multiple corrections can be grouped under it.
+- Reply in the same language as the user for "Better" and "Why".
 - Never add greetings, never propose a follow-up question.
 `.trim()
 
@@ -82,9 +94,11 @@ export async function POST(req: NextRequest) {
     const betterMatch = corrTrim.match(/✏️?\s*Better\s*:\s*(.+?)(?:\n|$)/i)
     const whyMatch = corrTrim.match(/💡?\s*Why\s*:\s*(.+?)(?:\n|$)/i)
     const frMatch = corrTrim.match(/🇫🇷?\s*FR\s*:\s*(.+?)(?:\n|$)/i)
+    const ruleMatch = corrTrim.match(/📚?\s*Rule\s*:\s*(.+?)(?:\n|$)/i)
     const corrected_text = betterMatch?.[1]?.trim()
     const reason = whyMatch?.[1]?.trim() || null
     const corrected_fr = frMatch?.[1]?.trim() || null
+    const grammar_rule = ruleMatch?.[1]?.trim().slice(0, 60) || null  // v3.9
     if (corrected_text && corrected_text !== utterance) {
       const sourceMode = (typeof body.source_mode === 'string' && ['ami','auto','tuteur','speaking_pur','pro_grc'].includes(body.source_mode))
         ? body.source_mode : 'tuteur'
@@ -95,7 +109,8 @@ export async function POST(req: NextRequest) {
         original_text: utterance,
         corrected_text,
         reason,
-        corrected_fr,  // v3.8.1
+        corrected_fr,
+        grammar_rule,  // v3.9
         fsrs_state: {},
         next_review: new Date().toISOString(),
         lapses: 0,

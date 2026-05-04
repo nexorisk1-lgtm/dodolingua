@@ -629,7 +629,7 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
 
 // v3.8.1 — Phase de révision d'une correction coach (flip card style)
 function CorrectionReviewPhase({ corr, onGrade, busy }: {
-  corr: { id: string; original_text: string; corrected_text: string; corrected_fr: string | null; reason: string | null }
+  corr: { id: string; original_text: string; corrected_text: string; corrected_fr: string | null; reason: string | null; grammar_rule?: string | null }
   onGrade: (g: 'savais' | 'hesite' | 'pas_su') => void
   busy: boolean
 }) {
@@ -642,9 +642,15 @@ function CorrectionReviewPhase({ corr, onGrade, busy }: {
   }
   return (
     <div className="space-y-4 text-center">
-      <div className="text-[10px] uppercase font-bold text-gray-500">Tu te souviens de la correction ?</div>
+      <div className="text-[10px] uppercase font-bold text-gray-500">Tu te souviens de la règle ?</div>
+      {corr.grammar_rule && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+          <div className="text-[10px] uppercase font-bold text-blue-700">📚 Règle de grammaire</div>
+          <div className="text-base font-extrabold text-blue-900">{corr.grammar_rule}</div>
+        </div>
+      )}
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-        <div className="text-[10px] uppercase font-bold text-gray-500 mb-1">Ta phrase initiale</div>
+        <div className="text-[10px] uppercase font-bold text-gray-500 mb-1">Exemple : ta phrase initiale</div>
         <div className="text-sm">{corr.original_text}</div>
       </div>
       {!revealed ? (

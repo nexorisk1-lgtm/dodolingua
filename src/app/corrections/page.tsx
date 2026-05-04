@@ -17,6 +17,7 @@ interface CorrectionItem {
   corrected_text: string
   corrected_fr: string | null  // v3.8.1
   reason: string | null
+  grammar_rule: string | null  // v3.9
   source_mode: string
   next_review: string
   lapses: number
@@ -128,8 +129,15 @@ export default function CorrectionsPage() {
             <span>Source : {current.source_mode}</span>
           </div>
 
+          {current.grammar_rule && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
+              <div className="text-[10px] uppercase font-bold text-blue-700">📚 Règle de grammaire</div>
+              <div className="text-base font-extrabold text-blue-900">{current.grammar_rule}</div>
+            </div>
+          )}
+
           <div>
-            <div className="text-[10px] uppercase font-bold text-gray-500 mb-1">Ta phrase initiale</div>
+            <div className="text-[10px] uppercase font-bold text-gray-500 mb-1">Exemple : ta phrase initiale</div>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm">
               {current.original_text}
             </div>

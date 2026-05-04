@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const VALID_MODES = ['ami', 'auto', 'tuteur', 'speaking_pur', 'pro_grc'] as const
+const VALID_MODES = ['ami', 'auto', 'tuteur', 'speaking_pur', 'pro_grc', 'debutant'] as const
 type Mode = typeof VALID_MODES[number]
 
 interface PersistedMsg {

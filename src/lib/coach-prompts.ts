@@ -1,7 +1,7 @@
 import type { CefrLevel } from '@/types/database'
 
 // v3 — 4 modes : 3 historiques + speaking_pur (focus prononciation/fluidité)
-export type CoachModeV15 = 'tuteur' | 'ami' | 'auto' | 'speaking_pur' | 'pro_grc'
+export type CoachModeV15 = 'tuteur' | 'ami' | 'auto' | 'speaking_pur' | 'pro_grc' | 'debutant'
 
 // v3.3.2 — Scénarios étendus : 12 situations + 12 thèmes
 export type SpeakingScenario =
@@ -207,6 +207,33 @@ ${ctx.grcLevel === 'senior' ? '- Senior level: assume mastery of fundamentals, f
 ${ctx.grcLevel === 'expert' ? '- Expert level: peer-to-peer tone, debate trade-offs, regulatory interpretation, strategic implications, board-level concerns.' : ''}`
     toneRules = `# Tone — Pro GRC
 Tone: senior mentor. Direct, professional, supportive but challenging. Use real GRC scenarios drawn from financial services or large corporates. Switch pillars regularly so ${name} trains the full breadth of her field.`
+  } else if (mode === 'debutant') {
+    // v3.9 — Mode Débutant : coach bilingue FR/EN pour vrais débutants (A0/A1)
+    correctionRules = `# DÉBUTANT mode (v3.9 — bilingual FR/EN coach for true beginners)
+You are coaching ${name} who is a TRUE BEGINNER in ${langName}. She may not understand
+full ${langName} sentences yet. Your job is to gently introduce ${langName} while keeping
+her comfortable thanks to French scaffolding.
+
+# Bilingual format (MANDATORY)
+For EVERY English line you produce, ADD a French translation on the next line, prefixed [FR].
+Format strictly:
+  Hello! How are you today?
+  [FR] Bonjour ! Comment vas-tu aujourd'hui ?
+
+If ${name} writes in French, REPLY in BOTH ${langName} AND French (with [FR] prefix).
+Reformulate her French sentence into a simple English sentence she can repeat.
+
+# Tone & content
+- Use VERY simple ${langName}: top 300 most common words, present tense mostly,
+  short sentences (3-6 words).
+- Acknowledge her French answers warmly, never criticize.
+- Each turn: ONE small question or proposal, never a big block.
+- Goal: build confidence + vocabulary slowly.
+
+# NO grammar corrections
+Don't correct her English mistakes in this mode. Just model the correct version naturally.`
+    toneRules = `# Tone — Débutant
+Tone: warm, patient, very encouraging. Like a friendly French aunt teaching her niece her first English words.`
   } else {
     // auto / default = balanced
     correctionRules = `# CORRECTIONS — AUTO mode (v1.5 — balanced)

@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const messages: GroqMessage[] = body.messages || []
   // v1.5 — mode coach : 'tuteur' | 'ami' | 'auto'
-  const mode = (body.mode === 'tuteur' || body.mode === 'ami' || body.mode === 'auto' || body.mode === 'speaking_pur' || body.mode === 'pro_grc') ? body.mode : 'auto'
+  const mode = (body.mode === 'tuteur' || body.mode === 'ami' || body.mode === 'auto' || body.mode === 'speaking_pur' || body.mode === 'pro_grc' || body.mode === 'debutant') ? body.mode : 'auto'
   // v3.3 — scénario optionnel (mode speaking_pur)
   const VALID_SCENARIOS = ['daily', 'meeting', 'restaurant', 'cafe', 'hotel', 'travel', 'shopping', 'pro', 'phone', 'health', 'park', 'info', 'colors', 'clothes', 'food', 'family', 'weather', 'hobbies', 'animals', 'house', 'numbers', 'calendar', 'emotions', 'irregular_verbs']
   const scenario = (typeof body.scenario === 'string' && VALID_SCENARIOS.includes(body.scenario)) ? body.scenario : 'daily'
