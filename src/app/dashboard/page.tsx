@@ -98,6 +98,13 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .lte('next_review', nowIso)
 
+  // v3.12 — Total de mots maîtrisés pour le système de checkpoints
+  const { count: masteredCount } = await supabase
+    .from('user_progress')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('consec_correct', 2)
+
   const questMap: Record<QuestType, any> = {} as any
   for (const q of quests || []) questMap[q.quest_type as QuestType] = q
 
@@ -250,6 +257,32 @@ export default async function DashboardPage() {
           </div>
         </details>
       )}
+
+      {/* v3.12 — Checkpoints / Parcours */}
+      <Card className="!p-4 bg-gradient-to-br from-emerald-50 to-blue-50 border-emerald-200">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="font-bold text-primary-900">🎯 Ton parcours</div>
+            <div className="text-xs text-gray-600">{masteredCount || 0} mot{(masteredCount || 0) > 1 ? 's' : ''} maîtrisé{(masteredCount || 0) > 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-6 gap-1 mt-2">
+          {[5, 10, 25, 50, 100, 250].map(milestone => {
+            const reached = (masteredCount || 0) >= milestone
+            return (
+              <div key={milestone} className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg text-center ${reached ? 'bg-emerald-100 border-2 border-emerald-400' : 'bg-white border-2 border-rule opacity-60'}`}>
+                <div className="text-base">{reached ? '✓' : '○'}</div>
+                <div className={`text-[10px] font-bold ${reached ? 'text-emerald-700' : 'text-gray-500'}`}>{milestone}</div>
+              </div>
+            )
+          })}
+        </div>
+        {(masteredCount || 0) === 0 && (
+          <div className="text-[11px] text-gray-600 italic mt-2 text-center">
+            Maîtrise un mot en le validant 2 fois de suite (✅ Je savais).
+          </div>
+        )}
+      </Card>
 
       <Link href="/ligue">
         <Card style={{ background: `linear-gradient(135deg, ${tierInfo.color}, #2E75B6)` }} className="text-white">

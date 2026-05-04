@@ -69,11 +69,13 @@ export default function SessionRunner() {
       const supabase = createClient()
       const search = new URLSearchParams(window.location.search)
       const isReview = search.get('mode') === 'revision'
+      const typeFilter = search.get('type') || undefined  // v3.12 : 'words' | 'grammar'
+      isReviewRef.current = isReview
       // v3.7.5 — En mode révision : pioche jusqu'à 15 mots dûs (au lieu de 5 mots fixes)
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lang_code: 'en-GB', word_count: isReview ? 15 : 5, mode: isReview ? 'revision' : undefined }),
+        body: JSON.stringify({ lang_code: 'en-GB', word_count: isReview ? 15 : 5, mode: isReview ? 'revision' : undefined, type: typeFilter }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Erreur'); return }
