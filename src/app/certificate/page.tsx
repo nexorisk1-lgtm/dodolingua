@@ -4,12 +4,12 @@
  */
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense} from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
-export default function CertificatePage() {
+function CertificateInner() {
   const search = useSearchParams()
   const level = (search.get('level') || 'A1').toUpperCase()
   const score = search.get('score') || '0'
@@ -69,5 +69,13 @@ export default function CertificatePage() {
         </Link>
       </div>
     </main>
+  )
+}
+
+export default function CertificatePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Chargement…</div>}>
+      <CertificateInner />
+    </Suspense>
   )
 }

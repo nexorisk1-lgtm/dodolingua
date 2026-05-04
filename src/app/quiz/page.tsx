@@ -10,7 +10,7 @@
  */
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Suspense} from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Container } from '@/components/ui/Container'
@@ -34,7 +34,7 @@ interface Section {
   questions: any[]
 }
 
-export default function QuizPage() {
+function QuizInner() {
   const router = useRouter()
   const search = useSearchParams()
   const level = (search.get('level') || 'A1').toUpperCase()
@@ -377,5 +377,13 @@ export default function QuizPage() {
         </Card>
       </Container>
     </main>
+  )
+}
+
+export default function QuizPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Chargement du quiz…</div>}>
+      <QuizInner />
+    </Suspense>
   )
 }
