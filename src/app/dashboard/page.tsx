@@ -105,6 +105,27 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .gte('consec_correct', 2)
 
+  // v3.14 — Stats par niveau CEFR pour le parcours basé sur la biblio réelle
+  const { data: byLevelTotal } = await supabase
+    .from('concepts')
+    .select('cefr_min')
+  const { data: byLevelMastered } = await supabase
+    .from('user_progress')
+    .select('concept_id, concepts(cefr_min)')
+    .eq('user_id', user.id)
+    .gte('consec_correct', 2)
+
+  const totalByLevel: Record<string, number> = {}
+  for (const c of (byLevelTotal || [])) {
+    const lvl = (c as any).cefr_min || 'A1'
+    totalByLevel[lvl] = (totalByLevel[lvl] || 0) + 1
+  }
+  const masteredByLevel: Record<string, number> = {}
+  for (const r of (byLevelMastered || [])) {
+    const lvl = ((r as any).concepts?.cefr_min) || 'A1'
+    masteredByLevel[lvl] = (masteredByLevel[lvl] || 0) + 1
+  }
+
   const questMap: Record<QuestType, any> = {} as any
   for (const q of quests || []) questMap[q.quest_type as QuestType] = q
 
@@ -237,20 +258,17 @@ export default async function DashboardPage() {
 
       {/* v3.13 — Carte cycle révision supprimée du dashboard (redondant avec /revision) */}
 
-      {/* v3.13 — Parcours CEFR : progression vers le prochain niveau + test de passage */}
+      {/* v3.14 — Parcours CEFR basé sur la BDD réelle : % de la biblio maîtrisée */}
       {(() => {
-        // Seuils de mots maîtrisés requis pour chaque niveau CEFR
-        const LEVEL_THRESHOLDS: Record<string, number> = {
-          A1: 50, A2: 150, B1: 300, B2: 600, C1: 1000, C2: 1500
-        }
         const LEVEL_ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
         const currentLevel = lang?.cefr_global || 'A1'
         const currentIdx = LEVEL_ORDER.indexOf(currentLevel)
         const nextLevel = currentIdx >= 0 && currentIdx < 5 ? LEVEL_ORDER[currentIdx + 1] : null
-        const targetMastered = nextLevel ? LEVEL_THRESHOLDS[currentLevel] : LEVEL_THRESHOLDS['C2']
-        const masteredNum = masteredCount || 0
-        const pctToNext = Math.min(100, Math.round((masteredNum / targetMastered) * 100))
-        const canTest = masteredNum >= targetMastered && nextLevel !== null
+        // v3.14 : target = TOTAL mots disponibles dans le niveau actuel (pas un chiffre arbitraire)
+        const targetMastered = totalByLevel[currentLevel] || 0
+        const masteredNum = masteredByLevel[currentLevel] || 0
+        const pctToNext = targetMastered > 0 ? Math.min(100, Math.round((masteredNum / targetMastered) * 100)) : 0
+        const canTest = targetMastered > 0 && masteredNum >= targetMastered && nextLevel !== null
 
         return (
           <Card className="!p-4 bg-gradient-to-br from-emerald-50 to-blue-50 border-emerald-200">
@@ -266,21 +284,27 @@ export default async function DashboardPage() {
             {nextLevel ? (
               <>
                 <div className="text-[11px] text-gray-700 mt-2 mb-1">
-                  Mots maîtrisés : <b>{masteredNum}</b> / {targetMastered} pour passer en {nextLevel}
+                  {targetMastered > 0
+                    ? <>Mots {currentLevel} maîtrisés : <b>{masteredNum}</b> / {targetMastered} disponibles dans la biblio</>
+                    : <>Aucun mot {currentLevel} disponible dans la biblio actuelle</>}
                 </div>
                 <div className="h-3 bg-white rounded-full overflow-hidden border border-emerald-200">
                   <div className={`h-full transition-all ${canTest ? 'bg-emerald-500' : 'bg-emerald-400'}`} style={{ width: `${pctToNext}%` }} />
                 </div>
                 {canTest ? (
-                  <Link href="/profile">
+                  <Link href={`/quiz?level=${currentLevel}`}>
                     <span className="mt-3 block w-full px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm text-center cursor-pointer hover:bg-emerald-700">
-                      🎓 Passer le test de niveau {nextLevel} →
+                      🎓 Passer le test {currentLevel} pour débloquer {nextLevel} →
                     </span>
                   </Link>
+                ) : targetMastered > 0 ? (
+                  <div className="text-[11px] text-gray-500 italic mt-2 text-center">
+                    Encore {targetMastered - masteredNum} mot{targetMastered - masteredNum > 1 ? 's' : ''} {currentLevel} à maîtriser pour débloquer le test.
+                    <br />Un mot est <b>maîtrisé</b> quand tu le valides ✅ 2 fois de suite en révision.
+                  </div>
                 ) : (
                   <div className="text-[11px] text-gray-500 italic mt-2 text-center">
-                    Encore {targetMastered - masteredNum} mot{targetMastered - masteredNum > 1 ? 's' : ''} à maîtriser pour débloquer le test {nextLevel}.
-                    <br />Un mot est <b>maîtrisé</b> quand tu le valides ✅ 2 fois de suite en révision.
+                    Pas encore de contenu {currentLevel} dans la biblio. Plus de mots à venir.
                   </div>
                 )}
               </>
