@@ -58,6 +58,8 @@ export default function SessionRunner() {
   const [remediationCount, setRemediationCount] = useState(0)
   // v3.8.1 — corrections (révision unifiée)
   const [corrections, setCorrections] = useState<any[]>([])
+  // v3.11 — détecte mode révision pour passer à submit
+  const isReviewRef = useRef(false)
 
   const current = plan[idx]
   const word = current ? words[current.word_id] : null
@@ -140,7 +142,9 @@ export default function SessionRunner() {
     setBusy(true)
     setResults(prev => [...prev, { word_id: current.word_id, phase: current.phase, ...payload }])
     try {
-      await fetch(`/api/sessions/${sessionId}/submit`, {
+      // v3.11 — pass mode=revision dans l'URL pour mettre à jour la bonne quête
+      const submitUrl = `/api/sessions/${sessionId}/submit${isReviewRef.current ? '?mode=revision' : ''}`
+      await fetch(submitUrl, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ word_id: current.word_id, phase: current.phase, ...payload }),
