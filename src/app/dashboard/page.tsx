@@ -37,7 +37,7 @@ const QUESTS: QuestDef[] = [
     title: 'Révision',
     description: 'Consolide ton vocabulaire et ta grammaire',
     reward: '+10 pts',
-    href: '/session?mode=revision',
+    href: '/revision',  // v3.12 — page intermédiaire avec pavés Vocab/Grammaire/Tout
     target: 5,
     unit: 'items',
   },

@@ -37,6 +37,8 @@ export async function POST(req: NextRequest) {
   const wordCount = Math.min(Math.max(body.word_count || 5, 3), 30)
   const lesson_id = body.lesson_id || null
   const isReview = body.mode === 'revision'
+  // v3.12 — type filter : 'words' (skip corrections), 'grammar' (only corrections), undefined (both)
+  const typeFilter = body.type === 'words' || body.type === 'grammar' ? body.type : undefined
 
   const { data: prefs } = await supabase
     .from('user_preferences').select('mode').eq('user_id', user.id).eq('lang_code', lang_code).single()
@@ -165,11 +167,15 @@ export async function POST(req: NextRequest) {
   }
 
   // 5. Construit le plan
-  const plan = buildInterleavedPlan(wordIds, { mode, skipDiscovery: isReview })
+  // v3.12 — En mode révision avec type='grammar', on ne fait QUE les corrections (pas de mots)
+  const plan = (isReview && typeFilter === 'grammar')
+    ? []
+    : buildInterleavedPlan(wordIds, { mode, skipDiscovery: isReview })
 
-  // v3.8.1 — En mode révision, ajoute aussi les corrections coach dûes (FSRS)
+  // v3.8.1 + v3.12 — En mode révision, ajoute aussi les corrections coach dûes (FSRS)
+  // sauf si typeFilter='words' (utilisateur veut juste vocabulaire)
   let corrections: any[] = []
-  if (isReview) {
+  if (isReview && typeFilter !== 'words') {
     const nowIso = new Date().toISOString()
     const { data: dueCorr } = await supabase
       .from('coach_corrections')
