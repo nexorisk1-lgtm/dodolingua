@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
           frequency_rank: item.rank,
           enrichment_status: 'pending',
           gloss_fr: null,
+          domain: 'general',
         })
         .select('id')
         .single()
