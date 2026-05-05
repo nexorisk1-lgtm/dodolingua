@@ -20,6 +20,9 @@ export default function AdminVocabPage() {
   const [enriching, setEnriching] = useState(false)
   const [enrichResult, setEnrichResult] = useState<any>(null)
   const [batchSize, setBatchSize] = useState(20)
+  const [autoLoop, setAutoLoop] = useState(false)
+  const [autoLoopProgress, setAutoLoopProgress] = useState<{done: number; total: number; failed: number; lastWord: string} | null>(null)
+  const stopAutoRef = useState({ stop: false })[0]
   const [error, setError] = useState<string | null>(null)
 
   async function loadStats() {
@@ -110,6 +113,51 @@ export default function AdminVocabPage() {
     } finally {
       setImporting(false)
     }
+  }
+
+  async function handleAutoEnrich() {
+    if (totalPending === 0) return
+    setAutoLoop(true)
+    stopAutoRef.stop = false
+    const startPending = totalPending
+    let done = 0, failed = 0, lastWord = ''
+    setAutoLoopProgress({ done: 0, total: startPending, failed: 0, lastWord: '' })
+
+    try {
+      // Boucle jusqu'à pending = 0 ou stop
+      while (!stopAutoRef.stop) {
+        const res = await fetch('/api/admin/vocab/enrich', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch_size: batchSize }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          // Quota dépassé / erreur LLM → wait 30s puis retry
+          if (res.status === 503 || res.status === 429) {
+            setAutoLoopProgress({ done, total: startPending, failed, lastWord: `⏸️ Pause 30s (quota)…` })
+            await new Promise(r => setTimeout(r, 30000))
+            continue
+          }
+          setError(`Auto-loop arrêté : ${data.error || 'erreur'}`)
+          break
+        }
+        if (data.enriched === 0 && data.message?.includes('no pending')) break
+        done += data.enriched || 0
+        failed += data.failed || 0
+        lastWord = data.sample_word || lastWord
+        setAutoLoopProgress({ done, total: startPending, failed, lastWord })
+        // Délai 2s entre batches pour respecter quota Groq (~30 req/min)
+        await new Promise(r => setTimeout(r, 2000))
+      }
+      await loadStats()
+    } finally {
+      setAutoLoop(false)
+    }
+  }
+
+  function stopAutoLoop() {
+    stopAutoRef.stop = true
   }
 
   async function handleEnrich() {
@@ -222,9 +270,39 @@ export default function AdminVocabPage() {
           <input type="number" min={1} max={30} value={batchSize}
             onChange={e => setBatchSize(parseInt(e.target.value, 10) || 20)}
             className="w-16 px-2 py-1 border border-rule rounded text-sm" />
-          <Button onClick={handleEnrich} disabled={enriching || totalPending === 0}>
+          <Button onClick={handleEnrich} disabled={enriching || autoLoop || totalPending === 0}>
             {enriching ? '⏳ Enrichissement…' : `🤖 Enrichir ${Math.min(batchSize, totalPending)} mots`}
           </Button>
+        </div>
+
+        {/* Auto-loop : enrichir tout automatiquement */}
+        <div className="border-t border-rule pt-3 mt-3">
+          <div className="text-xs text-gray-600 mb-2">
+            <b>Auto-loop</b> : enrichit tous les mots pending automatiquement, par batches de {batchSize}, avec délai 2s entre appels (respecte quota Groq).
+          </div>
+          {!autoLoop ? (
+            <Button onClick={handleAutoEnrich} disabled={enriching || totalPending === 0} variant="primary">
+              ⚡ Enrichir TOUT en automatique ({totalPending} mots)
+            </Button>
+          ) : (
+            <div className="space-y-2">
+              <div className="bg-blue-50 border border-blue-200 rounded p-2 text-xs">
+                {autoLoopProgress && (
+                  <>
+                    <div className="font-bold">⏳ Auto-loop en cours…</div>
+                    <div>Enrichis : <b className="text-emerald-700">{autoLoopProgress.done}</b> / {autoLoopProgress.total}</div>
+                    {autoLoopProgress.failed > 0 && <div className="text-warn">Échecs : {autoLoopProgress.failed}</div>}
+                    {autoLoopProgress.lastWord && <div className="opacity-70">Dernier : <code>{autoLoopProgress.lastWord}</code></div>}
+                    <div className="mt-1 h-2 bg-gray-200 rounded overflow-hidden">
+                      <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (autoLoopProgress.done / autoLoopProgress.total) * 100)}%` }}></div>
+                    </div>
+                    <div className="text-[10px] mt-1">~{Math.ceil((autoLoopProgress.total - autoLoopProgress.done) / batchSize * 2 / 60)} min restantes</div>
+                  </>
+                )}
+              </div>
+              <Button onClick={stopAutoLoop} variant="ghost">⛔ Arrêter l'auto-loop</Button>
+            </div>
+          )}
         </div>
         {enrichResult && (
           <div className="text-xs bg-emerald-50 border border-emerald-200 rounded p-2">
