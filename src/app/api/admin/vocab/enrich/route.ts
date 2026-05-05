@@ -82,8 +82,14 @@ export async function POST(req: NextRequest) {
     parsed = JSON.parse(cleaned)
     if (!Array.isArray(parsed)) throw new Error('not an array')
   } catch (e: any) {
-    await supabase.from('concepts').update({ enrichment_status: 'failed' }).in('id', ids)
-    return NextResponse.json({ error: 'LLM response not parsable', raw: raw.slice(0, 300) }, { status: 500 })
+    // Parse échoué = LLM a renvoyé du JSON cassé. On remet en pending pour retry,
+    // pas en failed (sinon on perd les mots définitivement).
+    await supabase.from('concepts').update({ enrichment_status: 'pending' }).in('id', ids)
+    return NextResponse.json({
+      error: 'LLM response not parsable, batch reset to pending',
+      raw: raw.slice(0, 300),
+      retryable: true,
+    }, { status: 500 })
   }
 
   // Update each concept + translation

@@ -133,14 +133,23 @@ export default function AdminVocabPage() {
         })
         const data = await res.json()
         if (!res.ok) {
-          // Quota dépassé / erreur LLM → wait 30s puis retry
+          // Quota dépassé → pause 30s puis retry
           if (res.status === 503 || res.status === 429) {
             setAutoLoopProgress({ done, total: startPending, failed, lastWord: `⏸️ Pause 30s (quota)…` })
             await new Promise(r => setTimeout(r, 30000))
             continue
           }
-          setError(`Auto-loop arrêté : ${data.error || 'erreur'}`)
-          break
+          // Parse JSON cassé (500 retryable) → wait 5s puis retry (l'endpoint a déjà reset à pending)
+          if (res.status === 500 && data.retryable) {
+            setAutoLoopProgress({ done, total: startPending, failed, lastWord: `🔄 JSON Groq cassé, retry dans 5s…` })
+            await new Promise(r => setTimeout(r, 5000))
+            continue
+          }
+          // Autre erreur → log mais continue
+          failed += batchSize
+          setAutoLoopProgress({ done, total: startPending, failed, lastWord: `⚠️ Erreur batch : ${data.error || 'inconnue'}` })
+          await new Promise(r => setTimeout(r, 3000))
+          continue
         }
         if (data.enriched === 0 && data.message?.includes('no pending')) break
         done += data.enriched || 0
