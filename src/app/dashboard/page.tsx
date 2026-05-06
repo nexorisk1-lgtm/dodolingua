@@ -292,6 +292,12 @@ export default async function DashboardPage() {
                 </div>
               </div>
             </div>
+            {/* v3.22 — Lien vers le parcours visuel */}
+            <Link href={`/parcours`}>
+              <span className="mt-2 mb-3 block w-full px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-sm text-center cursor-pointer hover:opacity-90 shadow">
+                🗺️ Voir mon parcours visuel →
+              </span>
+            </Link>
             {nextLevel ? (
               <>
                 <div className="text-[11px] text-gray-700 mt-2 mb-1">

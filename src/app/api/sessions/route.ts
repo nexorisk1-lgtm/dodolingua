@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
   const isReview = body.mode === 'revision'
   // v3.12 — type filter : 'words' (skip corrections), 'grammar' (only corrections), undefined (both)
   const typeFilter = body.type === 'words' || body.type === 'grammar' ? body.type : undefined
+  // v3.22 — course_id : ?course=A1-1 → on pioche les 5 mots du cours dans l'ordre
+  const courseId: string | undefined = body.course_id
 
   const { data: prefs } = await supabase
     .from('user_preferences').select('mode').eq('user_id', user.id).eq('lang_code', lang_code).single()
@@ -46,6 +48,23 @@ export async function POST(req: NextRequest) {
 
   // 1. Sélection des concepts
   let concepts: { id: string; image_url: string | null; image_alt?: string | null; gloss_fr?: string | null; cefr_min?: string }[] = []
+
+  // v3.22 — Si course_id fourni : pioche les 5 mots du cours
+  if (courseId && /^[A-C][12]-\d+$/.test(courseId)) {
+    const [level, numStr] = courseId.split('-')
+    const courseNum = parseInt(numStr, 10)
+    const offset = (courseNum - 1) * 5
+    const { data: courseConcepts } = await supabase
+      .from('concepts')
+      .select('id, image_url, image_alt, gloss_fr, cefr_min')
+      .eq('cefr_min', level)
+      .eq('enrichment_status', 'enriched')
+      .order('frequency_rank', { ascending: true, nullsFirst: false })
+      .range(offset, offset + 4)
+    if (courseConcepts && courseConcepts.length > 0) {
+      concepts = courseConcepts as any
+    }
+  }
 
   if (lesson_id) {
     const { data } = await supabase.from('lesson_concepts')
