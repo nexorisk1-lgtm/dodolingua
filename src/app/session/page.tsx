@@ -262,6 +262,33 @@ export default function SessionRunner() {
   }
 
   if (done) {
+    // v3.22.4 — Calcul des stats de la session pour message contextuel
+    const totalAnswered = results.length
+    const correctCount = results.filter((r: any) => r.qcm_correct === true || r.cloze_correct === true || r.grade === 'savais').length
+    const failedCount = results.filter((r: any) => r.qcm_correct === false || r.cloze_correct === false || r.grade === 'pas_su').length
+    const avgPron = (() => {
+      const scores = results.filter((r: any) => typeof r.pronunciation_score === 'number').map((r: any) => r.pronunciation_score)
+      if (scores.length === 0) return null
+      return Math.round(scores.reduce((s: number, v: number) => s + v, 0) / scores.length)
+    })()
+    const ratio = totalAnswered > 0 ? correctCount / totalAnswered : 0
+
+    let dodoMessage = ''
+    let dodoTip = ''
+    if (ratio >= 0.9) {
+      dodoMessage = '🏆 Excellent ! Tu maîtrises ces mots.'
+      dodoTip = 'Continue sur cette lancée — tu peux passer à la leçon suivante !'
+    } else if (ratio >= 0.7) {
+      dodoMessage = '🎯 Bon travail !'
+      dodoTip = `Encore ${failedCount} mot${failedCount > 1 ? 's' : ''} à consolider en révision pour décrocher 3 étoiles.`
+    } else if (ratio >= 0.4) {
+      dodoMessage = '💪 Tu progresses !'
+      dodoTip = 'N\'hésite pas à refaire cette leçon ou à utiliser la révision pour ancrer.'
+    } else {
+      dodoMessage = '🌱 Pas de pression !'
+      dodoTip = 'Refais cette leçon doucement, et utilise le coach pour pratiquer.'
+    }
+
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
         <Card className="max-w-md text-center space-y-5 overflow-visible">
@@ -269,10 +296,22 @@ export default function SessionRunner() {
             <Mascot pose="champion" size={260} animation="slideUp" />
           </div>
           <div className="-mt-2">
-            <h1 className="text-3xl font-extrabold text-primary-900 animate-pop-in">🎉 Session terminée !</h1>
+            <h1 className="text-3xl font-extrabold text-primary-900 animate-pop-in">{dodoMessage}</h1>
             <div className="text-5xl font-extrabold text-emerald-600 mt-3 animate-pop-in">+{points?.total ?? 10} pts</div>
           </div>
-          <p className="text-sm text-gray-600">À demain pour la suite !</p>
+          {/* Bulle Dodo : conseil contextuel + stats */}
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 text-sm text-blue-900 text-left space-y-2">
+            <div className="font-semibold">💬 {dodoTip}</div>
+            <div className="text-xs space-y-0.5">
+              {totalAnswered > 0 && <div>✓ {correctCount}/{totalAnswered} bonnes réponses</div>}
+              {avgPron !== null && (
+                <div>
+                  🎤 Prononciation moyenne : <b className={avgPron >= 80 ? 'text-emerald-700' : avgPron >= 50 ? 'text-amber-700' : 'text-red-700'}>{avgPron}%</b>
+                  {avgPron < 70 && ' — pense à utiliser le coach pour t\'entraîner'}
+                </div>
+              )}
+            </div>
+          </div>
           <Button block onClick={() => router.push('/dashboard')}>Retour au dashboard</Button>
         </Card>
       </main>
@@ -322,9 +361,13 @@ export default function SessionRunner() {
               💾 Reprendre plus tard
             </button>
           </div>
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden relative">
-            <div className="h-full bg-gradient-to-r from-primary-400 to-primary-600 transition-all" style={{ width: `${((idx + 1) / plan.length) * 100}%` }} />
-            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow">
+          {/* v3.22.4 — Barre plus grosse, bleu/gris bien lisible, pourcentage au centre */}
+          <div className="h-5 bg-gray-200 rounded-full overflow-hidden relative shadow-inner">
+            <div
+              className="h-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-500"
+              style={{ width: `${((idx + 1) / plan.length) * 100}%` }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md">
               ⭐ {Math.round(((idx + 1) / plan.length) * 100)}%
             </div>
           </div>

@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
   // Récupère la progression user (consec_correct >= 2 = maîtrisé)
   const conceptIds = allConcepts.map(c => c.id)
   const masteredSet = new Set<string>()
-  const fragileSet = new Set<string>()  // 1 ou 2 réussites sans maîtrise
+  const fragileSet = new Set<string>()  // 1 réussite sans maîtrise
+  const seenSet = new Set<string>()  // v3.22.4 : tout concept déjà vu (présent dans user_progress)
   // Pagination user_progress aussi
   let upFrom = 0
   while (true) {
@@ -63,9 +64,11 @@ export async function GET(req: NextRequest) {
       .in('concept_id', upPage)
     for (const p of (progress || [])) {
       const cid = (p as any).concept_id
-      const cc = (p as any).consec_correct
+      const cc = (p as any).consec_correct || 0
       if (cc >= 2) masteredSet.add(cid)
       else if (cc >= 1) fragileSet.add(cid)
+      // v3.22.4 : tout concept présent dans user_progress = "started" (au moins vu)
+      seenSet.add(cid)
     }
     upFrom += PAGE
     if (upPage.length < PAGE) break
@@ -85,6 +88,7 @@ export async function GET(req: NextRequest) {
     fragile: number
     stars: number
     status: CourseStatus
+    seen: number
     preview_words: { lemma: string; gloss_fr: string | null }[]
     concept_ids: string[]
   }
@@ -95,15 +99,19 @@ export async function GET(req: NextRequest) {
     const courseNum = Math.floor(i / WORDS_PER_COURSE) + 1
     const mastered = slice.filter(c => masteredSet.has(c.id)).length
     const fragile = slice.filter(c => fragileSet.has(c.id)).length
+    const seen = slice.filter(c => seenSet.has(c.id)).length
     const total = slice.length
 
-    // Étoiles : 0 = pas commencé, 1 = au moins 1 mot vu, 2 = >= 50% maîtrisés, 3 = 100%
+    // v3.22.4 — Étoiles plus généreuses :
+    // 1 étoile = leçon faite au moins 1 fois (au moins 1 mot vu)
+    // 2 étoiles = >= 50% des mots vus avec succès (mastered + fragile)
+    // 3 étoiles = tous les mots maîtrisés (consec_correct >= 2)
     let stars = 0
-    if (mastered + fragile > 0) stars = 1
-    if (mastered >= Math.ceil(total / 2)) stars = 2
+    if (seen > 0) stars = 1
+    if ((mastered + fragile) >= Math.ceil(total / 2)) stars = 2
     if (mastered === total) stars = 3
 
-    // Statut : locked si le cours précédent n'est pas commencé (sauf le 1er)
+    // v3.22.4 — Unlock plus généreux : la précédente doit avoir au moins 1 étoile (pas être complétée)
     const status: CourseStatus = (courses.length > 0 && courses[courses.length - 1].stars === 0 && courseNum > 1)
       ? 'locked'
       : (stars === 3 ? 'completed' : (stars > 0 ? 'in_progress' : 'available'))
@@ -117,6 +125,7 @@ export async function GET(req: NextRequest) {
       total,
       mastered,
       fragile,
+      seen,
       stars,
       status,
       // 3 premiers mots en preview

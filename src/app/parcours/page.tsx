@@ -121,10 +121,12 @@ export default function ParcoursPage() {
           </div>
         )}
 
-        {/* Grille zigzag : 1 carte par ligne, alternant gauche/droite */}
-        <div className="space-y-2 relative z-10">
+        {/* Vrai serpentine alterné gauche/droite (v3.22.4) */}
+        <div className="space-y-1 relative z-10">
           {courses.map((course, i) => {
-            const side = i % 4 === 0 ? 'center' : i % 4 === 1 ? 'right' : i % 4 === 2 ? 'center' : 'left'
+            // Alternance pure : center, right, right, center, left, left, repeat
+            const positions = ['center', 'right', 'right', 'center', 'left', 'left'] as const
+            const side = positions[i % 6]
             return <CourseCard key={course.id} course={course} side={side as any} />
           })}
         </div>

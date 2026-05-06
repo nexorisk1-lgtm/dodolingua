@@ -8,6 +8,7 @@ import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
 import { cefrFull, cefrLabel } from '@/lib/cefr_labels'
 import { QuestRow } from '@/components/dashboard/QuestRow'
+import { QuestsAccordion } from '@/components/dashboard/QuestsAccordion'
 import { tierMeta, nextTier } from '@/lib/leagues'
 import type { QuestType } from '@/types/database'
 
@@ -169,12 +170,7 @@ export default async function DashboardPage() {
         </div>
       </Card>
 
-      <div>
-        <div className="flex items-baseline justify-between mb-2">
-          <h2 className="text-xs uppercase font-bold text-gray-500">Tes 4 quêtes du jour</h2>
-          {completedCount === 4 && <span className="text-xs font-bold text-ok">⭐ Quadrifecta !</span>}
-        </div>
-        <div className="space-y-2">
+      <QuestsAccordion completedCount={completedCount} totalCount={QUESTS.length}>
           {QUESTS.map(q => {
             const dq = questMap[q.type]
             const status = dq?.status
@@ -212,8 +208,7 @@ export default async function DashboardPage() {
               />
             )
           })}
-        </div>
-      </div>
+      </QuestsAccordion>
 
       {/* v3.8.1 — Carte standalone supprimée : intégrée dans la quête Révision */}
 
