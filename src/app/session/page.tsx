@@ -70,8 +70,44 @@ export default function SessionRunner() {
       const search = new URLSearchParams(window.location.search)
       const isReview = search.get('mode') === 'revision'
       const typeFilter = search.get('type') || undefined  // v3.12 : 'words' | 'grammar'
+      const forceNew = search.get('new') === '1'
       isReviewRef.current = isReview
-      // v3.7.5 — En mode révision : pioche jusqu'à 15 mots dûs (au lieu de 5 mots fixes)
+
+      // v3.21 — Reprise : check localStorage pour session non terminée < 24h
+      const storageKey = `dodolingua-session-${isReview ? 'rev' : 'learn'}-${typeFilter || 'def'}`
+      if (!forceNew) {
+        try {
+          const saved = localStorage.getItem(storageKey)
+          if (saved) {
+            const state = JSON.parse(saved)
+            const ageH = (Date.now() - (state.savedAt || 0)) / 3600000
+            if (ageH < 24 && state.plan?.length > 0 && state.idx < state.plan.length) {
+              // Reprise OK
+              setSessionId(state.sessionId)
+              setPlan(state.plan)
+              setWords(state.words || {})
+              setCorrections(state.corrections || [])
+              setIdx(state.idx || 0)
+              setResults(state.results || [])
+              setRemediationActive(state.remediationActive || false)
+              setRemediationCount(state.remediationCount || 0)
+              const { data: { user } } = await supabase.auth.getUser()
+              if (user) {
+                const { data: vp } = await supabase.from('user_voice_pref')
+                  .select('voice_name').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle()
+                await waitForVoices(2000)
+                if (vp?.voice_name) setVoiceName(vp.voice_name)
+                else { const best = getBestVoice('en'); if (best?.name) setVoiceName(best.name) }
+              }
+              return
+            } else {
+              localStorage.removeItem(storageKey)
+            }
+          }
+        } catch (e) { /* silent */ }
+      }
+
+      // Nouvelle session
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -96,6 +132,33 @@ export default function SessionRunner() {
       }
     })()
   }, [])
+
+  // v3.21 — Sauve l'état session à chaque update pour reprise
+  useEffect(() => {
+    if (!sessionId || done || plan.length === 0) return
+    try {
+      const search = new URLSearchParams(window.location.search)
+      const isReview = search.get('mode') === 'revision'
+      const typeFilter = search.get('type') || undefined
+      const storageKey = `dodolingua-session-${isReview ? 'rev' : 'learn'}-${typeFilter || 'def'}`
+      localStorage.setItem(storageKey, JSON.stringify({
+        sessionId, plan, words, corrections, idx, results,
+        remediationActive, remediationCount, savedAt: Date.now(),
+      }))
+    } catch (e) { /* silent */ }
+  }, [sessionId, idx, results, remediationActive, remediationCount, plan.length, done])
+
+  // v3.21 — À la fin, on supprime le stockage
+  useEffect(() => {
+    if (!done) return
+    try {
+      const search = new URLSearchParams(window.location.search)
+      const isReview = search.get('mode') === 'revision'
+      const typeFilter = search.get('type') || undefined
+      const storageKey = `dodolingua-session-${isReview ? 'rev' : 'learn'}-${typeFilter || 'def'}`
+      localStorage.removeItem(storageKey)
+    } catch (e) {}
+  }, [done])
 
   function next() {
     if (idx + 1 >= plan.length) {
@@ -244,14 +307,23 @@ export default function SessionRunner() {
           </div>
         )}
 
-        {/* Header progress */}
+        {/* Header progress — v3.21 : étoile au lieu du compteur, plus encourageant */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-gray-500">
             <span className="font-bold text-primary-700">{phaseEmoji(current.phase)} {phaseLabel(current.phase)}</span>
-            <span>{idx + 1} / {plan.length} · {positionInGroup}/{groupSize} de cet exo</span>
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="text-[11px] text-gray-500 hover:text-primary-700 underline"
+              title="Tu peux quitter, ta progression est sauvée"
+            >
+              💾 Reprendre plus tard
+            </button>
           </div>
-          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-full bg-primary-500 transition-all" style={{ width: `${((idx + 1) / plan.length) * 100}%` }} />
+          <div className="h-2 bg-gray-200 rounded-full overflow-hidden relative">
+            <div className="h-full bg-gradient-to-r from-primary-400 to-primary-600 transition-all" style={{ width: `${((idx + 1) / plan.length) * 100}%` }} />
+            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow">
+              ⭐ {Math.round(((idx + 1) / plan.length) * 100)}%
+            </div>
           </div>
         </div>
 
@@ -597,6 +669,7 @@ function QcmPhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct
 
 function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct: boolean) => void; busy: boolean }) {
   const [picked, setPicked] = useState<string | null>(null)
+  const [showFr, setShowFr] = useState(false)
   if (!word.cloze) {
     // Pas de phrase d'exemple → skip auto
     return (
@@ -622,6 +695,23 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
       <div className="bg-amber-50 rounded-xl p-5 text-base text-gray-800 italic min-h-[4rem]">
         {display}
       </div>
+      {/* v3.21 — Aide traduction FR dépliable */}
+      {word.gloss_fr && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowFr(v => !v)}
+            className="text-[11px] text-primary-700 hover:underline font-semibold"
+          >
+            {showFr ? '🇫🇷 Masquer la traduction' : '🇫🇷 Voir la traduction du mot'}
+          </button>
+          {showFr && (
+            <div className="mt-2 text-sm bg-blue-50 border border-blue-200 rounded-lg p-2 text-blue-900">
+              <b>{word.lemma}</b> = <b>{word.gloss_fr}</b>
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-2">
         {cloze.options.map(opt => {
           const isCorrect = opt === cloze.correct
