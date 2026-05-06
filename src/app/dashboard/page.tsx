@@ -106,10 +106,19 @@ export default async function DashboardPage() {
     .gte('consec_correct', 2)
 
   // v3.14 — Stats par niveau CEFR pour le parcours basé sur la biblio réelle
-  const { data: byLevelTotal } = await supabase
-    .from('concepts')
-    .select('cefr_min')
-    .range(0, 19999)  // v3.21 : élargit limite Supabase pour inclure les 11 901 concepts
+  // v3.21.2 : boucle de pagination (Supabase config max-rows = 1000 même avec range())
+  const byLevelAll: any[] = []
+  let _from = 0
+  const _PAGE = 1000
+  while (true) {
+    const { data: page } = await supabase
+      .from('concepts').select('cefr_min').range(_from, _from + _PAGE - 1)
+    if (!page || page.length === 0) break
+    byLevelAll.push(...page)
+    if (page.length < _PAGE) break
+    _from += _PAGE
+  }
+  const byLevelTotal = byLevelAll
   const { data: byLevelMastered } = await supabase
     .from('user_progress')
     .select('concept_id, concepts(cefr_min)')

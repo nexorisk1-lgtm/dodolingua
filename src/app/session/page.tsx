@@ -670,6 +670,35 @@ function QcmPhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct
 function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct: boolean) => void; busy: boolean }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [showFr, setShowFr] = useState(false)
+  const [sentenceFr, setSentenceFr] = useState<string | null>(null)
+  const [loadingFr, setLoadingFr] = useState(false)
+
+  async function loadFr(textEn: string) {
+    if (sentenceFr) return  // déjà chargé
+    setLoadingFr(true)
+    try {
+      // Cache localStorage pour éviter re-appels
+      const key = `dodo-tr-${textEn.toLowerCase().slice(0, 100)}`
+      const cached = localStorage.getItem(key)
+      if (cached) { setSentenceFr(cached); setLoadingFr(false); return }
+      const res = await fetch('/api/translate-sentence', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sentence: textEn }),
+      })
+      const data = await res.json()
+      if (data.fr) {
+        setSentenceFr(data.fr)
+        try { localStorage.setItem(key, data.fr) } catch {}
+      } else {
+        setSentenceFr('Traduction indisponible')
+      }
+    } catch {
+      setSentenceFr('Erreur traduction')
+    } finally {
+      setLoadingFr(false)
+    }
+  }
+
   if (!word.cloze) {
     // Pas de phrase d'exemple → skip auto
     return (
@@ -695,23 +724,42 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
       <div className="bg-amber-50 rounded-xl p-5 text-base text-gray-800 italic min-h-[4rem]">
         {display}
       </div>
-      {/* v3.21 — Aide traduction FR dépliable */}
-      {word.gloss_fr && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowFr(v => !v)}
-            className="text-[11px] text-primary-700 hover:underline font-semibold"
-          >
-            {showFr ? '🇫🇷 Masquer la traduction' : '🇫🇷 Voir la traduction du mot'}
-          </button>
-          {showFr && (
-            <div className="mt-2 text-sm bg-blue-50 border border-blue-200 rounded-lg p-2 text-blue-900">
-              <b>{word.lemma}</b> = <b>{word.gloss_fr}</b>
-            </div>
-          )}
-        </div>
-      )}
+      {/* v3.21.2 — Aide traduction FR de la PHRASE (Groq à la volée + cache) */}
+      <div>
+        <button
+          type="button"
+          onClick={() => {
+            const newShow = !showFr
+            setShowFr(newShow)
+            if (newShow && !sentenceFr) {
+              // Si on a déjà la réponse choisie, traduire la phrase complète. Sinon traduire avec ___
+              const textEn = picked
+                ? cloze!.sentence.replace('___', picked)
+                : cloze!.sentence.replace('___', word.gloss_fr ? `[${word.lemma}]` : '___')
+              loadFr(textEn)
+            }
+          }}
+          className="text-[11px] text-primary-700 hover:underline font-semibold"
+        >
+          {showFr ? '🇫🇷 Masquer la traduction' : '🇫🇷 Voir la traduction française'}
+        </button>
+        {showFr && (
+          <div className="mt-2 text-sm bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 space-y-1">
+            {loadingFr ? (
+              <div className="italic text-blue-700">⏳ Traduction en cours…</div>
+            ) : sentenceFr ? (
+              <>
+                <div className="font-semibold">{sentenceFr}</div>
+                {word.gloss_fr && (
+                  <div className="text-xs opacity-80 mt-1 pt-1 border-t border-blue-200">
+                    Mot à deviner : <b>{word.lemma}</b> = <b>{word.gloss_fr}</b>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-2">
         {cloze.options.map(opt => {
           const isCorrect = opt === cloze.correct
