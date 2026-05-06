@@ -106,7 +106,7 @@ export function ParcoursCarousel({ level }: Props) {
       {/* v3.22.12 — Bulle Dodo avec vraie mascotte (au lieu du 🐤) */}
       <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-2xl p-2 pl-1 mb-3 flex items-center gap-2 text-xs shadow-sm">
         <div className="shrink-0 -mb-2 -ml-1">
-          <Mascot pose={dodoPose} size={72} animation={dodoAnim} />
+          <Mascot pose={dodoPose} size={130} animation={dodoAnim} />
         </div>
         <div className="flex-1 bg-white border border-blue-100 rounded-xl px-3 py-2 relative">
           {/* Petit triangle pointant vers Dodo */}

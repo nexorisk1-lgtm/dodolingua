@@ -24,7 +24,7 @@ export function QuestsAccordion({ children, completedCount, totalCount }: Props)
         <div className="shrink-0">
           <Mascot
             pose={completedCount === totalCount ? 'stars' : 'quest'}
-            size={64}
+            size={110}
             animation={open ? 'breathe' : 'bounce'}
           />
         </div>
