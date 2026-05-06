@@ -153,23 +153,19 @@ export default async function DashboardPage() {
 
   return (
     <Container className="space-y-5 pb-20">
-      <Card className="!py-4">
-        <div className="flex items-center justify-between">
+      {/* v3.22.15 — Header compact : juste salutation + streak (les stats étaient redondantes avec parcours/ligue/quêtes) */}
+      <div className="flex items-center justify-between px-1">
+        <div>
+          <div className="text-xs text-gray-500">Bonjour</div>
+          <h1 className="text-xl font-bold text-primary-900">{profile?.display_name || 'Raïssa'} 👋</h1>
+        </div>
+        <div className="text-right flex items-center gap-1.5">
+          <span className="text-2xl">🔥</span>
           <div>
-            <div className="text-xs text-gray-500">Bonjour</div>
-            <h1 className="text-xl font-bold text-primary-900">{profile?.display_name || 'Raïssa'} 👋</h1>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl">🔥</div>
-            <div className="text-xs text-gray-500">streak</div>
+            <div className="text-sm font-bold text-primary-900">streak</div>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 mt-3">
-          <Stat n={lang?.cefr_global || 'A1'} l="CECRL" />
-          <Stat n={String(wp)} l="Pts semaine" />
-          <Stat n={`${completedCount}/4`} l="Quêtes" />
-        </div>
-      </Card>
+      </div>
 
       <QuestsAccordion completedCount={completedCount} totalCount={QUESTS.length}>
           {QUESTS.map(q => {
