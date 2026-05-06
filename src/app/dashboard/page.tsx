@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
 import { cefrFull, cefrLabel } from '@/lib/cefr_labels'
+import { QuestRow } from '@/components/dashboard/QuestRow'
 import { tierMeta, nextTier } from '@/lib/leagues'
 import type { QuestType } from '@/types/database'
 
@@ -180,17 +181,11 @@ export default async function DashboardPage() {
             const earned = dq?.points_earned || 0
             const done = status === 'completed'
             const inProgress = status === 'in_progress'
-            // v1.3 — Calcul progression : lit content_ref.progress si disponible,
-            // sinon dérive depuis le statut (in_progress = 1, completed = target).
-            // v1.7 — progression : lit content_ref.progress (apprentissage/revision)
-            // ou content_ref.games_played (jeu) ou content_ref.messages_count (pratique)
             const ref = (dq?.content_ref as any) || {}
             const refProgress = (typeof ref.progress === 'number' ? ref.progress
               : q.type === 'jeu' ? ref.games_played
               : q.type === 'pratique' ? ref.messages_count
               : null) as number | null
-            // v3.13 — Pour la quête révision, target dynamique = items dûs au moment du chargement
-            // (au lieu de 5 hardcodé). Permet de refléter l'état réel.
             const dynTarget = q.type === 'revision'
               ? Math.max(1, ((revisionDue || 0) + (correctionsDue || 0) + (refProgress || 0)))
               : q.target
@@ -198,68 +193,23 @@ export default async function DashboardPage() {
               : typeof refProgress === 'number' ? Math.min(refProgress, dynTarget)
               : inProgress ? Math.max(1, Math.floor(dynTarget * 0.3))
               : 0
-            const progressPct = Math.round((current / dynTarget) * 100)
+            const dynDescription = q.type === 'revision' && ((revisionDue || 0) > 0 || (correctionsDue || 0) > 0)
+              ? `Révise ${(revisionDue || 0) > 0 ? `tes ${revisionDue} vocabulaire${(revisionDue || 0) > 1 ? 's' : ''}` : ''}${(revisionDue || 0) > 0 && (correctionsDue || 0) > 0 ? ' + ' : ''}${(correctionsDue || 0) > 0 ? `tes ${correctionsDue} règle${(correctionsDue || 0) > 1 ? 's' : ''} de grammaire` : ''}`
+              : q.description
             return (
-              <Link key={q.type} href={q.href as any}>
-                <div className={`p-3 rounded-xl border transition ${
-                  done ? 'bg-green-50 border-green-200' :
-                  inProgress ? 'bg-amber-50 border-amber-200' :
-                  'bg-white border-rule hover:border-primary-300'
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${
-                      done ? 'bg-ok text-white' : 'bg-primary-50'
-                    }`}>
-                      {done ? '✓' : q.emoji}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <div className="font-bold text-sm text-primary-900">{q.title}</div>
-                        <div className="text-[11px] font-bold whitespace-nowrap">
-                          {done ? (
-                            <span className="text-ok">+{earned} pts ✨</span>
-                          ) : (
-                            <span className="text-primary-700">{q.reward}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-600 truncate">
-                        {done ? (
-                          <>
-                            {q.type === 'jeu' && ref.games_played
-                              ? `${ref.games_played} jeu${ref.games_played > 1 ? 'x' : ''} joué${ref.games_played > 1 ? 's' : ''} · ${earned} pts cumulés`
-                              : q.type === 'pratique' && ref.messages_count
-                              ? `${ref.messages_count} échange${ref.messages_count > 1 ? 's' : ''} avec Dodo`
-                              : `${q.target} ${q.unit} validés ✨`}
-                          </>
-                        ) : q.type === 'revision' && ((revisionDue || 0) > 0 || (correctionsDue || 0) > 0) ? (
-                          <span className="text-amber-700 font-bold">
-                            Révise {(revisionDue || 0) > 0 && `tes ${revisionDue} vocabulaire${(revisionDue || 0) > 1 ? 's' : ''}`}
-                            {(revisionDue || 0) > 0 && (correctionsDue || 0) > 0 && ' + '}
-                            {(correctionsDue || 0) > 0 && `tes ${correctionsDue} règle${(correctionsDue || 0) > 1 ? 's' : ''} de grammaire`}
-                          </span>
-                        ) : q.description}
-                      </div>
-                    </div>
-                  </div>
-                  {/* v1.7 — Barre de progression FULL WIDTH, gris→bleu */}
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div className={`h-full transition-all ${
-                        done ? 'bg-ok' :
-                        progressPct > 0 ? 'bg-primary-500' :
-                        'bg-gray-200'
-                      }`}
-                        style={{ width: `${progressPct}%` }} />
-                    </div>
-                    <span className={`text-[11px] font-bold whitespace-nowrap ${
-                      done ? 'text-ok' : progressPct > 0 ? 'text-primary-700' : 'text-gray-400'
-                    }`}>
-                      {current}/{dynTarget} {q.unit}
-                    </span>
-                  </div>
-                </div>
-              </Link>
+              <QuestRow key={q.type}
+                href={q.href as string}
+                emoji={q.emoji}
+                title={q.title}
+                description={dynDescription}
+                reward={q.reward}
+                unit={q.unit}
+                current={current}
+                target={dynTarget}
+                done={done}
+                inProgress={inProgress}
+                earnedText={done ? `+${earned} pts ✨` : null}
+              />
             )
           })}
         </div>

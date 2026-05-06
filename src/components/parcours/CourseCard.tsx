@@ -57,20 +57,24 @@ export function CourseCard({ course, side = 'center' }: Props) {
         <div className="text-2xl font-extrabold leading-none">{course.number}</div>
       </div>
 
-      {/* Étoiles */}
-      <div className="absolute -bottom-2 left-0 right-0 flex justify-center gap-0.5">
-        {[1, 2, 3].map(i => (
-          <div
-            key={i}
-            className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${
-              i <= course.stars
-                ? 'bg-yellow-400 text-yellow-900 shadow-md'
-                : 'bg-white/60 text-gray-400 border border-gray-300'
-            }`}
-          >
-            ⭐
-          </div>
-        ))}
+      {/* Étoiles — v3.22.3 plus grosses (32px → 12px text → 24px text), jaune si gagnée, gris sinon */}
+      <div className="absolute -bottom-4 left-0 right-0 flex justify-center gap-1">
+        {[1, 2, 3].map(i => {
+          const earned = i <= course.stars
+          return (
+            <div
+              key={i}
+              className={`w-10 h-10 rounded-full flex items-center justify-center text-2xl shadow-md transition-transform ${
+                earned
+                  ? 'bg-yellow-400 border-2 border-yellow-600 scale-100'
+                  : 'bg-gray-200 border-2 border-gray-300 grayscale opacity-60'
+              }`}
+              style={{ filter: earned ? 'none' : 'grayscale(1)' }}
+            >
+              ⭐
+            </div>
+          )
+        })}
       </div>
 
       {/* Badge progression mots maîtrisés */}
@@ -84,17 +88,17 @@ export function CourseCard({ course, side = 'center' }: Props) {
 
   if (isLocked) {
     return (
-      <div className="flex flex-col items-center pb-6">
+      <div className="flex flex-col items-center pb-10">
         {inner}
-        <div className="text-[10px] text-gray-500 italic mt-2">Verrouillé</div>
+        <div className="text-xs text-gray-600 italic mt-4">Verrouillé</div>
       </div>
     )
   }
 
   return (
-    <Link href={`/session?course=${course.id}`} className="flex flex-col items-center pb-6 cursor-pointer">
+    <Link href={`/session?course=${course.id}`} className="flex flex-col items-center pb-10 cursor-pointer">
       {inner}
-      <div className="text-[10px] font-bold text-primary-900 mt-2">{course.name}</div>
+      <div className="text-sm font-bold text-primary-900 mt-4">{course.name}</div>
     </Link>
   )
 }

@@ -58,11 +58,12 @@ export default function ParcoursPage() {
     <div className="min-h-screen pb-24 relative overflow-hidden" style={{
       background: 'linear-gradient(180deg, #87CEEB 0%, #B0E0E6 30%, #E0F2FE 70%, #F0F9FF 100%)'
     }}>
-      {/* Nuages décoratifs */}
-      <div className="absolute top-10 left-4 text-6xl opacity-70 pointer-events-none">☁️</div>
-      <div className="absolute top-32 right-8 text-5xl opacity-50 pointer-events-none">☁️</div>
-      <div className="absolute top-72 left-12 text-4xl opacity-60 pointer-events-none">☁️</div>
-      <div className="absolute bottom-40 right-4 text-5xl opacity-50 pointer-events-none">☁️</div>
+      {/* Nuages décoratifs (v3.22.3 plus gros) */}
+      <div className="absolute top-8 left-2 text-8xl opacity-80 pointer-events-none">☁️</div>
+      <div className="absolute top-32 right-2 text-7xl opacity-60 pointer-events-none">☁️</div>
+      <div className="absolute top-96 left-6 text-7xl opacity-70 pointer-events-none">☁️</div>
+      <div className="absolute top-[40rem] right-2 text-8xl opacity-60 pointer-events-none">☁️</div>
+      <div className="absolute top-[60rem] left-4 text-7xl opacity-50 pointer-events-none">☁️</div>
 
       {/* Header sticky avec sélecteur de niveau */}
       <div className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-rule p-3">
@@ -75,18 +76,18 @@ export default function ParcoursPage() {
               )}
             </div>
           </div>
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="flex gap-1 flex-wrap">
             {LEVELS.map(lvl => (
               <button
                 key={lvl}
                 onClick={() => setLevel(lvl)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition flex-shrink-0 ${
                   level === lvl
                     ? 'bg-primary-700 text-white'
                     : 'bg-white text-gray-600 border border-rule hover:border-primary-400'
                 }`}
               >
-                {lvl} = {cefrLabel(lvl)}
+                {lvl} <span className="opacity-70">= {cefrLabel(lvl)}</span>
               </button>
             ))}
           </div>

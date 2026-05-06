@@ -735,10 +735,9 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
             const newShow = !showFr
             setShowFr(newShow)
             if (newShow && !sentenceFr) {
-              // Si on a déjà la réponse choisie, traduire la phrase complète. Sinon traduire avec ___
-              const textEn = picked
-                ? cloze!.sentence.replace('___', picked)
-                : cloze!.sentence.replace('___', word.gloss_fr ? `[${word.lemma}]` : '___')
+              // v3.22.3 — On envoie la phrase avec un PLACEHOLDER pour que la traduction garde le ___
+              // (Pour ne pas révéler le mot à deviner)
+              const textEn = cloze!.sentence.replace('___', 'XBLANK')
               loadFr(textEn)
             }
           }}
@@ -752,12 +751,7 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
               <div className="italic text-blue-700">⏳ Traduction en cours…</div>
             ) : sentenceFr ? (
               <>
-                <div className="font-semibold">{sentenceFr}</div>
-                {word.gloss_fr && (
-                  <div className="text-xs opacity-80 mt-1 pt-1 border-t border-blue-200">
-                    Mot à deviner : <b>{word.lemma}</b> = <b>{word.gloss_fr}</b>
-                  </div>
-                )}
+                <div className="font-semibold">{sentenceFr.replace(/XBLANK/g, '___').replace(/Xblank/g, '___').replace(/xblank/g, '___')}</div>
               </>
             ) : null}
           </div>
