@@ -109,6 +109,7 @@ export default async function DashboardPage() {
   const { data: byLevelTotal } = await supabase
     .from('concepts')
     .select('cefr_min')
+    .range(0, 19999)  // v3.21 : élargit limite Supabase pour inclure les 11 901 concepts
   const { data: byLevelMastered } = await supabase
     .from('user_progress')
     .select('concept_id, concepts(cefr_min)')

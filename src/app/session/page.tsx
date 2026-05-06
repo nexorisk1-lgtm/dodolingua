@@ -198,10 +198,14 @@ export default function SessionRunner() {
   if (done) {
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
-        <Card className="max-w-md text-center space-y-4">
-          <div className="flex justify-center"><Mascot pose="champion" size={140} animation="celebrate" /></div>
-          <h1 className="text-2xl font-bold text-primary-900">Session terminée</h1>
-          <div className="text-3xl font-extrabold text-primary-700">+{points?.total ?? 10} pts</div>
+        <Card className="max-w-md text-center space-y-5 overflow-visible">
+          <div className="flex justify-center -mt-12">
+            <Mascot pose="champion" size={260} animation="slideUp" />
+          </div>
+          <div className="-mt-2">
+            <h1 className="text-3xl font-extrabold text-primary-900 animate-pop-in">🎉 Session terminée !</h1>
+            <div className="text-5xl font-extrabold text-emerald-600 mt-3 animate-pop-in">+{points?.total ?? 10} pts</div>
+          </div>
           <p className="text-sm text-gray-600">À demain pour la suite !</p>
           <Button block onClick={() => router.push('/dashboard')}>Retour au dashboard</Button>
         </Card>
@@ -581,8 +585,8 @@ function QcmPhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (correct
       </div>
       {picked !== null && (
         <div className={`flex flex-col items-center justify-center gap-2 mt-2 p-3 rounded-xl ${picked === correctOpt ? 'bg-emerald-50' : 'bg-red-50'} animate-pop-in`}>
-          <Mascot pose={picked === correctOpt ? 'champion' : 'sad'} size={120} animation={picked === correctOpt ? 'celebrate' : 'wobble'} />
-          <div className={`text-base font-extrabold ${picked === correctOpt ? 'text-emerald-700' : 'text-red-700'}`}>
+          <Mascot pose={picked === correctOpt ? 'champion' : 'sad'} size={180} animation={picked === correctOpt ? 'slideUp' : 'wobble'} />
+          <div className={`text-xl font-extrabold ${picked === correctOpt ? 'text-emerald-700' : 'text-red-700'} animate-pop-in`}>
             {picked === correctOpt ? '🎯 Bonne réponse !' : `❌ La bonne réponse était : ${correctOpt}`}
           </div>
         </div>
@@ -640,8 +644,8 @@ function ClozePhase({ word, onAnswer, busy }: { word: WordData; onAnswer: (corre
       </div>
       {picked !== null && (
         <div className={`flex flex-col items-center justify-center gap-2 mt-2 p-3 rounded-xl ${picked === cloze.correct ? 'bg-emerald-50' : 'bg-red-50'} animate-pop-in`}>
-          <Mascot pose={picked === cloze.correct ? 'champion' : 'sad'} size={120} animation={picked === cloze.correct ? 'celebrate' : 'wobble'} />
-          <div className={`text-base font-extrabold ${picked === cloze.correct ? 'text-emerald-700' : 'text-red-700'}`}>
+          <Mascot pose={picked === cloze.correct ? 'champion' : 'sad'} size={180} animation={picked === cloze.correct ? 'slideUp' : 'wobble'} />
+          <div className={`text-xl font-extrabold animate-pop-in ${picked === cloze.correct ? 'text-emerald-700' : 'text-red-700'}`}>
             {picked === cloze.correct ? '🎯 Parfait !' : `❌ La bonne réponse était : ${cloze.correct}`}
           </div>
         </div>

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { tierMeta } from '@/lib/leagues'
 import { VoicePicker } from '@/components/profile/VoicePicker'
 import { CefrEvalCard } from '@/components/profile/CefrEvalCard'
+import { PreferencesEditor } from '@/components/profile/PreferencesEditor'
 
 export default async function ProfilePage() {
   const supabase = createClient()
@@ -80,13 +81,8 @@ export default async function ProfilePage() {
       )}
 
       <Card>
-        <h2 className="font-bold text-primary-700 mb-3">Préférences (modifiables)</h2>
-        <PrefRow label="Objectifs" value={(prefs?.goals || []).join(', ') || '—'} />
-        {prefs?.scolaire_level && <PrefRow label="Niveau scolaire" value={prefs.scolaire_level} />}
-        <PrefRow label="Thèmes" value={(prefs?.themes || []).join(', ') || '—'} />
-        <PrefRow label="Mode" value={prefs?.mode || '—'} />
-        <PrefRow label="GRC" value={prefs?.grc_enabled ? `Activé (${prefs.grc_level || 'à définir'})` : 'Désactivé'} />
-        <PrefRow label="Affichage IPA" value={prefs?.ipa_display || 'permanent'} />
+        <h2 className="font-bold text-primary-700 mb-3">Préférences</h2>
+        <PreferencesEditor initialPrefs={prefs} userId={user.id} />
       </Card>
 
       <Card>
