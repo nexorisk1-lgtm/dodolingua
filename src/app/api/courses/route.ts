@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     if (upPage.length === 0) break
     const { data: progress } = await supabase
       .from('user_progress')
-      .select('concept_id, consec_correct, last_seen_at')
+      .select('concept_id, consec_correct')
       .eq('user_id', user.id)
       .in('concept_id', upPage)
     for (const p of (progress || [])) {
