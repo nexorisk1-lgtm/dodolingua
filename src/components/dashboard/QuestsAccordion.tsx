@@ -23,8 +23,8 @@ export function QuestsAccordion({ children, completedCount, totalCount }: Props)
         <h2 className="text-xs uppercase font-bold text-gray-500 flex items-center gap-2">
           <span className="text-base text-gray-700">{open ? '▼' : '▶'}</span>
           {completedCount === totalCount && totalCount > 0
-            ? `Quadrifecta ! Toutes les quêtes faites ✨`
-            : `Faire ta quête du jour (${completedCount}/${totalCount})`}
+            ? `🎉 Toutes les quêtes faites ! Bravo ✨`
+            : `👉 Clique ici pour faire ta quête du jour (${completedCount}/${totalCount})`}
         </h2>
         {completedCount === totalCount && totalCount > 0 && (
           <span className="text-xs font-bold text-ok">⭐</span>
