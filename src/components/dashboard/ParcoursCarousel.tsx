@@ -5,6 +5,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
+import { Mascot } from '@/components/Mascot'
 
 interface Course {
   id: string
@@ -71,28 +72,47 @@ export function ParcoursCarousel({ level }: Props) {
   const active = courses.find(c => c.status === 'in_progress') || courses.find(c => c.status === 'available')
   const totalStars = courses.reduce((s, c) => s + c.stars, 0)
   const maxStars = courses.length * 4
-  let dodoMsg = "Allez, on attaque la première leçon ! 🌱"
+  let dodoMsg = "Allez, on attaque la première leçon !"
+  let dodoPose: 'idle' | 'happy' | 'study' | 'champion' = 'happy'
+  let dodoAnim: 'breathe' | 'bounce' | 'wave' | 'celebrate' = 'wave'
+
   if (active) {
     if (active.kind === 'checkpoint') {
-      dodoMsg = `🎯 Checkpoint dispo ! Teste tes ${active.total} mots vus.`
+      dodoMsg = `Checkpoint dispo ! Teste tes ${active.total} mots vus.`
+      dodoPose = 'study'
+      dodoAnim = 'bounce'
     } else if (active.stars === 0) {
-      dodoMsg = `🌱 Démarre la Leçon ${active.number} pour gagner tes 1ères étoiles !`
+      dodoMsg = `Démarre la Leçon ${active.number} pour gagner tes 1ères étoiles !`
+      dodoPose = 'happy'
+      dodoAnim = 'wave'
     } else if (active.stars < 4) {
-      dodoMsg = `💪 Plus que ${4 - active.stars} étoile${4 - active.stars > 1 ? 's' : ''} sur la Leçon ${active.number} !`
+      dodoMsg = `Plus que ${4 - active.stars} étoile${4 - active.stars > 1 ? 's' : ''} sur la Leçon ${active.number} !`
+      dodoPose = 'happy'
+      dodoAnim = 'bounce'
     } else {
-      dodoMsg = `🏆 Bravo ! Tu peux passer à la suivante.`
+      dodoMsg = `Bravo ! Tu peux passer à la suivante.`
+      dodoPose = 'champion'
+      dodoAnim = 'celebrate'
     }
   }
   if (totalStars === maxStars) {
-    dodoMsg = `🏆 Niveau complet ! Tu es prête pour le test.`
+    dodoMsg = `Niveau complet ! Tu es prête pour le test.`
+    dodoPose = 'champion'
+    dodoAnim = 'celebrate'
   }
 
   return (
     <div className="mt-3">
-      {/* Bulle Dodo encourageante */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-2 mb-3 flex items-center gap-2 text-xs">
-        <span className="text-2xl shrink-0">🐤</span>
-        <span className="text-blue-900 font-semibold">{dodoMsg}</span>
+      {/* v3.22.12 — Bulle Dodo avec vraie mascotte (au lieu du 🐤) */}
+      <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-2xl p-2 pl-1 mb-3 flex items-center gap-2 text-xs shadow-sm">
+        <div className="shrink-0 -mb-2 -ml-1">
+          <Mascot pose={dodoPose} size={56} animation={dodoAnim} />
+        </div>
+        <div className="flex-1 bg-white border border-blue-100 rounded-xl px-3 py-2 relative">
+          {/* Petit triangle pointant vers Dodo */}
+          <div className="absolute -left-1.5 top-3 w-3 h-3 bg-white border-l border-b border-blue-100 transform rotate-45" />
+          <div className="text-blue-900 font-semibold">{dodoMsg}</div>
+        </div>
       </div>
 
       {/* Carrousel avec flèches */}

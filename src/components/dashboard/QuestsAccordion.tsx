@@ -5,6 +5,7 @@
 'use client'
 
 import { useState, ReactNode } from 'react'
+import { Mascot } from '@/components/Mascot'
 
 interface Props {
   children: ReactNode
@@ -18,16 +19,25 @@ export function QuestsAccordion({ children, completedCount, totalCount }: Props)
     <div>
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-baseline justify-between mb-2 cursor-pointer hover:opacity-80 transition"
+        className="w-full flex items-center gap-3 mb-2 cursor-pointer hover:opacity-90 transition bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3 shadow-sm"
       >
-        <h2 className="text-xs uppercase font-bold text-gray-500 flex items-center gap-2">
-          <span className="text-base text-gray-700">{open ? '▼' : '▶'}</span>
-          {completedCount === totalCount && totalCount > 0
-            ? `🎉 Toutes les quêtes faites ! Bravo ✨`
-            : `👉 Clique ici pour faire ta quête du jour (${completedCount}/${totalCount})`}
-        </h2>
+        <div className="shrink-0">
+          <Mascot
+            pose={completedCount === totalCount ? 'champion' : 'happy'}
+            size={48}
+            animation={open ? 'breathe' : 'bounce'}
+          />
+        </div>
+        <div className="flex-1 text-left">
+          <div className="text-xs uppercase font-bold text-amber-700">{open ? '▼ Réduire' : '▶ Déplier'}</div>
+          <div className="text-sm font-bold text-gray-900">
+            {completedCount === totalCount && totalCount > 0
+              ? `Toutes les quêtes faites ! Bravo 🎉`
+              : `Clique ici pour faire ta quête du jour (${completedCount}/${totalCount})`}
+          </div>
+        </div>
         {completedCount === totalCount && totalCount > 0 && (
-          <span className="text-xs font-bold text-ok">⭐</span>
+          <span className="text-xl">✨</span>
         )}
       </button>
       {open && <div className="space-y-2">{children}</div>}
