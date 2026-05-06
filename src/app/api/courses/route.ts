@@ -77,12 +77,14 @@ export async function GET(req: NextRequest) {
   // Découpe en cours de 5 mots
   type CourseStatus = 'locked' | 'available' | 'in_progress' | 'completed'
 
+  type CourseKind = 'lesson' | 'checkpoint'
   interface CourseItem {
     id: string
     level: string
     number: number
     name: string
     emoji: string
+    kind: CourseKind
     total: number
     mastered: number
     fragile: number
@@ -118,12 +120,43 @@ export async function GET(req: NextRequest) {
       ? 'locked'
       : (stars === 4 ? 'completed' : (stars > 0 ? 'in_progress' : 'available'))
 
+    // v3.22.9 — Insertion d'un checkpoint après chaque 5 leçons (avant la 6, 11, 16...)
+    if (courseNum > 1 && (courseNum - 1) % 5 === 0) {
+      const groupStartIdx = (courseNum - 6) * WORDS_PER_COURSE
+      const groupEndIdx = (courseNum - 1) * WORDS_PER_COURSE
+      const checkpointConcepts = allConcepts.slice(groupStartIdx, groupEndIdx)
+      const checkpointConceptIds = checkpointConcepts.map(c => c.id)
+      const cpMastered = checkpointConceptIds.filter(id => masteredSet.has(id)).length
+      const cpTotal = checkpointConceptIds.length
+      const previousLessons = courses.slice(-5).filter(c => c.kind === 'lesson')
+      const allPrevHaveStar = previousLessons.length === 5 && previousLessons.every(l => l.stars >= 1)
+      const cpStars = cpMastered === cpTotal ? 4 : (cpMastered >= Math.ceil(cpTotal * 0.75) ? 3 : (cpMastered >= Math.ceil(cpTotal / 2) ? 2 : (cpMastered > 0 ? 1 : 0)))
+      const cpStatus: CourseStatus = !allPrevHaveStar ? 'locked' : (cpStars === 4 ? 'completed' : (cpStars > 0 ? 'in_progress' : 'available'))
+      courses.push({
+        id: `${level}-cp-${courseNum - 1}`,
+        level,
+        number: Math.floor((courseNum - 1) / 5),
+        name: `Checkpoint ${Math.floor((courseNum - 1) / 5)}`,
+        emoji: '🎯',
+        kind: 'checkpoint',
+        total: cpTotal,
+        mastered: cpMastered,
+        fragile: 0,
+        seen: cpMastered,
+        stars: cpStars,
+        status: cpStatus,
+        preview_words: [],
+        concept_ids: checkpointConceptIds,
+      })
+    }
+
     courses.push({
       id: `${level}-${courseNum}`,
       level,
       number: courseNum,
       name: `Leçon ${courseNum}`,
       emoji: COURSE_EMOJIS[(courseNum - 1) % COURSE_EMOJIS.length],
+      kind: 'lesson',
       total,
       mastered,
       fragile,
