@@ -23,8 +23,8 @@ export function QuestsAccordion({ children, completedCount, totalCount }: Props)
       >
         <div className="shrink-0">
           <Mascot
-            pose={completedCount === totalCount ? 'champion' : 'happy'}
-            size={48}
+            pose={completedCount === totalCount ? 'stars' : 'quest'}
+            size={64}
             animation={open ? 'breathe' : 'bounce'}
           />
         </div>

@@ -73,7 +73,7 @@ export function ParcoursCarousel({ level }: Props) {
   const totalStars = courses.reduce((s, c) => s + c.stars, 0)
   const maxStars = courses.length * 4
   let dodoMsg = "Allez, on attaque la première leçon !"
-  let dodoPose: 'idle' | 'happy' | 'study' | 'champion' = 'happy'
+  let dodoPose: 'idle' | 'happy' | 'study' | 'champion' | 'quest' | 'stars' = 'quest'
   let dodoAnim: 'breathe' | 'bounce' | 'wave' | 'celebrate' = 'wave'
 
   if (active) {
@@ -83,21 +83,21 @@ export function ParcoursCarousel({ level }: Props) {
       dodoAnim = 'bounce'
     } else if (active.stars === 0) {
       dodoMsg = `Démarre la Leçon ${active.number} pour gagner tes 1ères étoiles !`
-      dodoPose = 'happy'
+      dodoPose = 'quest'
       dodoAnim = 'wave'
     } else if (active.stars < 4) {
       dodoMsg = `Plus que ${4 - active.stars} étoile${4 - active.stars > 1 ? 's' : ''} sur la Leçon ${active.number} !`
-      dodoPose = 'happy'
+      dodoPose = 'stars'
       dodoAnim = 'bounce'
     } else {
       dodoMsg = `Bravo ! Tu peux passer à la suivante.`
-      dodoPose = 'champion'
+      dodoPose = 'stars'
       dodoAnim = 'celebrate'
     }
   }
   if (totalStars === maxStars) {
     dodoMsg = `Niveau complet ! Tu es prête pour le test.`
-    dodoPose = 'champion'
+    dodoPose = 'stars'
     dodoAnim = 'celebrate'
   }
 
@@ -106,7 +106,7 @@ export function ParcoursCarousel({ level }: Props) {
       {/* v3.22.12 — Bulle Dodo avec vraie mascotte (au lieu du 🐤) */}
       <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-2xl p-2 pl-1 mb-3 flex items-center gap-2 text-xs shadow-sm">
         <div className="shrink-0 -mb-2 -ml-1">
-          <Mascot pose={dodoPose} size={56} animation={dodoAnim} />
+          <Mascot pose={dodoPose} size={72} animation={dodoAnim} />
         </div>
         <div className="flex-1 bg-white border border-blue-100 rounded-xl px-3 py-2 relative">
           {/* Petit triangle pointant vers Dodo */}

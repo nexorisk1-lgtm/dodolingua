@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-type Pose = 'idle' | 'happy' | 'sad' | 'study' | 'listen' | 'sleep' | 'champion'
+type Pose = 'idle' | 'happy' | 'sad' | 'study' | 'listen' | 'sleep' | 'champion' | 'quest' | 'stars'
 
 type AnimationType = 'breathe' | 'bounce' | 'shake' | 'wave' | 'pop' | 'celebrate' | 'wobble' | 'peek' | 'slideUp' | 'none'
 
