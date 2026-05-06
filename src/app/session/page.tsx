@@ -141,6 +141,7 @@ export default function SessionRunner() {
       const search = new URLSearchParams(window.location.search)
       const isReview = search.get('mode') === 'revision'
       const typeFilter = search.get('type') || undefined
+      const courseId = search.get('course') || undefined
       const storageKey = `dodolingua-session-${isReview ? 'rev' : courseId ? `course-${courseId}` : 'learn'}-${typeFilter || 'def'}`
       localStorage.setItem(storageKey, JSON.stringify({
         sessionId, plan, words, corrections, idx, results,
@@ -156,6 +157,7 @@ export default function SessionRunner() {
       const search = new URLSearchParams(window.location.search)
       const isReview = search.get('mode') === 'revision'
       const typeFilter = search.get('type') || undefined
+      const courseId = search.get('course') || undefined
       const storageKey = `dodolingua-session-${isReview ? 'rev' : courseId ? `course-${courseId}` : 'learn'}-${typeFilter || 'def'}`
       localStorage.removeItem(storageKey)
     } catch (e) {}
