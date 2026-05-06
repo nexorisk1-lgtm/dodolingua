@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card'
 import { cefrFull, cefrLabel } from '@/lib/cefr_labels'
 import { QuestRow } from '@/components/dashboard/QuestRow'
 import { QuestsAccordion } from '@/components/dashboard/QuestsAccordion'
+import { ParcoursCarousel } from '@/components/dashboard/ParcoursCarousel'
 import { tierMeta, nextTier } from '@/lib/leagues'
 import type { QuestType } from '@/types/database'
 
@@ -231,16 +232,13 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between mb-2">
               <div>
                 <div className="font-bold text-primary-900">🎯 Ton parcours <span className="text-primary-700">{cefrFull(currentLevel)}</span></div>
-                <div className="text-xs text-gray-600 mt-0.5">
-                  Niveau actuel : <b>{cefrFull(currentLevel)}</b>
-                  {nextLevel && <> → prochain : <b>{cefrFull(nextLevel)}</b></>}
-                </div>
               </div>
             </div>
-            {/* v3.22 — Lien vers le parcours visuel */}
+            {/* v3.22.10 — Mini-carrousel des prochaines leçons */}
+            <ParcoursCarousel level={currentLevel} />
             <Link href={`/parcours`}>
-              <span className="mt-2 mb-3 block w-full px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-sm text-center cursor-pointer hover:opacity-90 shadow">
-                🗺️ Voir mon parcours visuel →
+              <span className="mt-3 block w-full px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold text-sm text-center cursor-pointer hover:opacity-90 shadow">
+                🗺️ Voir mon parcours complet →
               </span>
             </Link>
             {nextLevel ? (
