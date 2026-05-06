@@ -57,16 +57,16 @@ export function CourseCard({ course, side = 'center' }: Props) {
         <div className="text-2xl font-extrabold leading-none">{course.number}</div>
       </div>
 
-      {/* v3.22.4 — Étoiles encore plus grosses (x2 = 80px) avec animation et ombrage */}
-      <div className="absolute -bottom-6 left-0 right-0 flex justify-center gap-1.5">
-        {[1, 2, 3].map(i => {
+      {/* v3.22.6 — 4 étoiles selon avancement de phase (Proposition A) */}
+      <div className="absolute -bottom-6 left-0 right-0 flex justify-center gap-1">
+        {[1, 2, 3, 4].map(i => {
           const earned = i <= course.stars
           return (
             <div
               key={i}
-              className={`w-14 h-14 rounded-full flex items-center justify-center text-4xl shadow-lg transition-transform ${
+              className={`w-12 h-12 rounded-full flex items-center justify-center text-3xl shadow-md transition-transform ${
                 earned
-                  ? 'bg-yellow-400 border-2 border-yellow-600 scale-100 hover:scale-110'
+                  ? 'bg-yellow-400 border-2 border-yellow-600 hover:scale-110'
                   : 'bg-gray-200 border-2 border-gray-300 opacity-50'
               }`}
               style={{ filter: earned ? 'drop-shadow(0 2px 4px rgba(234, 179, 8, 0.5))' : 'grayscale(1)' }}
@@ -95,10 +95,21 @@ export function CourseCard({ course, side = 'center' }: Props) {
     )
   }
 
+  const remaining = 4 - course.stars
   return (
     <Link href={`/session?course=${course.id}`} className="flex flex-col items-center pb-14 cursor-pointer">
       {inner}
       <div className="text-sm font-bold text-primary-900 mt-4">{course.name}</div>
+      {course.stars > 0 && course.stars < 4 && (
+        <div className="text-[10px] text-primary-700 italic mt-0.5">
+          Encore {remaining} étoile{remaining > 1 ? 's' : ''} à débloquer
+        </div>
+      )}
+      {course.stars === 4 && (
+        <div className="text-[10px] text-emerald-700 font-bold mt-0.5">
+          ✓ Leçon maîtrisée !
+        </div>
+      )}
     </Link>
   )
 }

@@ -102,19 +102,21 @@ export async function GET(req: NextRequest) {
     const seen = slice.filter(c => seenSet.has(c.id)).length
     const total = slice.length
 
-    // v3.22.4 — Étoiles plus généreuses :
-    // 1 étoile = leçon faite au moins 1 fois (au moins 1 mot vu)
-    // 2 étoiles = >= 50% des mots vus avec succès (mastered + fragile)
-    // 3 étoiles = tous les mots maîtrisés (consec_correct >= 2)
+    // v3.22.6 — Système 4 étoiles (Proposition A) basé sur l'avancement par phase :
+    // 1 étoile = Découverte (au moins 1 mot vu)
+    // 2 étoiles = Découverte complète (tous les mots vus = user_progress existe)
+    // 3 étoiles = Validation partielle (>= 50% des mots avec consec_correct >= 1)
+    // 4 étoiles = Maîtrise complète (tous les mots avec consec_correct >= 2)
     let stars = 0
     if (seen > 0) stars = 1
-    if ((mastered + fragile) >= Math.ceil(total / 2)) stars = 2
-    if (mastered === total) stars = 3
+    if (seen === total) stars = 2
+    if ((mastered + fragile) >= Math.ceil(total / 2)) stars = 3
+    if (mastered === total) stars = 4
 
-    // v3.22.4 — Unlock plus généreux : la précédente doit avoir au moins 1 étoile (pas être complétée)
+    // v3.22.6 — Unlock : la précédente doit avoir au moins 1 étoile pour débloquer
     const status: CourseStatus = (courses.length > 0 && courses[courses.length - 1].stars === 0 && courseNum > 1)
       ? 'locked'
-      : (stars === 3 ? 'completed' : (stars > 0 ? 'in_progress' : 'available'))
+      : (stars === 4 ? 'completed' : (stars > 0 ? 'in_progress' : 'available'))
 
     courses.push({
       id: `${level}-${courseNum}`,

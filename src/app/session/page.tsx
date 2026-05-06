@@ -275,18 +275,24 @@ export default function SessionRunner() {
 
     let dodoMessage = ''
     let dodoTip = ''
-    if (ratio >= 0.9) {
-      dodoMessage = '🏆 Excellent ! Tu maîtrises ces mots.'
-      dodoTip = 'Continue sur cette lancée — tu peux passer à la leçon suivante !'
-    } else if (ratio >= 0.7) {
-      dodoMessage = '🎯 Bon travail !'
-      dodoTip = `Encore ${failedCount} mot${failedCount > 1 ? 's' : ''} à consolider en révision pour décrocher 3 étoiles.`
-    } else if (ratio >= 0.4) {
-      dodoMessage = '💪 Tu progresses !'
-      dodoTip = 'N\'hésite pas à refaire cette leçon ou à utiliser la révision pour ancrer.'
+    let estimatedStars = 1  // au moins 1 puisque la session est complétée
+    if (ratio >= 0.9) estimatedStars = 4
+    else if (ratio >= 0.7) estimatedStars = 3
+    else if (ratio >= 0.4) estimatedStars = 2
+    const remaining = 4 - estimatedStars
+
+    if (estimatedStars === 4) {
+      dodoMessage = '🏆 4/4 étoiles ! Leçon maîtrisée !'
+      dodoTip = 'Tu peux passer à la leçon suivante 🎯'
+    } else if (estimatedStars === 3) {
+      dodoMessage = '🎯 3/4 étoiles ! Bon travail !'
+      dodoTip = `Encore 1 étoile à débloquer : ancre les ${failedCount} mot${failedCount > 1 ? 's' : ''} ratés en révision.`
+    } else if (estimatedStars === 2) {
+      dodoMessage = '💪 2/4 étoiles ! Tu progresses !'
+      dodoTip = 'Refais la leçon ou utilise la révision pour décrocher les 2 dernières étoiles.'
     } else {
-      dodoMessage = '🌱 Pas de pression !'
-      dodoTip = 'Refais cette leçon doucement, et utilise le coach pour pratiquer.'
+      dodoMessage = '🌱 1/4 étoile ! Tu as commencé !'
+      dodoTip = 'Refais la leçon doucement, le coach peut t\'aider à mieux prononcer.'
     }
 
     return (
