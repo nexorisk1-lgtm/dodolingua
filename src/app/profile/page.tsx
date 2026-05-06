@@ -7,6 +7,7 @@ import { tierMeta } from '@/lib/leagues'
 import { VoicePicker } from '@/components/profile/VoicePicker'
 import { CefrEvalCard } from '@/components/profile/CefrEvalCard'
 import { PreferencesEditor } from '@/components/profile/PreferencesEditor'
+import { cefrFull } from '@/lib/cefr_labels'
 
 export default async function ProfilePage() {
   const supabase = createClient()
@@ -55,7 +56,7 @@ export default async function ProfilePage() {
               <span className="text-xl">{LANG_FLAGS[l.lang_code] || '🌍'}</span>
               <div className="flex-1">
                 <div className="font-semibold text-sm">{LANG_NAMES[l.lang_code] || l.lang_code}</div>
-                <div className="text-xs text-gray-500">{l.cefr_global || 'A1'} · {l.total_points} pts total</div>
+                <div className="text-xs text-gray-500">{cefrFull(l.cefr_global)} · {l.total_points} pts total</div>
               </div>
               {l.is_current && <span className="text-[10px] bg-ok text-white px-2 py-0.5 rounded-full font-bold">ACTIVE</span>}
             </div>

@@ -5,6 +5,7 @@
 'use client'
 
 import { useState } from 'react'
+import { cefrFull } from '@/lib/cefr_labels'
 import { createClient } from '@/lib/supabase/client'
 
 interface Props {
@@ -73,11 +74,11 @@ export function CefrEvalCard({ declared, estimated, estimatedAt, breakdown }: Pr
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-50 rounded-lg p-3 text-center">
           <div className="text-[10px] uppercase font-bold text-gray-500">Déclaré (onboarding)</div>
-          <div className="text-2xl font-extrabold text-gray-700">{declared}</div>
+          <div className="text-base font-extrabold text-gray-700 leading-tight">{cefrFull(declared)}</div>
         </div>
         <div className={`rounded-lg p-3 text-center ${display ? 'bg-emerald-50' : 'bg-gray-50'}`}>
           <div className="text-[10px] uppercase font-bold text-emerald-700">Estimé par l'IA</div>
-          <div className="text-2xl font-extrabold text-emerald-700">{display || '—'}</div>
+          <div className="text-base font-extrabold text-emerald-700 leading-tight">{display ? cefrFull(display) : '—'}</div>
         </div>
       </div>
 

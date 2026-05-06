@@ -6,6 +6,7 @@ export const revalidate = 0
 import { createClient } from '@/lib/supabase/server'
 import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
+import { cefrFull, cefrLabel } from '@/lib/cefr_labels'
 import { tierMeta, nextTier } from '@/lib/leagues'
 import type { QuestType } from '@/types/database'
 
@@ -284,10 +285,10 @@ export default async function DashboardPage() {
           <Card className="!p-4 bg-gradient-to-br from-emerald-50 to-blue-50 border-emerald-200">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <div className="font-bold text-primary-900">🎯 Ton parcours CEFR</div>
+                <div className="font-bold text-primary-900">🎯 Ton parcours <span className="text-primary-700">{cefrFull(currentLevel)}</span></div>
                 <div className="text-xs text-gray-600 mt-0.5">
-                  Niveau actuel : <b>{currentLevel}</b>
-                  {nextLevel && <> → prochain : <b>{nextLevel}</b></>}
+                  Niveau actuel : <b>{cefrFull(currentLevel)}</b>
+                  {nextLevel && <> → prochain : <b>{cefrFull(nextLevel)}</b></>}
                 </div>
               </div>
             </div>
@@ -295,8 +296,8 @@ export default async function DashboardPage() {
               <>
                 <div className="text-[11px] text-gray-700 mt-2 mb-1">
                   {targetMastered > 0
-                    ? <>Mots {currentLevel} maîtrisés : <b>{masteredNum}</b> / {targetMastered} disponibles dans la biblio</>
-                    : <>Aucun mot {currentLevel} disponible dans la biblio actuelle</>}
+                    ? <>Mots <b>{cefrLabel(currentLevel)}</b> maîtrisés : <b>{masteredNum}</b> / {targetMastered} disponibles</>
+                    : <>Aucun mot {cefrLabel(currentLevel)} disponible dans la biblio actuelle</>}
                 </div>
                 <div className="h-3 bg-white rounded-full overflow-hidden border border-emerald-200">
                   <div className={`h-full transition-all ${canTest ? 'bg-emerald-500' : 'bg-emerald-400'}`} style={{ width: `${pctToNext}%` }} />
