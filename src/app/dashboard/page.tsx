@@ -153,18 +153,13 @@ export default async function DashboardPage() {
 
   return (
     <Container className="space-y-5 pb-20">
-      {/* v3.22.15 — Header compact : juste salutation + streak (les stats étaient redondantes avec parcours/ligue/quêtes) */}
+      {/* v3.22.16 — Header compact, streak affiché seulement si on a une valeur réelle */}
       <div className="flex items-center justify-between px-1">
         <div>
           <div className="text-xs text-gray-500">Bonjour</div>
           <h1 className="text-xl font-bold text-primary-900">{profile?.display_name || 'Raïssa'} 👋</h1>
         </div>
-        <div className="text-right flex items-center gap-1.5">
-          <span className="text-2xl">🔥</span>
-          <div>
-            <div className="text-sm font-bold text-primary-900">streak</div>
-          </div>
-        </div>
+        {/* Streak supprimé pour l'instant (pas implémenté en BDD). Réintroduire quand on aura le compteur. */}
       </div>
 
       <QuestsAccordion completedCount={completedCount} totalCount={QUESTS.length}>
@@ -239,30 +234,14 @@ export default async function DashboardPage() {
             </Link>
             {nextLevel ? (
               <>
-                <div className="text-[11px] text-gray-700 mt-2 mb-1">
-                  {targetMastered > 0
-                    ? <>Mots <b>{cefrLabel(currentLevel)}</b> maîtrisés : <b>{masteredNum}</b> / {targetMastered} disponibles</>
-                    : <>Aucun mot {cefrLabel(currentLevel)} disponible dans la biblio actuelle</>}
-                </div>
-                <div className="h-3 bg-white rounded-full overflow-hidden border border-emerald-200">
-                  <div className={`h-full transition-all ${canTest ? 'bg-emerald-500' : 'bg-emerald-400'}`} style={{ width: `${pctToNext}%` }} />
-                </div>
+                {/* v3.22.16 — Bloc "Mots maîtrisés / disponibles" supprimé : redondant avec étoiles du carrousel */}
                 {canTest ? (
                   <Link href={`/quiz?level=${currentLevel}`}>
                     <span className="mt-3 block w-full px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold text-sm text-center cursor-pointer hover:bg-emerald-700">
                       🎓 Passer le test {currentLevel} pour débloquer {nextLevel} →
                     </span>
                   </Link>
-                ) : targetMastered > 0 ? (
-                  <div className="text-[11px] text-gray-500 italic mt-2 text-center">
-                    Encore {targetMastered - masteredNum} mot{targetMastered - masteredNum > 1 ? 's' : ''} {currentLevel} à maîtriser pour débloquer le test.
-                    <br />Un mot est <b>maîtrisé</b> quand tu le valides ✅ 2 fois de suite en révision.
-                  </div>
-                ) : (
-                  <div className="text-[11px] text-gray-500 italic mt-2 text-center">
-                    Pas encore de contenu {currentLevel} dans la biblio. Plus de mots à venir.
-                  </div>
-                )}
+                ) : null}
               </>
             ) : (
               <div className="text-center mt-2">
@@ -275,18 +254,18 @@ export default async function DashboardPage() {
         )
       })()}
 
+      {/* v3.22.16 — Carte Ligue plus compacte */}
       <Link href="/ligue">
-        <Card style={{ background: `linear-gradient(135deg, ${tierInfo.color}, #2E75B6)` }} className="text-white">
+        <Card style={{ background: `linear-gradient(135deg, ${tierInfo.color}, #2E75B6)` }} className="text-white !py-3">
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="text-xs opacity-80">Ligue {tierInfo.label}</div>
-              <div className="text-2xl font-extrabold mt-0.5">{wp} / {nextThreshold} pts</div>
-              {next && <div className="text-xs opacity-80 mt-0.5">→ {tierMeta(next).label} si tu dépasses {nextThreshold}</div>}
-              <div className="mt-2 h-2 bg-white/20 rounded-full overflow-hidden">
+              <div className="text-xs opacity-90">Ligue {tierInfo.label}</div>
+              <div className="text-lg font-extrabold mt-0.5">{wp} pts cette semaine</div>
+              <div className="mt-1.5 h-1.5 bg-white/20 rounded-full overflow-hidden">
                 <div className="h-full bg-white transition-all" style={{ width: `${progressPct}%` }} />
               </div>
             </div>
-            <div className="text-5xl ml-3">{tierInfo.emoji}</div>
+            <div className="text-3xl ml-3">{tierInfo.emoji}</div>
           </div>
         </Card>
       </Link>

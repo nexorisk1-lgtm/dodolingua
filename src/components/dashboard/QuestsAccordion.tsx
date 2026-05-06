@@ -29,8 +29,9 @@ export function QuestsAccordion({ children, completedCount, totalCount }: Props)
           />
         </div>
         <div className="flex-1 text-left">
-          <div className="text-xs uppercase font-bold text-amber-700">{open ? '▼ Réduire' : '▶ Déplier'}</div>
+          {/* v3.22.16 — ▶ Déplier inline avec titre */}
           <div className="text-sm font-bold text-gray-900">
+            <span className="text-amber-700 mr-1">{open ? '▼' : '▶'}</span>
             {completedCount === totalCount && totalCount > 0
               ? `Toutes les quêtes faites ! Bravo 🎉`
               : `Clique ici pour faire ta quête du jour (${completedCount}/${totalCount})`}
