@@ -72,7 +72,24 @@ export async function GET(req: NextRequest) {
   }
 
   // Découpe en cours de 5 mots
-  const courses = []
+  type CourseStatus = 'locked' | 'available' | 'in_progress' | 'completed'
+
+  interface CourseItem {
+    id: string
+    level: string
+    number: number
+    name: string
+    emoji: string
+    total: number
+    mastered: number
+    fragile: number
+    stars: number
+    status: CourseStatus
+    preview_words: { lemma: string; gloss_fr: string | null }[]
+    concept_ids: string[]
+  }
+
+  const courses: CourseItem[] = []
   for (let i = 0; i < allConcepts.length; i += WORDS_PER_COURSE) {
     const slice = allConcepts.slice(i, i + WORDS_PER_COURSE)
     const courseNum = Math.floor(i / WORDS_PER_COURSE) + 1
@@ -87,7 +104,7 @@ export async function GET(req: NextRequest) {
     if (mastered === total) stars = 3
 
     // Statut : locked si le cours précédent n'est pas commencé (sauf le 1er)
-    const status = courses.length > 0 && courses[courses.length - 1].stars === 0 && courseNum > 1
+    const status: CourseStatus = (courses.length > 0 && courses[courses.length - 1].stars === 0 && courseNum > 1)
       ? 'locked'
       : (stars === 3 ? 'completed' : (stars > 0 ? 'in_progress' : 'available'))
 
