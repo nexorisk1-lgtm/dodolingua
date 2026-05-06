@@ -73,6 +73,27 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       onConflict: 'user_id,lang_code,concept_id'
     })
 
+    } else {
+      // v3.22.7 — Phases sans grade (discovery, pronunciation) : on crée quand même
+      // une row user_progress minimale pour marquer le mot comme "vu" et alimenter
+      // les étoiles du parcours.
+      const { data: existingProg } = await supabase
+        .from('user_progress')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('lang_code', lang)
+        .eq('concept_id', wordId)
+        .maybeSingle()
+      if (!existingProg) {
+        await supabase.from('user_progress').upsert({
+          user_id: user.id,
+          lang_code: lang,
+          concept_id: wordId,
+          fsrs_state: newState(),
+          consec_correct: 0,
+          total_reviews: 0,
+        }, { onConflict: 'user_id,lang_code,concept_id' })
+      }
     } // end if(derivedButton)
 
     const results = [...(session.results_json || []), {
