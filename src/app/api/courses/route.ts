@@ -1,15 +1,19 @@
 /**
- * v3.22 — Endpoint /api/courses?level=A1
- * Découpe les mots d'un niveau CEFR en "cours" de 5 mots (option C).
- * Renvoie la liste avec progression de l'utilisateur (mots maîtrisés sur 5).
+ * v3.24.0 — Endpoint /api/courses?level=A1
+ * Intercale grammaire dans le parcours :
+ *   pattern de bloc = 5 vocab + 1 grammar (× 3) + 1 checkpoint
+ *   bloc = 18 leçons (15 vocab + 3 grammar) puis 1 checkpoint
+ * Le checkpoint teste 15 mots vocab + 3 topics grammaire mélangés (un seul format).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 const WORDS_PER_COURSE = 5
+const VOCAB_PER_BLOCK = 5            // 5 leçons vocab par mini-bloc
+const GRAMMAR_PER_BLOCK = 1          // 1 leçon grammaire par mini-bloc
+const BLOCKS_BEFORE_CHECKPOINT = 3   // 3 mini-blocs → 1 checkpoint (15 vocab + 3 grammar)
 const VALID_LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 
-// Emojis thématiques pour les cours (cyclent par bloc de 10)
 const COURSE_EMOJIS = ['🌱', '🌿', '🌳', '🌲', '🌸', '🌺', '🌻', '🌷', '🌹', '🌼']
 
 export async function GET(req: NextRequest) {
@@ -23,8 +27,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'invalid level' }, { status: 400 })
   }
 
-  // Récupère tous les concepts du niveau, ordonnés par frequency_rank puis lemma
-  // (pagination boucle pour dépasser la limite Supabase de 1000)
+  // ───────── 1. Récupérer tous les concepts vocab du niveau ─────────
   const allConcepts: any[] = []
   let from = 0
   const PAGE = 1000
@@ -43,16 +46,22 @@ export async function GET(req: NextRequest) {
     from += PAGE
   }
 
-  if (allConcepts.length === 0) {
+  // ───────── 2. Récupérer tous les topics grammaire du niveau ─────────
+  const { data: grammarTopics } = await supabase
+    .from('grammar_topics')
+    .select('id, slug, position, title_fr, emoji')
+    .eq('level', level)
+    .order('position', { ascending: true })
+
+  if (allConcepts.length === 0 && (!grammarTopics || grammarTopics.length === 0)) {
     return NextResponse.json({ courses: [], level, total_words: 0 })
   }
 
-  // Récupère la progression user (consec_correct >= 2 = maîtrisé)
+  // ───────── 3. Progression vocab ─────────
   const conceptIds = allConcepts.map(c => c.id)
   const masteredSet = new Set<string>()
-  const fragileSet = new Set<string>()  // 1 réussite sans maîtrise
-  const seenSet = new Set<string>()  // v3.22.4 : tout concept déjà vu (présent dans user_progress)
-  // Pagination user_progress aussi
+  const fragileSet = new Set<string>()
+  const seenSet = new Set<string>()
   let upFrom = 0
   while (true) {
     const upPage = conceptIds.slice(upFrom, upFrom + PAGE)
@@ -67,17 +76,35 @@ export async function GET(req: NextRequest) {
       const cc = (p as any).consec_correct || 0
       if (cc >= 2) masteredSet.add(cid)
       else if (cc >= 1) fragileSet.add(cid)
-      // v3.22.4 : tout concept présent dans user_progress = "started" (au moins vu)
       seenSet.add(cid)
     }
     upFrom += PAGE
     if (upPage.length < PAGE) break
   }
 
-  // Découpe en cours de 5 mots
-  type CourseStatus = 'locked' | 'available' | 'in_progress' | 'completed'
+  // ───────── 4. Progression grammaire ─────────
+  const grammarMastered = new Set<string>()
+  const grammarFragile = new Set<string>()
+  const grammarSeen = new Set<string>()
+  if (grammarTopics && grammarTopics.length > 0) {
+    const { data: gp } = await supabase
+      .from('grammar_progress')
+      .select('topic_id, consec_correct')
+      .eq('user_id', user.id)
+      .in('topic_id', grammarTopics.map(t => t.id))
+    for (const p of (gp || [])) {
+      const cc = (p as any).consec_correct || 0
+      const tid = (p as any).topic_id
+      if (cc >= 2) grammarMastered.add(tid)
+      else if (cc >= 1) grammarFragile.add(tid)
+      grammarSeen.add(tid)
+    }
+  }
 
-  type CourseKind = 'lesson' | 'checkpoint'
+  // ───────── 5. Construction du parcours intercalé ─────────
+  type CourseStatus = 'locked' | 'available' | 'in_progress' | 'completed'
+  type CourseKind = 'lesson' | 'grammar' | 'checkpoint'
+
   interface CourseItem {
     id: string
     level: string
@@ -88,58 +115,132 @@ export async function GET(req: NextRequest) {
     total: number
     mastered: number
     fragile: number
+    seen: number
     stars: number
     status: CourseStatus
-    seen: number
     preview_words: { lemma: string; gloss_fr: string | null }[]
     concept_ids: string[]
+    topic_id?: string
   }
 
+  // Nombre total de mini-blocs basé sur le min(vocab, grammar)
+  const totalVocabLessons = Math.ceil(allConcepts.length / WORDS_PER_COURSE)
+  const totalGrammarTopics = grammarTopics?.length || 0
+
+  // On intercale tant qu'on a du vocab. Si plus de grammaire que de blocs vocab, on cycle.
+  // Si moins de grammaire, on saute la leçon grammaire (qui sera null).
   const courses: CourseItem[] = []
-  for (let i = 0; i < allConcepts.length; i += WORDS_PER_COURSE) {
-    const slice = allConcepts.slice(i, i + WORDS_PER_COURSE)
-    const courseNum = Math.floor(i / WORDS_PER_COURSE) + 1
-    const mastered = slice.filter(c => masteredSet.has(c.id)).length
-    const fragile = slice.filter(c => fragileSet.has(c.id)).length
-    const seen = slice.filter(c => seenSet.has(c.id)).length
-    const total = slice.length
+  let vocabIdx = 0
+  let grammarIdx = 0
+  let blockNum = 1            // numéro du mini-bloc courant (1, 2, 3, ...)
+  let checkpointNum = 0
 
-    // v3.22.6 — Système 4 étoiles (Proposition A) basé sur l'avancement par phase :
-    // 1 étoile = Découverte (au moins 1 mot vu)
-    // 2 étoiles = Découverte complète (tous les mots vus = user_progress existe)
-    // 3 étoiles = Validation partielle (>= 50% des mots avec consec_correct >= 1)
-    // 4 étoiles = Maîtrise complète (tous les mots avec consec_correct >= 2)
-    let stars = 0
-    if (seen > 0) stars = 1
-    if (seen === total) stars = 2
-    if ((mastered + fragile) >= Math.ceil(total / 2)) stars = 3
-    if (mastered === total) stars = 4
+  while (vocabIdx < totalVocabLessons || grammarIdx < totalGrammarTopics) {
+    // ─── 5a. 5 leçons vocab ───
+    for (let i = 0; i < VOCAB_PER_BLOCK && vocabIdx < totalVocabLessons; i++, vocabIdx++) {
+      const startWord = vocabIdx * WORDS_PER_COURSE
+      const slice = allConcepts.slice(startWord, startWord + WORDS_PER_COURSE)
+      const courseNum = vocabIdx + 1
+      const mastered = slice.filter(c => masteredSet.has(c.id)).length
+      const fragile = slice.filter(c => fragileSet.has(c.id)).length
+      const seen = slice.filter(c => seenSet.has(c.id)).length
+      const total = slice.length
 
-    // v3.22.6 — Unlock : la précédente doit avoir au moins 1 étoile pour débloquer
-    const status: CourseStatus = (courses.length > 0 && courses[courses.length - 1].stars === 0 && courseNum > 1)
-      ? 'locked'
-      : (stars === 4 ? 'completed' : (stars > 0 ? 'in_progress' : 'available'))
+      let stars = 0
+      if (seen > 0) stars = 1
+      if (seen === total) stars = 2
+      if ((mastered + fragile) >= Math.ceil(total / 2)) stars = 3
+      if (mastered === total) stars = 4
 
-    // v3.22.9 — Insertion d'un checkpoint après chaque 5 leçons (avant la 6, 11, 16...)
-    if (courseNum > 1 && (courseNum - 1) % 5 === 0) {
-      const groupStartIdx = (courseNum - 6) * WORDS_PER_COURSE
-      const groupEndIdx = (courseNum - 1) * WORDS_PER_COURSE
-      const checkpointConcepts = allConcepts.slice(groupStartIdx, groupEndIdx)
-      const checkpointConceptIds = checkpointConcepts.map(c => c.id)
-      const cpMastered = checkpointConceptIds.filter(id => masteredSet.has(id)).length
-      const cpTotal = checkpointConceptIds.length
-      const previousLessons = courses.slice(-5).filter(c => c.kind === 'lesson')
-      // v3.23.1 — Minimum 2 étoiles sur chaque leçon (Découverte complète) avant checkpoint
-      const allPrevHaveStar = previousLessons.length === 5 && previousLessons.every(l => l.stars >= 2)
-      // v3.23.2 — Étoiles checkpoint : 0 par défaut, 4 SEULEMENT si tous les mots maîtrisés via le test
-      // (pas avant). Évite que le checkpoint affiche des étoiles sans avoir été fait.
-      const cpStars = cpMastered === cpTotal && cpTotal > 0 ? 4 : 0
-      const cpStatus: CourseStatus = !allPrevHaveStar ? 'locked' : (cpStars === 4 ? 'completed' : (cpStars > 0 ? 'in_progress' : 'available'))
+      const prevHasStar = courses.length === 0
+        || (courses[courses.length - 1].stars > 0)
+      const status: CourseStatus = (!prevHasStar && courseNum > 1)
+        ? 'locked'
+        : (stars === 4 ? 'completed' : (stars > 0 ? 'in_progress' : 'available'))
+
       courses.push({
-        id: `${level}-cp-${courseNum - 1}`,
+        id: `${level}-${courseNum}`,
         level,
-        number: Math.floor((courseNum - 1) / 5),
-        name: `Checkpoint ${Math.floor((courseNum - 1) / 5)}`,
+        number: courseNum,
+        name: `Leçon ${courseNum}`,
+        emoji: COURSE_EMOJIS[(courseNum - 1) % COURSE_EMOJIS.length],
+        kind: 'lesson',
+        total, mastered, fragile, seen, stars, status,
+        preview_words: slice.slice(0, 3).map(c => {
+          const t = Array.isArray(c.translations) ? c.translations[0] : c.translations
+          return { lemma: t?.lemma, gloss_fr: c.gloss_fr }
+        }),
+        concept_ids: slice.map(c => c.id),
+      })
+    }
+
+    // ─── 5b. 1 leçon grammaire ───
+    if (grammarTopics && grammarIdx < totalGrammarTopics) {
+      const topic = grammarTopics[grammarIdx]
+      grammarIdx++
+      const tid = (topic as any).id as string
+      const isMastered = grammarMastered.has(tid)
+      const isFragile = grammarFragile.has(tid)
+      const isSeen = grammarSeen.has(tid)
+      let gStars = 0
+      if (isSeen) gStars = 1
+      if (isFragile || isMastered) gStars = 2
+      if (isMastered) gStars = 4
+
+      const prevHasStar = courses.length === 0
+        || (courses[courses.length - 1].stars > 0)
+      const gStatus: CourseStatus = !prevHasStar
+        ? 'locked'
+        : (gStars === 4 ? 'completed' : (gStars > 0 ? 'in_progress' : 'available'))
+
+      courses.push({
+        id: `grammar-${tid}`,
+        level,
+        number: grammarIdx,
+        name: (topic as any).title_fr,
+        emoji: (topic as any).emoji || '📘',
+        kind: 'grammar',
+        total: 1, mastered: isMastered ? 1 : 0, fragile: isFragile ? 1 : 0, seen: isSeen ? 1 : 0,
+        stars: gStars, status: gStatus,
+        preview_words: [],
+        concept_ids: [],
+        topic_id: tid,
+      })
+    }
+
+    // ─── 5c. Checkpoint après BLOCKS_BEFORE_CHECKPOINT mini-blocs ───
+    if (blockNum % BLOCKS_BEFORE_CHECKPOINT === 0) {
+      checkpointNum++
+      // 15 vocab des 3 derniers mini-blocs
+      const cpVocabStart = (vocabIdx - VOCAB_PER_BLOCK * BLOCKS_BEFORE_CHECKPOINT) * WORDS_PER_COURSE
+      const cpVocabEnd = vocabIdx * WORDS_PER_COURSE
+      const cpVocab = allConcepts.slice(Math.max(0, cpVocabStart), cpVocabEnd)
+      const cpVocabIds = cpVocab.map(c => c.id)
+      // 3 grammar topics des 3 derniers mini-blocs
+      const cpGrammarStart = grammarIdx - GRAMMAR_PER_BLOCK * BLOCKS_BEFORE_CHECKPOINT
+      const cpGrammarTopics = (grammarTopics || []).slice(Math.max(0, cpGrammarStart), grammarIdx)
+
+      const cpVocabMastered = cpVocabIds.filter(id => masteredSet.has(id)).length
+      const cpGrammarMastered = cpGrammarTopics.filter(t => grammarMastered.has((t as any).id)).length
+      const cpTotal = cpVocab.length + cpGrammarTopics.length
+      const cpMastered = cpVocabMastered + cpGrammarMastered
+
+      // Min 2 étoiles sur les 18 leçons précédentes pour débloquer
+      const previousLessons = courses.slice(-VOCAB_PER_BLOCK * BLOCKS_BEFORE_CHECKPOINT - GRAMMAR_PER_BLOCK * BLOCKS_BEFORE_CHECKPOINT)
+        .filter(c => c.kind === 'lesson' || c.kind === 'grammar')
+      const allPrevHaveStar = previousLessons.length > 0 && previousLessons.every(l => l.stars >= 2)
+
+      // Étoiles checkpoint : 0 par défaut, 4 SEULEMENT si tout maîtrisé via le test
+      const cpStars = cpMastered === cpTotal && cpTotal > 0 ? 4 : 0
+      const cpStatus: CourseStatus = !allPrevHaveStar
+        ? 'locked'
+        : (cpStars === 4 ? 'completed' : (cpStars > 0 ? 'in_progress' : 'available'))
+
+      courses.push({
+        id: `${level}-cp-${checkpointNum}`,
+        level,
+        number: checkpointNum,
+        name: `Checkpoint ${checkpointNum}`,
         emoji: '🎯',
         kind: 'checkpoint',
         total: cpTotal,
@@ -149,36 +250,20 @@ export async function GET(req: NextRequest) {
         stars: cpStars,
         status: cpStatus,
         preview_words: [],
-        concept_ids: checkpointConceptIds,
+        concept_ids: cpVocabIds,
+        topic_id: cpGrammarTopics.map(t => (t as any).id).join(','),  // CSV des topics
       })
     }
+    blockNum++
 
-    courses.push({
-      id: `${level}-${courseNum}`,
-      level,
-      number: courseNum,
-      name: `Leçon ${courseNum}`,
-      emoji: COURSE_EMOJIS[(courseNum - 1) % COURSE_EMOJIS.length],
-      kind: 'lesson',
-      total,
-      mastered,
-      fragile,
-      seen,
-      stars,
-      status,
-      // 3 premiers mots en preview
-      preview_words: slice.slice(0, 3).map(c => {
-        const t = Array.isArray(c.translations) ? c.translations[0] : c.translations
-        return { lemma: t?.lemma, gloss_fr: c.gloss_fr }
-      }),
-      // IDs concept pour démarrer la session
-      concept_ids: slice.map(c => c.id),
-    })
+    // Garde-fou : si on a plus de grammaire que de vocab, on s'arrête après cycle
+    if (vocabIdx >= totalVocabLessons && grammarIdx >= totalGrammarTopics) break
   }
 
   return NextResponse.json({
     level,
     total_words: allConcepts.length,
+    total_grammar_topics: totalGrammarTopics,
     total_courses: courses.length,
     completed_courses: courses.filter(c => c.status === 'completed').length,
     courses,

@@ -13,7 +13,7 @@ interface Course {
   number: number
   name: string
   emoji: string
-  kind?: 'lesson' | 'checkpoint'
+  kind?: 'lesson' | 'grammar' | 'checkpoint'
   total: number
   mastered: number
   stars: number
@@ -113,7 +113,7 @@ export function ParcoursCarousel({ level }: Props) {
     // Toutes les leçons commencées sont à 4 étoiles → enchaîner sur la suivante
     const next = courses.find(c => c.status === 'available')
     if (next) {
-      dodoMsg = `Bravo ! Continue avec ${next.kind === 'checkpoint' ? `le Checkpoint ${next.number}` : `la Leçon ${next.number}`}.`
+      dodoMsg = `Bravo ! Continue avec ${next.kind === 'checkpoint' ? `le Checkpoint ${next.number}` : next.kind === 'grammar' ? next.name : `la Leçon ${next.number}`}.`
       dodoPose = 'stars'
       dodoAnim = 'celebrate'
     } else {
@@ -159,7 +159,7 @@ export function ParcoursCarousel({ level }: Props) {
             const cardContent = (
               <div className={`flex flex-col items-center shrink-0 transition-transform ${isLocked ? 'opacity-60' : 'hover:scale-105'}`}>
                 <div
-                  className={`flex flex-col items-center justify-center text-white shadow-md ${course.kind === 'checkpoint' ? 'bg-gradient-to-br from-purple-400 to-pink-500 ring-2 ring-yellow-300' : STATUS_BG[course.status]}`}
+                  className={`flex flex-col items-center justify-center text-white shadow-md ${course.kind === 'checkpoint' ? 'bg-gradient-to-br from-purple-400 to-pink-500 ring-2 ring-yellow-300' : course.kind === 'grammar' ? 'bg-gradient-to-br from-violet-400 to-purple-600' : STATUS_BG[course.status]}`}
                   style={{
                     clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
                     width: '80px',
@@ -168,10 +168,10 @@ export function ParcoursCarousel({ level }: Props) {
                 >
                   <div className="text-2xl">{isLocked ? '🔒' : course.emoji}</div>
                   <div className="text-[8px] font-bold uppercase">
-                    {course.kind === 'checkpoint' ? 'CHECK' : 'Leçon'}
+                    {course.kind === 'checkpoint' ? 'CHECK' : course.kind === 'grammar' ? 'GRAM' : 'Leçon'}
                   </div>
                   <div className="text-sm font-extrabold leading-none">
-                    {course.kind === 'checkpoint' ? '★' : course.number}
+                    {course.kind === 'checkpoint' ? '★' : course.kind === 'grammar' ? `G${course.number}` : course.number}
                   </div>
                 </div>
                 <div className="flex gap-0.5 mt-1">
@@ -180,7 +180,7 @@ export function ParcoursCarousel({ level }: Props) {
                   ))}
                 </div>
                 <div className="text-[10px] font-bold text-primary-900 mt-0.5 whitespace-nowrap">
-                  {course.kind === 'checkpoint' ? 'Checkpoint' : `Leçon ${course.number}`}
+                  {course.kind === 'checkpoint' ? 'Checkpoint' : course.kind === 'grammar' ? course.name : `Leçon ${course.number}`}
                 </div>
               </div>
             )
@@ -188,7 +188,7 @@ export function ParcoursCarousel({ level }: Props) {
               return <div key={course.id} className="shrink-0">{cardContent}</div>
             }
             return (
-              <Link key={course.id} href={`/session?course=${course.id}`} className="shrink-0">
+              <Link key={course.id} href={(course.kind === 'grammar' ? `/grammar/${course.id.replace(/^grammar-/, '')}` : `/session?course=${course.id}`) as any} className="shrink-0">
                 {cardContent}
               </Link>
             )

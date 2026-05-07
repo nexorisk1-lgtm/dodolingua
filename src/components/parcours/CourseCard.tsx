@@ -12,7 +12,7 @@ interface Course {
   number: number
   name: string
   emoji: string
-  kind?: 'lesson' | 'checkpoint'
+  kind?: 'lesson' | 'grammar' | 'checkpoint'
   total: number
   mastered: number
   fragile: number
@@ -39,6 +39,13 @@ const CHECKPOINT_BG: Record<Course['status'], string> = {
   in_progress: 'bg-gradient-to-br from-purple-500 to-pink-600',
   completed: 'bg-gradient-to-br from-yellow-400 to-orange-500',
 }
+// v3.24.0 — Palette grammaire (violet vif)
+const GRAMMAR_BG: Record<Course['status'], string> = {
+  locked: 'bg-gray-300',
+  available: 'bg-gradient-to-br from-violet-400 to-purple-500',
+  in_progress: 'bg-gradient-to-br from-violet-500 to-purple-700',
+  completed: 'bg-gradient-to-br from-violet-600 to-purple-800',
+}
 
 const STATUS_BORDER: Record<Course['status'], string> = {
   locked: 'border-gray-400',
@@ -55,16 +62,16 @@ export function CourseCard({ course, side = 'center' }: Props) {
     <div className={`relative ${offsetClass} transition-transform hover:scale-105 ${isLocked ? 'opacity-60' : ''}`}>
       {/* v3.22.9 — Hexagone plus gros (Simpler-like) + style checkpoint */}
       <div
-        className={`w-48 h-52 ${course.kind === 'checkpoint' ? CHECKPOINT_BG[course.status] : STATUS_BG[course.status]} border-4 ${STATUS_BORDER[course.status]} flex flex-col items-center justify-center text-white shadow-2xl ${course.kind === 'checkpoint' ? 'ring-4 ring-yellow-300' : ''}`}
+        className={`w-48 h-52 ${course.kind === 'checkpoint' ? CHECKPOINT_BG[course.status] : course.kind === 'grammar' ? GRAMMAR_BG[course.status] : STATUS_BG[course.status]} border-4 ${STATUS_BORDER[course.status]} flex flex-col items-center justify-center text-white shadow-2xl ${course.kind === 'checkpoint' ? 'ring-4 ring-yellow-300' : ''}`}
         style={{
           clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
         }}
       >
         <div className="text-6xl mb-2">{isLocked ? '🔒' : course.emoji}</div>
         <div className="text-xs font-bold uppercase tracking-wider">
-          {course.kind === 'checkpoint' ? '★ CHECKPOINT' : 'Leçon'}
+          {course.kind === 'checkpoint' ? '★ CHECKPOINT' : course.kind === 'grammar' ? '📘 GRAMMAIRE' : 'Leçon'}
         </div>
-        <div className="text-4xl font-extrabold leading-none">{course.kind === 'checkpoint' ? '✓' : course.number}</div>
+        <div className="text-4xl font-extrabold leading-none">{course.kind === 'checkpoint' ? '✓' : course.kind === 'grammar' ? `G${course.number}` : course.number}</div>
       </div>
 
       {/* v3.22.6 — 4 étoiles selon avancement de phase (Proposition A) */}
@@ -88,7 +95,7 @@ export function CourseCard({ course, side = 'center' }: Props) {
       </div>
 
       {/* Badge progression mots maîtrisés */}
-      {!isLocked && (
+      {!isLocked && course.kind !== 'grammar' && (
         <div className="absolute -top-2 -right-2 bg-white text-primary-900 text-[10px] font-extrabold px-1.5 py-0.5 rounded-full shadow border border-rule">
           {course.mastered}/{course.total}
         </div>
@@ -106,8 +113,12 @@ export function CourseCard({ course, side = 'center' }: Props) {
   }
 
   const remaining = 4 - course.stars
+  // v3.24.0 — Routage selon kind
+  const href = course.kind === 'grammar'
+    ? `/grammar/${course.id.replace(/^grammar-/, '')}`
+    : `/session?course=${course.id}`
   return (
-    <Link href={`/session?course=${course.id}`} className="flex flex-col items-center pb-16 cursor-pointer">
+    <Link href={href as any} className="flex flex-col items-center pb-16 cursor-pointer">
       {inner}
       <div className="text-sm font-bold text-primary-900 mt-4">{course.name}</div>
       {course.stars > 0 && course.stars < 4 && (

@@ -17,6 +17,7 @@ interface Course {
   number: number
   name: string
   emoji: string
+  kind?: "lesson" | "grammar" | "checkpoint"
   total: number
   mastered: number
   fragile: number
