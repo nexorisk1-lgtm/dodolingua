@@ -129,7 +129,8 @@ export async function GET(req: NextRequest) {
       const cpMastered = checkpointConceptIds.filter(id => masteredSet.has(id)).length
       const cpTotal = checkpointConceptIds.length
       const previousLessons = courses.slice(-5).filter(c => c.kind === 'lesson')
-      const allPrevHaveStar = previousLessons.length === 5 && previousLessons.every(l => l.stars >= 1)
+      // v3.23.1 — Minimum 2 étoiles sur chaque leçon (Découverte complète) avant checkpoint
+      const allPrevHaveStar = previousLessons.length === 5 && previousLessons.every(l => l.stars >= 2)
       const cpStars = cpMastered === cpTotal ? 4 : (cpMastered >= Math.ceil(cpTotal * 0.75) ? 3 : (cpMastered >= Math.ceil(cpTotal / 2) ? 2 : (cpMastered > 0 ? 1 : 0)))
       const cpStatus: CourseStatus = !allPrevHaveStar ? 'locked' : (cpStars === 4 ? 'completed' : (cpStars > 0 ? 'in_progress' : 'available'))
       courses.push({

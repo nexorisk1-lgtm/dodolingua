@@ -7,15 +7,15 @@ import type { LeagueTier } from '@/types/database'
  * Plus on monte, plus c'est difficile (moins de places en promotion).
  */
 export const LEAGUE_TIERS: { id: LeagueTier; emoji: string; label: string; color: string; promote_top: number }[] = [
-  { id: 'bronze',     emoji: '🥉', label: 'Bronze',      color: '#CD7F32', promote_top: 15 },
-  { id: 'argent',     emoji: '🥈', label: 'Argent',      color: '#C0C0C0', promote_top: 12 },
-  { id: 'or',         emoji: '🥇', label: 'Or',          color: '#FFD700', promote_top: 10 },
-  { id: 'saphir',     emoji: '💎', label: 'Saphir',      color: '#0F52BA', promote_top: 8 },
-  { id: 'rubis',      emoji: '❤️', label: 'Rubis',       color: '#E0115F', promote_top: 7 },
-  { id: 'emeraude',   emoji: '💚', label: 'Émeraude',    color: '#50C878', promote_top: 5 },
-  { id: 'amethyste',  emoji: '💜', label: 'Améthyste',   color: '#9966CC', promote_top: 5 },
-  { id: 'perle',      emoji: '🤍', label: 'Perle',       color: '#F0EAD6', promote_top: 4 },
-  { id: 'obsidienne', emoji: '⬛', label: 'Obsidienne',  color: '#3D3D3D', promote_top: 4 },
+  { id: 'bronze',     emoji: '🥉', label: 'Bronze',      color: '#CD7F32', promote_top: 10 },
+  { id: 'argent',     emoji: '🥈', label: 'Argent',      color: '#C0C0C0', promote_top: 8 },
+  { id: 'or',         emoji: '🥇', label: 'Or',          color: '#FFD700', promote_top: 6 },
+  { id: 'saphir',     emoji: '💎', label: 'Saphir',      color: '#0F52BA', promote_top: 5 },
+  { id: 'rubis',      emoji: '❤️', label: 'Rubis',       color: '#E0115F', promote_top: 4 },
+  { id: 'emeraude',   emoji: '💚', label: 'Émeraude',    color: '#50C878', promote_top: 3 },
+  { id: 'amethyste',  emoji: '💜', label: 'Améthyste',   color: '#9966CC', promote_top: 3 },
+  { id: 'perle',      emoji: '🤍', label: 'Perle',       color: '#F0EAD6', promote_top: 2 },
+  { id: 'obsidienne', emoji: '⬛', label: 'Obsidienne',  color: '#3D3D3D', promote_top: 2 },
   { id: 'diamant',    emoji: '💎', label: 'Diamant',     color: '#B9F2FF', promote_top: 0 },  // niveau max
 ]
 

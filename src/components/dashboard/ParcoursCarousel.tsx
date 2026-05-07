@@ -68,37 +68,57 @@ export function ParcoursCarousel({ level }: Props) {
     scrollRef.current.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: 'smooth' })
   }
 
-  // Trouver la leçon active pour bulle Dodo encourageant
-  const active = courses.find(c => c.status === 'in_progress') || courses.find(c => c.status === 'available')
+  // v3.23.1 — Message Dodo intelligent : récap GLOBAL des étoiles manquantes
   const totalStars = courses.reduce((s, c) => s + c.stars, 0)
-  const maxStars = courses.length * 4
+  const maxStars = courses.filter(c => c.kind === 'lesson').length * 4
+  const missingStars = maxStars - totalStars
+  // Leçons partielles (1-3 étoiles, pas 0 ni 4) : ce sont celles à terminer
+  const partialLessons = courses.filter(c => c.kind === 'lesson' && c.stars > 0 && c.stars < 4)
+  const masteredLessons = courses.filter(c => c.kind === 'lesson' && c.stars === 4).length
+  const totalLessons = courses.filter(c => c.kind === 'lesson').length
+  const checkpointActive = courses.find(c => c.kind === 'checkpoint' && (c.status === 'available' || c.status === 'in_progress'))
+
   let dodoMsg = "Allez, on attaque la première leçon !"
   let dodoPose: 'idle' | 'happy' | 'study' | 'champion' | 'quest' | 'stars' = 'quest'
   let dodoAnim: 'breathe' | 'bounce' | 'wave' | 'celebrate' = 'wave'
 
-  if (active) {
-    if (active.kind === 'checkpoint') {
-      dodoMsg = `Checkpoint dispo ! Teste tes ${active.total} mots vus.`
-      dodoPose = 'study'
-      dodoAnim = 'bounce'
-    } else if (active.stars === 0) {
-      dodoMsg = `Démarre la Leçon ${active.number} pour gagner tes 1ères étoiles !`
-      dodoPose = 'quest'
-      dodoAnim = 'wave'
-    } else if (active.stars < 4) {
-      dodoMsg = `Plus que ${4 - active.stars} étoile${4 - active.stars > 1 ? 's' : ''} sur la Leçon ${active.number} !`
-      dodoPose = 'stars'
-      dodoAnim = 'bounce'
-    } else {
-      dodoMsg = `Bravo ! Tu peux passer à la suivante.`
-      dodoPose = 'stars'
-      dodoAnim = 'celebrate'
-    }
-  }
-  if (totalStars === maxStars) {
+  if (totalStars === 0) {
+    dodoMsg = `Démarre la Leçon 1 pour gagner tes 1ères étoiles !`
+    dodoPose = 'quest'
+    dodoAnim = 'wave'
+  } else if (totalStars === maxStars) {
     dodoMsg = `Niveau complet ! Tu es prête pour le test.`
     dodoPose = 'stars'
     dodoAnim = 'celebrate'
+  } else if (checkpointActive && checkpointActive.status === 'available') {
+    dodoMsg = `Checkpoint #${checkpointActive.number} prêt ! Teste tes mots maîtrisés.`
+    dodoPose = 'study'
+    dodoAnim = 'bounce'
+  } else if (partialLessons.length === 1) {
+    const l = partialLessons[0]
+    const remaining = 4 - l.stars
+    dodoMsg = `Plus que ${remaining} étoile${remaining > 1 ? 's' : ''} sur la Leçon ${l.number} !`
+    dodoPose = 'stars'
+    dodoAnim = 'bounce'
+  } else if (partialLessons.length > 1) {
+    // Plusieurs leçons partielles : récap global
+    const lessonNumbers = partialLessons.map(l => l.number).slice(0, 3).join(', ')
+    const more = partialLessons.length > 3 ? ` (+${partialLessons.length - 3} autres)` : ''
+    dodoMsg = `${missingStars} étoile${missingStars > 1 ? 's' : ''} à débloquer sur Leçons ${lessonNumbers}${more}`
+    dodoPose = 'stars'
+    dodoAnim = 'bounce'
+  } else {
+    // Toutes les leçons commencées sont à 4 étoiles → enchaîner sur la suivante
+    const next = courses.find(c => c.status === 'available')
+    if (next) {
+      dodoMsg = `Bravo ! Continue avec ${next.kind === 'checkpoint' ? `le Checkpoint ${next.number}` : `la Leçon ${next.number}`}.`
+      dodoPose = 'stars'
+      dodoAnim = 'celebrate'
+    } else {
+      dodoMsg = `${masteredLessons}/${totalLessons} leçons maîtrisées 🎯`
+      dodoPose = 'stars'
+      dodoAnim = 'breathe'
+    }
   }
 
   return (
