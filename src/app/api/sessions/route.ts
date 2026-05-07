@@ -139,12 +139,16 @@ export async function POST(req: NextRequest) {
   // 3. Pool de distracteurs (autres concepts du même niveau, pour QCM et Cloze)
   // On prend ~20 concepts random du même niveau pour avoir des distracteurs variés
   const cefrLevels = Array.from(new Set(concepts.map(c => c.cefr_min).filter(Boolean) as string[]))
-  const { data: pool } = await supabase
+  // v3.24.2 — Pool randomisé : on prend 300 concepts puis on shuffle côté JS
+  // (avant: .limit(50) sans ordre = toujours les 50 mêmes → distracteur 'appartement' tout le temps)
+  const offset = Math.floor(Math.random() * 200)
+  const { data: poolRaw } = await supabase
     .from('concepts')
     .select('id, gloss_fr')
     .in('cefr_min', cefrLevels.length ? cefrLevels : ['A1', 'A2'])
     .not('gloss_fr', 'is', null)
-    .limit(50)
+    .range(offset, offset + 299)
+  const pool = shuffle(poolRaw || []).slice(0, 50)
 
   const { data: poolTr } = await supabase
     .from('translations')

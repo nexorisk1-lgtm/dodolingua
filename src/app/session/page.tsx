@@ -58,6 +58,7 @@ export default function SessionRunner() {
   const [remediationCount, setRemediationCount] = useState(0)
   // v3.8.1 — corrections (révision unifiée)
   const [corrections, setCorrections] = useState<any[]>([])
+  const [realStars, setRealStars] = useState<number | null>(null)  // v3.24.2 — récup étoiles BDD
   // v3.11 — détecte mode révision pour passer à submit
   const isReviewRef = useRef(false)
 
@@ -261,11 +262,34 @@ export default function SessionRunner() {
     )
   }
 
+
+  // v3.24.2 — Au moment où la session est terminée, refetch /api/courses
+  // pour afficher la vraie valeur d'étoiles (alignée parcours).
+  useEffect(() => {
+    if (!done) return
+    const sp = new URLSearchParams(window.location.search)
+    const courseId = sp.get('course') || undefined
+    if (!courseId) return
+    const level = courseId.split('-')[0]
+    fetch(`/api/courses?level=${level}`)
+      .then(r => r.json())
+      .then(d => {
+        const c = (d.courses || []).find((c: any) => c.id === courseId)
+        if (c) setRealStars(c.stars)
+      })
+      .catch(() => {})
+  }, [done])
+
   if (done) {
     // v3.22.4 — Calcul des stats de la session pour message contextuel
-    const totalAnswered = results.length
-    const correctCount = results.filter((r: any) => r.qcm_correct === true || r.cloze_correct === true || r.grade === 'savais').length
-    const failedCount = results.filter((r: any) => r.qcm_correct === false || r.cloze_correct === false || r.grade === 'pas_su').length
+    // v3.24.2 — Mais la valeur d'étoiles affichée vient de /api/courses (BDD) pour cohérence parcours
+    // v3.24.2 — On ne compte QUE les items évaluables (QCM/Cloze/grade), exclut Discovery
+    const evalResults = results.filter((r: any) =>
+      r.qcm_correct !== undefined || r.cloze_correct !== undefined || r.grade !== undefined
+    )
+    const totalAnswered = evalResults.length  // v3.24.2 — only evaluables count for stars
+    const correctCount = evalResults.filter((r: any) => r.qcm_correct === true || r.cloze_correct === true || r.grade === 'savais').length
+    const failedCount = evalResults.filter((r: any) => r.qcm_correct === false || r.cloze_correct === false || r.grade === 'pas_su').length
     const avgPron = (() => {
       const scores = results.filter((r: any) => typeof r.pronunciation_score === 'number').map((r: any) => r.pronunciation_score)
       if (scores.length === 0) return null
@@ -279,15 +303,17 @@ export default function SessionRunner() {
     if (ratio >= 0.9) estimatedStars = 4
     else if (ratio >= 0.7) estimatedStars = 3
     else if (ratio >= 0.4) estimatedStars = 2
-    const remaining = 4 - estimatedStars
+    // v3.24.2 — Affiche les étoiles réelles BDD si dispo (sinon estimation)
+    const displayStars = realStars !== null ? realStars : estimatedStars
+    const remaining = 4 - displayStars
 
-    if (estimatedStars === 4) {
+    if (displayStars === 4) {
       dodoMessage = '🏆 4/4 étoiles ! Leçon maîtrisée !'
       dodoTip = 'Tu peux passer à la leçon suivante 🎯'
-    } else if (estimatedStars === 3) {
+    } else if (displayStars === 3) {
       dodoMessage = '🎯 3/4 étoiles ! Bon travail !'
       dodoTip = `Encore 1 étoile à débloquer : ancre les ${failedCount} mot${failedCount > 1 ? 's' : ''} ratés en révision.`
-    } else if (estimatedStars === 2) {
+    } else if (displayStars === 2) {
       dodoMessage = '💪 2/4 étoiles ! Tu progresses !'
       dodoTip = 'Refais la leçon ou utilise la révision pour décrocher les 2 dernières étoiles.'
     } else {
