@@ -13,6 +13,7 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
+import { useCombo, ComboBadge } from '@/components/ui/ComboBadge'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -40,6 +41,7 @@ function GrammarLessonInner() {
   const topicId = params.topicId
   const router = useRouter()
 
+  const combo = useCombo()
   const [topic, setTopic] = useState<Topic | null>(null)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [phase, setPhase] = useState<'rule' | 'exos' | 'recap'>('rule')
@@ -135,7 +137,14 @@ function GrammarLessonInner() {
       })
       const data = await res.json()
       setFeedback(data)
-      if (data.correct) setScore(s => s + 1)
+      if (data.correct) {
+        setScore(s => s + 1)
+        combo.onCorrect()
+        // Bump streak en arrière-plan (pas bloquant)
+        fetch('/api/streak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: 'en-GB' }) }).catch(() => {})
+      } else {
+        combo.onWrong()
+      }
     }
 
     function next() {
@@ -147,6 +156,13 @@ function GrammarLessonInner() {
     return (
       <main className="min-h-screen bg-gradient-to-b from-purple-50 to-white pb-24">
         <div className="max-w-2xl mx-auto p-4">
+          {/* v3.24.1 — Combo badge */}
+          {combo.combo >= 3 && (
+            <div className="flex justify-center mb-3">
+              <ComboBadge combo={combo.combo} bonusLabel={combo.bonusLabel} />
+            </div>
+          )}
+
           {/* Progress bar */}
           <div className="flex items-center gap-2 mb-4">
             <div className="flex-1 h-2 bg-purple-100 rounded-full overflow-hidden">

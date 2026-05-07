@@ -10,6 +10,7 @@ import { cefrFull, cefrLabel } from '@/lib/cefr_labels'
 import { QuestRow } from '@/components/dashboard/QuestRow'
 import { QuestsAccordion } from '@/components/dashboard/QuestsAccordion'
 import { ParcoursCarousel } from '@/components/dashboard/ParcoursCarousel'
+import { StreakCard } from '@/components/dashboard/StreakCard'
 import { tierMeta, nextTier } from '@/lib/leagues'
 import type { QuestType } from '@/types/database'
 
@@ -159,7 +160,8 @@ export default async function DashboardPage() {
           <div className="text-xs text-gray-500">Bonjour</div>
           <h1 className="text-xl font-bold text-primary-900">{profile?.display_name || 'Raïssa'} 👋</h1>
         </div>
-        {/* Streak supprimé pour l'instant (pas implémenté en BDD). Réintroduire quand on aura le compteur. */}
+        {/* v3.24.1 — Streak réintroduit avec compteur réel + tokens freeze */}
+        <StreakCard />
       </div>
 
       <QuestsAccordion completedCount={completedCount} totalCount={QUESTS.length}>

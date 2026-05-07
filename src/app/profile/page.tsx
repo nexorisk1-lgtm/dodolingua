@@ -8,6 +8,7 @@ import { VoicePicker } from '@/components/profile/VoicePicker'
 import { CefrEvalCard } from '@/components/profile/CefrEvalCard'
 import { PreferencesEditor } from '@/components/profile/PreferencesEditor'
 import { DiplomesCard } from '@/components/profile/DiplomesCard'
+import { WeakPointsCard } from '@/components/profile/WeakPointsCard'
 import { cefrFull } from '@/lib/cefr_labels'
 
 export default async function ProfilePage() {
@@ -47,6 +48,8 @@ export default async function ProfilePage() {
       </Card>
 
       <DiplomesCard />
+
+      <WeakPointsCard />
 
       <Card>
         <div className="flex items-center justify-between mb-3">
