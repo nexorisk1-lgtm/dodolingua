@@ -131,7 +131,9 @@ export async function GET(req: NextRequest) {
       const previousLessons = courses.slice(-5).filter(c => c.kind === 'lesson')
       // v3.23.1 — Minimum 2 étoiles sur chaque leçon (Découverte complète) avant checkpoint
       const allPrevHaveStar = previousLessons.length === 5 && previousLessons.every(l => l.stars >= 2)
-      const cpStars = cpMastered === cpTotal ? 4 : (cpMastered >= Math.ceil(cpTotal * 0.75) ? 3 : (cpMastered >= Math.ceil(cpTotal / 2) ? 2 : (cpMastered > 0 ? 1 : 0)))
+      // v3.23.2 — Étoiles checkpoint : 0 par défaut, 4 SEULEMENT si tous les mots maîtrisés via le test
+      // (pas avant). Évite que le checkpoint affiche des étoiles sans avoir été fait.
+      const cpStars = cpMastered === cpTotal && cpTotal > 0 ? 4 : 0
       const cpStatus: CourseStatus = !allPrevHaveStar ? 'locked' : (cpStars === 4 ? 'completed' : (cpStars > 0 ? 'in_progress' : 'available'))
       courses.push({
         id: `${level}-cp-${courseNum - 1}`,

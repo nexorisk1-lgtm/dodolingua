@@ -68,12 +68,14 @@ export function ParcoursCarousel({ level }: Props) {
     scrollRef.current.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: 'smooth' })
   }
 
-  // v3.23.1 — Message Dodo intelligent : récap GLOBAL des étoiles manquantes
+  // v3.23.2 — Message Dodo intelligent : compte SEULEMENT les étoiles manquantes
+  // sur les leçons DÉJÀ COMMENCÉES (pas les leçons jamais touchées)
   const totalStars = courses.reduce((s, c) => s + c.stars, 0)
   const maxStars = courses.filter(c => c.kind === 'lesson').length * 4
-  const missingStars = maxStars - totalStars
   // Leçons partielles (1-3 étoiles, pas 0 ni 4) : ce sont celles à terminer
   const partialLessons = courses.filter(c => c.kind === 'lesson' && c.stars > 0 && c.stars < 4)
+  // Étoiles manquantes UNIQUEMENT sur les leçons commencées (4 par leçon partielle - étoiles déjà gagnées)
+  const missingStars = partialLessons.reduce((sum, l) => sum + (4 - l.stars), 0)
   const masteredLessons = courses.filter(c => c.kind === 'lesson' && c.stars === 4).length
   const totalLessons = courses.filter(c => c.kind === 'lesson').length
   const checkpointActive = courses.find(c => c.kind === 'checkpoint' && (c.status === 'available' || c.status === 'in_progress'))

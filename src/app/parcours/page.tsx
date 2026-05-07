@@ -131,14 +131,14 @@ export default function ParcoursPage() {
           })}
         </div>
 
-        {/* Certificat de fin de niveau */}
+        {/* v3.23.2 — Carte certificat de fin de niveau (au-dessus du dernier hexagone) */}
         {courses.length > 0 && courses.every(c => c.status === 'completed') && (
-          <div className="mt-8 mx-auto max-w-xs bg-gradient-to-br from-blue-400 to-purple-500 rounded-2xl p-6 text-white text-center shadow-2xl">
-            <div className="text-5xl mb-2">🎓</div>
-            <div className="text-xl font-extrabold">Niveau {level} terminé !</div>
-            <div className="text-sm opacity-90 mt-1">Tu peux passer au niveau suivant.</div>
-            <Link href={`/quiz?level=${level}`} className="mt-4 inline-block px-4 py-2 bg-white text-purple-700 rounded-lg font-bold text-sm">
-              Passer le test {level}
+          <div className="mt-8 mx-auto max-w-sm bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500 rounded-3xl p-6 text-white text-center shadow-2xl border-4 border-yellow-300">
+            <div className="text-6xl mb-2 animate-bounce">🎓</div>
+            <div className="text-2xl font-extrabold drop-shadow">Lauréat {level} !</div>
+            <div className="text-xs opacity-90 mt-1">Tu maîtrises tout le niveau {cefrLabel(level)}.</div>
+            <Link href={`/quiz?level=${level}`} className="mt-4 inline-block px-6 py-3 bg-white text-purple-700 rounded-xl font-extrabold text-sm shadow-lg hover:scale-105 transition">
+              🏆 Passe ton certificat {level}
             </Link>
           </div>
         )}
