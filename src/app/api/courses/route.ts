@@ -146,11 +146,14 @@ export async function GET(req: NextRequest) {
       const seen = slice.filter(c => seenSet.has(c.id)).length
       const total = slice.length
 
+      // v3.24.3 — Étoiles plus intuitives : 4★ dès qu'on a réussi tous les mots 1 fois (fragile OU mastered)
+      // Avant : 4★ exigeait consec_correct >= 2 (mastery FSRS = 2 sessions). Trop frustrant pour l'utilisateur.
+      // Maintenant : 1 session 100% = 4★. Le système FSRS continue de gérer la révision en arrière-plan.
       let stars = 0
       if (seen > 0) stars = 1
       if (seen === total) stars = 2
       if ((mastered + fragile) >= Math.ceil(total / 2)) stars = 3
-      if (mastered === total) stars = 4
+      if ((mastered + fragile) === total) stars = 4
 
       const prevHasStar = courses.length === 0
         || (courses[courses.length - 1].stars > 0)
