@@ -43,13 +43,16 @@ export function ParcoursCarousel({ level }: Props) {
       .finally(() => setLoading(false))
   }, [level])
 
-  // Auto-scroll au montage : centrer sur la 1ère leçon active
+  // v3.24.4 — Auto-scroll amélioré : garde 2 leçons visibles avant l'active
+  // (avant: scrollLeft = (idx-1)*92 coupait la leçon 1 en deux dès que idx >= 2)
   useEffect(() => {
     if (!loading && courses.length > 0 && scrollRef.current) {
       const firstActiveIdx = courses.findIndex(c => c.status === 'in_progress' || c.status === 'available')
-      if (firstActiveIdx > 0) {
-        // Chaque carte fait ~92px (80 hex + 12 gap)
-        scrollRef.current.scrollLeft = Math.max(0, (firstActiveIdx - 1) * 92)
+      if (firstActiveIdx > 1) {
+        // Chaque carte fait ~92px (80 hex + 12 gap). On laisse 2 cartes précédentes visibles.
+        scrollRef.current.scrollLeft = Math.max(0, (firstActiveIdx - 2) * 92)
+      } else {
+        scrollRef.current.scrollLeft = 0
       }
     }
   }, [loading, courses])

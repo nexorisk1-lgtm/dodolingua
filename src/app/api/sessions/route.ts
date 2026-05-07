@@ -138,23 +138,13 @@ export async function POST(req: NextRequest) {
 
   // 3. Pool de distracteurs (autres concepts du même niveau, pour QCM et Cloze)
   // On prend ~20 concepts random du même niveau pour avoir des distracteurs variés
-  // v3.24.3 — Pool distracteurs VRAIMENT random : tous niveaux confondus, shuffle JS robuste
-  // Avant v3.24.2 : .limit(50) sans ORDER BY → Postgres retournait toujours les 50 mêmes (dont 'appartement')
-  // v3.24.2 : range aléatoire mais sans ORDER BY → toujours pas garanti
-  // v3.24.3 : on prend 1000 concepts tous niveaux, shuffle JS, garde 50 → vraiment aléatoire à chaque session
-  const { data: poolRaw } = await supabase
-    .from('concepts')
-    .select('id, gloss_fr')
-    .in('cefr_min', ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
-    .not('gloss_fr', 'is', null)
-    .limit(1000)
-  const pool = shuffle(poolRaw || []).slice(0, 50)
+  // v3.24.4 — Pool distracteurs via RPC SQL ORDER BY random() (vraiment aléatoire)
+  // Avant : limit(1000) sans ORDER BY = toujours les 1000 premiers (apartment apparaissait dans 50/1000 = 5% des sessions)
+  // Après : ORDER BY random() côté Postgres = vraiment 50 mots tirés au hasard parmi 11000+
+  const { data: pool } = await supabase.rpc('get_random_concepts', { p_count: 50 })
 
-  const { data: poolTr } = await supabase
-    .from('translations')
-    .select('concept_id, lemma')
-    .eq('lang_code', lang_code)
-    .in('concept_id', (pool || []).map((p: any) => p.id))
+  // v3.24.4 — Lemmas pour distracteurs Cloze : RPC random aussi (50 mots aléatoires)
+  const { data: poolTr } = await supabase.rpc('get_random_lemmas', { p_count: 50, p_lang: lang_code })
 
   const poolGlossFr = (pool || []).map((p: any) => p.gloss_fr).filter(Boolean) as string[]
   const poolLemmas = (poolTr || []).map((p: any) => p.lemma).filter(Boolean) as string[]

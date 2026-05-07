@@ -41,8 +41,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       derivedButton = body.qcm_correct ? 'savais' : 'pas_su'
     } else if (phase === 'cloze') {
       derivedButton = body.cloze_correct ? 'savais' : 'pas_su'
+    } else if (phase === 'pronunciation') {
+      // v3.24.4 — La prononciation réussie (>=70) donne aussi consec_correct +1
+      // Si l'utilisateur n'a pas accès au micro ou que le score est bas, ne pénalise pas
+      // (pas de grade 'pas_su' pour pronunciation, juste l'absence de bump si <70)
+      const pronScore = typeof body.pronunciation_score === 'number' ? body.pronunciation_score : null
+      if (pronScore !== null && pronScore >= 70) {
+        derivedButton = 'savais'
+      }
     }
-    // discovery, pronunciation : pas de grade FSRS, on enregistre juste la complétion
+    // discovery : pas de grade FSRS, on enregistre juste la complétion
 
     // Si on a un grade dérivé, applique FSRS
     if (derivedButton) {
