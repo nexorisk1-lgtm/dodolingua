@@ -226,11 +226,11 @@ function QuizInner() {
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
               <div className="text-sm font-bold text-emerald-700">🎓 Tu passes en {result?.newLevel}</div>
               {result?.certificateUrl && (
-                <Link href={result.certificateUrl}>
+                <a href={result.certificateUrl} target="_blank" rel="noopener noreferrer">
                   <span className="mt-3 inline-block px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold cursor-pointer">
-                    📜 Voir mon certificat {level}
+                    🎓 Télécharger mon diplôme {level}
                   </span>
-                </Link>
+                </a>
               )}
             </div>
           ) : passed ? (

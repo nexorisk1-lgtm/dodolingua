@@ -7,6 +7,7 @@ import { tierMeta } from '@/lib/leagues'
 import { VoicePicker } from '@/components/profile/VoicePicker'
 import { CefrEvalCard } from '@/components/profile/CefrEvalCard'
 import { PreferencesEditor } from '@/components/profile/PreferencesEditor'
+import { DiplomesCard } from '@/components/profile/DiplomesCard'
 import { cefrFull } from '@/lib/cefr_labels'
 
 export default async function ProfilePage() {
@@ -44,6 +45,8 @@ export default async function ProfilePage() {
           </Link>
         )}
       </Card>
+
+      <DiplomesCard />
 
       <Card>
         <div className="flex items-center justify-between mb-3">
