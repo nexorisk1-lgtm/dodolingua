@@ -50,15 +50,19 @@ export async function POST(req: NextRequest) {
   let concepts: { id: string; image_url: string | null; image_alt?: string | null; gloss_fr?: string | null; cefr_min?: string }[] = []
 
   // v3.22 — Si course_id fourni : pioche les 5 mots du cours
+  // v3.24.6 — IMPORTANT : on filtre par translations!inner pour aligner avec /api/courses
+  // Sinon, certains concepts sans traduction en-GB sont dans la session mais pas dans le calcul d'étoiles
+  // → décalage du découpage → mots qui se répètent (ex: 'apartment' apparaît dans plusieurs leçons)
   if (courseId && /^[A-C][12]-\d+$/.test(courseId)) {
     const [level, numStr] = courseId.split('-')
     const courseNum = parseInt(numStr, 10)
     const offset = (courseNum - 1) * 5
     const { data: courseConcepts } = await supabase
       .from('concepts')
-      .select('id, image_url, image_alt, gloss_fr, cefr_min')
+      .select('id, image_url, image_alt, gloss_fr, cefr_min, translations!inner(lemma)')
       .eq('cefr_min', level)
       .eq('enrichment_status', 'enriched')
+      .eq('translations.lang_code', 'en-GB')
       .order('frequency_rank', { ascending: true, nullsFirst: false })
       .range(offset, offset + 4)
     if (courseConcepts && courseConcepts.length > 0) {
