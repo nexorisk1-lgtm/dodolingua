@@ -146,14 +146,23 @@ export async function GET(req: NextRequest) {
       const seen = slice.filter(c => seenSet.has(c.id)).length
       const total = slice.length
 
-      // v3.24.3 — Étoiles plus intuitives : 4★ dès qu'on a réussi tous les mots 1 fois (fragile OU mastered)
-      // Avant : 4★ exigeait consec_correct >= 2 (mastery FSRS = 2 sessions). Trop frustrant pour l'utilisateur.
-      // Maintenant : 1 session 100% = 4★. Le système FSRS continue de gérer la révision en arrière-plan.
+      // v3.24.5 — Barème étoiles basé sur SCORE de bonnes réponses (Option 1, 4 étoiles)
+      // Pattern standard mobile games (Candy Crush, Mario...) : étoile = qualité, pas quantité.
+      //   < 50% : 0★ (à refaire)
+      //   ≥ 50% : 1★
+      //   ≥ 70% : 2★
+      //   ≥ 85% : 3★
+      //   = 100% : 4★ (sans-faute)
+      // Le système FSRS continue de gérer la révision en arrière-plan (consec_correct = 2 ne donne plus d'étoile bonus).
+      const successCount = mastered + fragile  // mots avec au moins 1 réussite
+      const scorePct = total > 0 ? (successCount / total) * 100 : 0
       let stars = 0
-      if (seen > 0) stars = 1
-      if (seen === total) stars = 2
-      if ((mastered + fragile) >= Math.ceil(total / 2)) stars = 3
-      if ((mastered + fragile) === total) stars = 4
+      if (scorePct >= 50) stars = 1
+      if (scorePct >= 70) stars = 2
+      if (scorePct >= 85) stars = 3
+      if (scorePct === 100) stars = 4
+      // Au moins 1 étoile si la leçon a été démarrée (au moins 1 mot vu, même si pas réussi)
+      if (stars === 0 && seen > 0) stars = 1
 
       const prevHasStar = courses.length === 0
         || (courses[courses.length - 1].stars > 0)
@@ -185,6 +194,10 @@ export async function GET(req: NextRequest) {
       const isMastered = grammarMastered.has(tid)
       const isFragile = grammarFragile.has(tid)
       const isSeen = grammarSeen.has(tid)
+      // v3.24.5 — Étoiles grammaire : 1 topic = 1 unité, donc score = soit 0% soit 100%
+      // (un topic est soit "réussi" = consec >= 1, soit "non commencé"). Pour granularité, on utilise les flags.
+      // Reste cohérent: 1★ = vu, 2★ = au moins 1 réussite, 4★ = mastered (consec >=2 = vraie maîtrise).
+      // Pour grammaire : 4★ = il a refait au moins 2 fois sans erreur. Sinon max 2★.
       let gStars = 0
       if (isSeen) gStars = 1
       if (isFragile || isMastered) gStars = 2

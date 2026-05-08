@@ -299,10 +299,12 @@ export default function SessionRunner() {
 
     let dodoMessage = ''
     let dodoTip = ''
-    let estimatedStars = 1  // au moins 1 puisque la session est complétée
-    if (ratio >= 0.9) estimatedStars = 4
-    else if (ratio >= 0.7) estimatedStars = 3
-    else if (ratio >= 0.4) estimatedStars = 2
+    // v3.24.5 — Barème aligné sur /api/courses : score-based
+    let estimatedStars = 0
+    if (ratio >= 0.5) estimatedStars = 1
+    if (ratio >= 0.7) estimatedStars = 2
+    if (ratio >= 0.85) estimatedStars = 3
+    if (ratio === 1) estimatedStars = 4
     // v3.24.2 — Affiche les étoiles réelles BDD si dispo (sinon estimation)
     const displayStars = realStars !== null ? realStars : estimatedStars
     const remaining = 4 - displayStars
