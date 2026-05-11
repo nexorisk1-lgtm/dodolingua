@@ -1,9 +1,8 @@
 /**
- * v3.28.0 — BookReader v3 : karaoké + STOP audio + traduction ligne par ligne
- * - Web Speech API avec onboundary → surbrillance mot par mot pendant lecture
- * - Bouton ⏹️ STOP pour arrêter l'audio
- * - Traduction par paragraphe (chaque paragraphe a sa traduction sous lui)
- * - 2 paragraphes par page
+ * v3.29.0 — BookReader v4 : traduction phrase par phrase
+ * - Chaque phrase a son petit bouton +/− individuel
+ * - Karaoké mot par mot pendant l'audio
+ * - Bouton ⏹️ STOP audio
  * - Exercices interactifs à la fin
  */
 'use client'
@@ -30,24 +29,20 @@ interface Book {
   estimated_minutes: number | null
 }
 
-interface Progress {
-  status: string
-  progress_pct: number
-  last_page: number
-  saved_words: any[]
-}
-
-interface Props {
-  book: Book
-  initialProgress: Progress | null
-}
+interface Progress { status: string; progress_pct: number; last_page: number; saved_words: any[] }
+interface Props { book: Book; initialProgress: Progress | null }
 
 function chunkPages(content: string[], perPage = 2): string[][] {
   const pages: string[][] = []
-  for (let i = 0; i < content.length; i += perPage) {
-    pages.push(content.slice(i, i + perPage))
-  }
+  for (let i = 0; i < content.length; i += perPage) pages.push(content.slice(i, i + perPage))
   return pages
+}
+
+// Split d'un paragraphe en phrases (en préservant la ponctuation)
+function splitSentences(text: string): string[] {
+  // Split sur . ! ? suivis d'espace + majuscule, ou newline
+  const parts = text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(s => s)
+  return parts.length > 0 ? parts : [text]
 }
 
 export function BookReader({ book, initialProgress }: Props) {
@@ -59,14 +54,14 @@ export function BookReader({ book, initialProgress }: Props) {
   const [savedWords, setSavedWords] = useState<any[]>(initialProgress?.saved_words || [])
   const [translation, setTranslation] = useState<{ word: string; fr: string | null; loading: boolean; context: string } | null>(null)
   const [showVocab, setShowVocab] = useState(false)
-  // Traduction par paragraphe (key = "pageIdx-paraIdx")
-  const [paraTranslations, setParaTranslations] = useState<Record<string, string>>({})
-  const [showParaTrans, setShowParaTrans] = useState<Record<number, boolean>>({})
-  // Audio state
+  // Traduction par PHRASE (key = "pageIdx-paraIdx-sentIdx")
+  const [sentenceTrans, setSentenceTrans] = useState<Record<string, string>>({})
+  const [openSentences, setOpenSentences] = useState<Record<string, boolean>>({})
+  // Audio
   const [isPlaying, setIsPlaying] = useState(false)
   const [highlightPos, setHighlightPos] = useState<{ paraIdx: number; charStart: number; charEnd: number } | null>(null)
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
-  // Réponses exercices
+  // Exercices
   const [revealedAnswers, setRevealedAnswers] = useState<Record<number, boolean>>({})
   const [clozeAnswers, setClozeAnswers] = useState<Record<number, string>>({})
   const [clozeChecked, setClozeChecked] = useState(false)
@@ -74,33 +69,25 @@ export function BookReader({ book, initialProgress }: Props) {
   const currentType = pages[page]
   const progressPct = Math.round((page / (totalPages - 1)) * 100)
 
-  // Save progress
   const saveProgress = useCallback(async (pageNum: number, status: 'reading' | 'completed' = 'reading') => {
     const pct = Math.round((pageNum / (totalPages - 1)) * 100)
     try {
       await fetch('/api/library/progress', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: book.id, status, progress_pct: pct, last_page: pageNum, saved_words: savedWords }),
       })
-    } catch (e) { console.error(e) }
+    } catch {}
   }, [book.id, savedWords, totalPages])
 
   useEffect(() => {
     if (page > 0) saveProgress(page, page === totalPages - 1 ? 'completed' : 'reading')
-    // Stop audio when changing page
     stopAudio()
   }, [page, saveProgress, totalPages])
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => { stopAudio() }
-  }, [])
+  useEffect(() => { return () => { stopAudio() } }, [])
 
   const stopAudio = () => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel()
     utterRef.current = null
     setIsPlaying(false)
     setHighlightPos(null)
@@ -109,7 +96,6 @@ export function BookReader({ book, initialProgress }: Props) {
   const goPrev = () => setPage(p => Math.max(0, p - 1))
   const goNext = () => setPage(p => Math.min(totalPages - 1, p + 1))
 
-  // Swipe
   const touchStart = useRef<number | null>(null)
   const onTouchStart = (e: React.TouchEvent) => { touchStart.current = e.touches[0].clientX }
   const onTouchEnd = (e: React.TouchEvent) => {
@@ -119,7 +105,6 @@ export function BookReader({ book, initialProgress }: Props) {
     touchStart.current = null
   }
 
-  // Tap sur un mot → traduction
   const handleWordClick = async (word: string, context: string) => {
     const clean = word.replace(/[^a-zA-ZÀ-ÿ'-]/g, '').trim()
     if (!clean) return
@@ -141,38 +126,28 @@ export function BookReader({ book, initialProgress }: Props) {
     setTranslation(null)
   }
 
-  // Traduction d'un paragraphe (ligne par ligne)
-  const translateParagraph = async (pageIdx: number, paraIdx: number, text: string) => {
-    const key = `${pageIdx}-${paraIdx}`
-    if (paraTranslations[key]) return  // déjà fait
-    setParaTranslations(prev => ({ ...prev, [key]: '⏳' }))
-    try {
-      const res = await fetch('/api/translate-sentence', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sentence: text.slice(0, 280) }),
-      })
-      const data = await res.json()
-      setParaTranslations(prev => ({ ...prev, [key]: data.fr || 'N/A' }))
-    } catch {
-      setParaTranslations(prev => ({ ...prev, [key]: 'Erreur' }))
+  // Toggle traduction d'une phrase
+  const toggleSentence = async (key: string, text: string) => {
+    const isOpen = openSentences[key]
+    setOpenSentences(prev => ({ ...prev, [key]: !isOpen }))
+    // Si on ouvre et qu'on n'a pas encore la traduction, fetch
+    if (!isOpen && !sentenceTrans[key]) {
+      setSentenceTrans(prev => ({ ...prev, [key]: '⏳' }))
+      try {
+        const res = await fetch('/api/translate-sentence', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sentence: text.slice(0, 280) }),
+        })
+        const data = await res.json()
+        setSentenceTrans(prev => ({ ...prev, [key]: data.fr || 'N/A' }))
+      } catch {
+        setSentenceTrans(prev => ({ ...prev, [key]: 'Erreur' }))
+      }
     }
   }
 
-  // Toggle traduction d'une page (traduit tous les paragraphes de la page)
-  const togglePageTranslation = (pageIdx: number) => {
-    const newState = !showParaTrans[pageIdx]
-    setShowParaTrans(prev => ({ ...prev, [pageIdx]: newState }))
-    if (newState) {
-      // Lancer la traduction de chaque paragraphe
-      const paras = contentPages[pageIdx] || []
-      paras.forEach((para, i) => {
-        translateParagraph(pageIdx, i, para)
-      })
-    }
-  }
-
-  // TTS Web Speech avec karaoké (surbrillance mot par mot)
-  const speakParagraph = (text: string, paraIdx: number, speed = 1) => {
+  // TTS Web Speech avec karaoké
+  const speakText = (text: string, paraIdx: number, speed = 1) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
     stopAudio()
     setIsPlaying(true)
@@ -181,7 +156,6 @@ export function BookReader({ book, initialProgress }: Props) {
     utter.rate = speed
     utter.onboundary = (event: any) => {
       if (event.name === 'word' || event.charIndex !== undefined) {
-        // Détecter la longueur du mot courant
         const start = event.charIndex
         const remaining = text.slice(start)
         const match = remaining.match(/^\S+/)
@@ -189,45 +163,39 @@ export function BookReader({ book, initialProgress }: Props) {
         setHighlightPos({ paraIdx, charStart: start, charEnd: end })
       }
     }
-    utter.onend = () => {
-      setIsPlaying(false)
-      setHighlightPos(null)
-      utterRef.current = null
-    }
-    utter.onerror = () => {
-      setIsPlaying(false)
-      setHighlightPos(null)
-      utterRef.current = null
-    }
+    utter.onend = () => { setIsPlaying(false); setHighlightPos(null); utterRef.current = null }
+    utter.onerror = () => { setIsPlaying(false); setHighlightPos(null); utterRef.current = null }
     utterRef.current = utter
     window.speechSynthesis.speak(utter)
   }
 
-  // Rendu d'un paragraphe avec mots cliquables + highlight karaoké
-  const renderParagraph = (text: string, paraIdx: number) => {
-    // Si highlight actif sur ce paragraphe : surligner le mot courant
+  // Rendre une phrase avec mots cliquables + karaoké
+  const renderSentence = (text: string, paraIdx: number, charOffset: number) => {
     if (highlightPos && highlightPos.paraIdx === paraIdx) {
-      const { charStart, charEnd } = highlightPos
-      const before = text.slice(0, charStart)
-      const word = text.slice(charStart, charEnd)
-      const after = text.slice(charEnd)
-      return (
-        <>
-          {renderClickableText(before, text)}
-          <span className="bg-yellow-300 rounded px-1 transition-colors">{word}</span>
-          {renderClickableText(after, text)}
-        </>
-      )
+      const localStart = highlightPos.charStart - charOffset
+      const localEnd = highlightPos.charEnd - charOffset
+      if (localStart >= 0 && localStart < text.length) {
+        const before = text.slice(0, localStart)
+        const word = text.slice(localStart, Math.min(localEnd, text.length))
+        const after = text.slice(Math.min(localEnd, text.length))
+        return (
+          <>
+            {renderClickable(before, text)}
+            <span className="bg-yellow-300 rounded px-1 transition-colors">{word}</span>
+            {renderClickable(after, text)}
+          </>
+        )
+      }
     }
-    return renderClickableText(text, text)
+    return renderClickable(text, text)
   }
 
-  const renderClickableText = (text: string, fullContext: string) => {
+  const renderClickable = (text: string, context: string) => {
     const parts = text.split(/(\s+)/)
     return parts.map((part, i) => {
       if (/^\s+$/.test(part)) return <span key={i}>{part}</span>
       return (
-        <span key={i} onClick={() => handleWordClick(part, fullContext)}
+        <span key={i} onClick={() => handleWordClick(part, context)}
           className="cursor-pointer hover:bg-yellow-100 active:bg-yellow-200 transition-colors rounded">
           {part}
         </span>
@@ -238,7 +206,6 @@ export function BookReader({ book, initialProgress }: Props) {
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-amber-50 to-orange-50 flex flex-col z-50"
          onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      {/* Header */}
       <header className="bg-white/90 backdrop-blur border-b border-amber-200 px-4 py-3 flex items-center gap-3">
         <Link href="/bibliotheque" onClick={stopAudio} className="text-2xl text-primary-700 hover:text-primary-900">←</Link>
         <div className="flex-1 min-w-0">
@@ -247,7 +214,6 @@ export function BookReader({ book, initialProgress }: Props) {
         </div>
         <div className="text-xs text-gray-500">{page + 1}/{totalPages}</div>
       </header>
-
       <div className="h-1 bg-amber-100">
         <div className="h-full bg-amber-500 transition-all" style={{ width: `${progressPct}%` }} />
       </div>
@@ -264,7 +230,7 @@ export function BookReader({ book, initialProgress }: Props) {
               <h1 className="text-3xl font-extrabold text-primary-900 mb-2">{book.title}</h1>
               <div className="text-sm text-gray-600 mb-4">{book.level} · {book.estimated_minutes} min · {book.word_count} mots</div>
               {!isPlaying ? (
-                <button onClick={() => speakParagraph(book.title, -1, 0.9)}
+                <button onClick={() => speakText(book.title, -1, 0.9)}
                   className="mb-3 px-4 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm font-bold hover:bg-blue-200">
                   🔊 Écouter le titre
                 </button>
@@ -287,41 +253,61 @@ export function BookReader({ book, initialProgress }: Props) {
             </div>
           )}
 
-          {/* CONTENT */}
+          {/* CONTENT — phrase par phrase */}
           {currentType?.startsWith('content-') && (() => {
             const idx = parseInt(currentType.split('-')[1])
             const paras = contentPages[idx] || []
-            const showTrans = showParaTrans[idx]
             return (
               <div>
-                <div className="space-y-5">
-                  {paras.map((para, i) => {
-                    const transKey = `${idx}-${i}`
+                <div className="space-y-6">
+                  {paras.map((para, paraI) => {
+                    const sentences = splitSentences(para)
                     return (
-                      <div key={i}>
-                        <p className="text-lg leading-relaxed text-primary-900 whitespace-pre-line">
-                          {renderParagraph(para, i)}
-                        </p>
-                        {/* Traduction directement sous le paragraphe */}
-                        {showTrans && (
-                          <div className="mt-2 pl-3 border-l-2 border-amber-300 text-sm text-amber-800 italic whitespace-pre-line">
-                            {paraTranslations[transKey] || '⏳'}
-                          </div>
-                        )}
+                      <div key={paraI} className="space-y-2">
+                        {sentences.map((sent, sentI) => {
+                          const key = `${idx}-${paraI}-${sentI}`
+                          // Calcul offset char pour le karaoké
+                          const charOffset = sentences.slice(0, sentI).join(' ').length + (sentI > 0 ? 1 : 0)
+                          const isOpen = openSentences[key]
+                          return (
+                            <div key={sentI}>
+                              <div className="flex items-start gap-2">
+                                <p className="flex-1 text-lg leading-relaxed text-primary-900 whitespace-pre-line">
+                                  {renderSentence(sent, paraI, charOffset)}
+                                </p>
+                                <button
+                                  onClick={() => toggleSentence(key, sent)}
+                                  className={`shrink-0 mt-1.5 w-7 h-7 rounded-full flex items-center justify-center font-bold text-sm transition ${
+                                    isOpen ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                  }`}
+                                  title={isOpen ? 'Cacher traduction' : 'Voir traduction'}
+                                  aria-label={isOpen ? 'Cacher traduction' : 'Voir traduction'}
+                                >
+                                  {isOpen ? '−' : '+'}
+                                </button>
+                              </div>
+                              {isOpen && (
+                                <div className="mt-1 ml-3 pl-3 border-l-2 border-amber-300 text-sm text-amber-800 italic">
+                                  {sentenceTrans[key] || '⏳'}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )
                   })}
                 </div>
 
-                {/* Toolbar */}
+                {/* Toolbar audio sticky */}
                 <div className="mt-6 flex flex-wrap gap-2 justify-center sticky bottom-2 bg-white/80 backdrop-blur p-2 rounded-lg shadow-sm">
                   {!isPlaying ? (
                     <>
-                      <button onClick={() => speakParagraph(paras.join(' '), 0, 1)}
+                      <button onClick={() => speakText(paras.join(' '), 0, 1)}
                         className="px-3 py-2 bg-blue-500 text-white rounded-lg text-xs font-bold hover:bg-blue-600">
                         🔊 Écouter
                       </button>
-                      <button onClick={() => speakParagraph(paras.join(' '), 0, 0.6)}
+                      <button onClick={() => speakText(paras.join(' '), 0, 0.6)}
                         className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-200">
                         🐢 Lent
                       </button>
@@ -332,11 +318,10 @@ export function BookReader({ book, initialProgress }: Props) {
                       ⏹️ Stop
                     </button>
                   )}
-                  <button onClick={() => togglePageTranslation(idx)}
-                    className="px-3 py-2 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold hover:bg-amber-200">
-                    {showTrans ? '➖ Cacher FR' : '➕ Voir FR'}
-                  </button>
                 </div>
+                <p className="text-center text-[11px] text-gray-500 mt-2">
+                  💡 Clique sur <span className="inline-block w-4 h-4 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">+</span> à côté de chaque phrase pour voir sa traduction
+                </p>
               </div>
             )
           })()}
@@ -420,7 +405,7 @@ export function BookReader({ book, initialProgress }: Props) {
                   <div key={i} className="bg-white rounded-xl p-4 shadow border-l-4 border-blue-500">
                     <div className="text-lg text-primary-900 mb-2">{s}</div>
                     {!isPlaying ? (
-                      <button onClick={() => speakParagraph(s.replace(/["“”]/g, ''), -1, 0.9)}
+                      <button onClick={() => speakText(s.replace(/["“”]/g, ''), -1, 0.9)}
                         className="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-bold hover:bg-blue-600">
                         🔊 Écouter
                       </button>
@@ -465,22 +450,18 @@ export function BookReader({ book, initialProgress }: Props) {
         </div>
       </main>
 
-      {/* Footer navigation */}
       <footer className="bg-white/90 backdrop-blur border-t border-amber-200 px-4 py-3 flex items-center justify-between">
         <button onClick={goPrev} disabled={page === 0}
           className="px-4 py-2 rounded-lg bg-amber-100 text-amber-900 font-bold disabled:opacity-30 hover:bg-amber-200">
           ← Précédent
         </button>
-        <div className="text-xs text-gray-500">
-          {savedWords.length > 0 && `⭐ ${savedWords.length} mots`}
-        </div>
+        <div className="text-xs text-gray-500">{savedWords.length > 0 && `⭐ ${savedWords.length} mots`}</div>
         <button onClick={goNext} disabled={page === totalPages - 1}
           className="px-4 py-2 rounded-lg bg-amber-500 text-white font-bold disabled:opacity-30 hover:bg-amber-600">
           Suivant →
         </button>
       </footer>
 
-      {/* Popup vocab */}
       {showVocab && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={() => setShowVocab(false)}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -495,7 +476,6 @@ export function BookReader({ book, initialProgress }: Props) {
         </div>
       )}
 
-      {/* Popup traduction mot */}
       {translation && (
         <div className="fixed inset-0 bg-black/30 z-[60] flex items-end sm:items-center justify-center p-4" onClick={() => setTranslation(null)}>
           <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -514,7 +494,7 @@ export function BookReader({ book, initialProgress }: Props) {
             </div>
             {!translation.loading && translation.fr && (
               <div className="mt-3 flex gap-2">
-                <button onClick={() => speakParagraph(translation.word, -1, 0.9)}
+                <button onClick={() => speakText(translation.word, -1, 0.9)}
                   className="flex-1 py-2 bg-blue-100 text-blue-800 rounded-lg font-bold text-sm hover:bg-blue-200">
                   🔊 Écouter
                 </button>
