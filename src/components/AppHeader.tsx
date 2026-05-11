@@ -1,11 +1,10 @@
 'use client'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { Container } from '@/components/ui/Container'
 
 export function AppHeader() {
   const pathname = usePathname()
-  const router = useRouter()
   const isDashboard = pathname === '/dashboard'
 
   return (
@@ -13,13 +12,13 @@ export function AppHeader() {
       <Container className="flex items-center justify-between py-3 gap-3">
         <div className="flex items-center gap-2">
           {!isDashboard && (
-            <button
-              onClick={() => router.back()}
+            <Link
+              href={"/dashboard" as any}
               className="text-sm text-gray-600 hover:text-primary-700 px-2 py-1 rounded-md hover:bg-primary-50"
-              title="Retour"
+              title="Retour à l'accueil"
             >
               ← Retour
-            </button>
+            </Link>
           )}
           <Link href="/dashboard" className="font-extrabold text-primary-700 text-lg">
             DodoLingua

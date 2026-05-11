@@ -48,6 +48,10 @@ export async function POST(req: NextRequest) {
 
   // 1. Sélection des concepts
   let concepts: { id: string; image_url: string | null; image_alt?: string | null; gloss_fr?: string | null; cefr_min?: string }[] = []
+  // v3.31.2 — Si la session vient d'un cours (course_id), on ne padde JAMAIS avec
+  // des concepts hors-leçon. Cela évitait que des leçons à <5 concepts comme
+  // « Salutations 2/2 » (3 concepts) soient complétées par face/woman/etc.
+  let isCoursePinned = false
 
   // v3.22 — Si course_id fourni : pioche les 5 mots du cours
   // v3.24.6 — IMPORTANT : on filtre par translations!inner pour aligner avec /api/courses
@@ -72,6 +76,7 @@ export async function POST(req: NextRequest) {
         .order('frequency_rank', { ascending: true, nullsFirst: false })
       if (courseConcepts && courseConcepts.length > 0) {
         concepts = courseConcepts as any
+        isCoursePinned = true
       }
     } else if (oldFormatMatch) {
       const level = oldFormatMatch[1]
@@ -87,6 +92,7 @@ export async function POST(req: NextRequest) {
         .range(offset, offset + 4)
       if (courseConcepts && courseConcepts.length > 0) {
         concepts = courseConcepts as any
+        isCoursePinned = true
       }
     }
   }
@@ -97,7 +103,7 @@ export async function POST(req: NextRequest) {
     concepts = (data || []).flatMap((r: any) => r.concepts ? [r.concepts] : []).slice(0, wordCount)
   }
 
-  if (concepts.length < wordCount) {
+  if (!isCoursePinned && concepts.length < wordCount) {
     const { data: ulang } = await supabase
       .from('user_languages').select('cefr_global').eq('user_id', user.id)
       .eq('lang_code', lang_code).maybeSingle()
