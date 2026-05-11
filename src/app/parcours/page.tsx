@@ -32,6 +32,8 @@ export default function ParcoursPage() {
   const [stats, setStats] = useState<{ total_words: number; total_courses: number; completed_courses: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // v3.31.0 — Bulle d'aide système d'étoiles
+  const [showStarInfo, setShowStarInfo] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -100,6 +102,32 @@ export default function ParcoursPage() {
         <h1 className="text-2xl font-extrabold text-primary-900 text-center mb-2 drop-shadow">
           {cefrFull(level)}
         </h1>
+
+        {/* v3.31.0 — Bulle d'aide « Comment ça marche les étoiles ? » */}
+        <div className="text-center mb-3">
+          <button
+            type="button"
+            onClick={() => setShowStarInfo(v => !v)}
+            className="text-[11px] font-bold text-primary-700 bg-white/80 backdrop-blur px-3 py-1.5 rounded-full border border-rule shadow-sm hover:bg-white"
+          >
+            {showStarInfo ? '✕ Fermer' : '⭐ Comment gagner les étoiles ?'}
+          </button>
+          {showStarInfo && (
+            <div className="mt-2 mx-auto max-w-md bg-white/95 rounded-2xl p-4 text-left text-xs text-gray-800 shadow-lg border border-amber-200">
+              <div className="font-extrabold text-primary-900 mb-2 text-center">⭐ Barème — chaque leçon vaut 4 étoiles max</div>
+              <ul className="space-y-1.5">
+                <li>⭐ <b>1 étoile</b> : ≥ 50 % de bonnes réponses (ou tentée)</li>
+                <li>⭐⭐ <b>2 étoiles</b> : ≥ 70 % de bonnes réponses</li>
+                <li>⭐⭐⭐ <b>3 étoiles</b> : ≥ 85 %</li>
+                <li>⭐⭐⭐⭐ <b>4 étoiles</b> : 100 % — leçon maîtrisée ✓</li>
+              </ul>
+              <div className="mt-2 pt-2 border-t border-gray-200 text-[11px] text-gray-600">
+                💡 Une leçon se débloque dès que la précédente a au moins <b>1 étoile</b>. Tu peux refaire une leçon autant de fois que tu veux pour gagner plus d'étoiles.
+              </div>
+            </div>
+          )}
+        </div>
+
         {stats && stats.total_courses > 0 && (
           <div className="text-center text-sm text-primary-800 mb-6">
             {stats.completed_courses === stats.total_courses
