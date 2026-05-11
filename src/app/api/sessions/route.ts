@@ -53,20 +53,41 @@ export async function POST(req: NextRequest) {
   // v3.24.6 — IMPORTANT : on filtre par translations!inner pour aligner avec /api/courses
   // Sinon, certains concepts sans traduction en-GB sont dans la session mais pas dans le calcul d'étoiles
   // → décalage du découpage → mots qui se répètent (ex: 'apartment' apparaît dans plusieurs leçons)
-  if (courseId && /^[A-C][12]-\d+$/.test(courseId)) {
-    const [level, numStr] = courseId.split('-')
-    const courseNum = parseInt(numStr, 10)
-    const offset = (courseNum - 1) * 5
-    const { data: courseConcepts } = await supabase
-      .from('concepts')
-      .select('id, image_url, image_alt, gloss_fr, cefr_min, translations!inner(lemma)')
-      .eq('cefr_min', level)
-      .eq('enrichment_status', 'enriched')
-      .eq('translations.lang_code', 'en-GB')
-      .order('frequency_rank', { ascending: true, nullsFirst: false })
-      .range(offset, offset + 4)
-    if (courseConcepts && courseConcepts.length > 0) {
-      concepts = courseConcepts as any
+  // v3.31.0 — Support du nouveau format `${level}-${lesson_id}` (ex A1-A1_L002)
+  // ET de l'ancien format `${level}-${num}` (ex A1-1) pour compat ascendante
+  if (courseId) {
+    // Nouveau format thématique : A1-A1_L002, B2-B2_L135, etc.
+    const newFormatMatch = courseId.match(/^([A-C][12]\+?)-([A-Z][12]\+?_L\d+)$/)
+    // Ancien format ordinal : A1-1, B2-23
+    const oldFormatMatch = courseId.match(/^([A-C][12])-(\d+)$/)
+
+    if (newFormatMatch) {
+      const lessonIdParam = newFormatMatch[2]
+      const { data: courseConcepts } = await supabase
+        .from('concepts')
+        .select('id, image_url, image_alt, gloss_fr, cefr_min, frequency_rank, translations!inner(lemma)')
+        .eq('lesson_id', lessonIdParam)
+        .eq('enrichment_status', 'enriched')
+        .eq('translations.lang_code', 'en-GB')
+        .order('frequency_rank', { ascending: true, nullsFirst: false })
+      if (courseConcepts && courseConcepts.length > 0) {
+        concepts = courseConcepts as any
+      }
+    } else if (oldFormatMatch) {
+      const level = oldFormatMatch[1]
+      const courseNum = parseInt(oldFormatMatch[2], 10)
+      const offset = (courseNum - 1) * 5
+      const { data: courseConcepts } = await supabase
+        .from('concepts')
+        .select('id, image_url, image_alt, gloss_fr, cefr_min, translations!inner(lemma)')
+        .eq('cefr_min', level)
+        .eq('enrichment_status', 'enriched')
+        .eq('translations.lang_code', 'en-GB')
+        .order('frequency_rank', { ascending: true, nullsFirst: false })
+        .range(offset, offset + 4)
+      if (courseConcepts && courseConcepts.length > 0) {
+        concepts = courseConcepts as any
+      }
     }
   }
 

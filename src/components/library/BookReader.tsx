@@ -70,6 +70,8 @@ export function BookReader({ book, initialProgress }: Props) {
   const [recording, setRecording] = useState<{ idx: number } | null>(null)
   const [repeatScores, setRepeatScores] = useState<Record<number, { score: number; matched: string[]; missed: string[]; transcript: string }>>({})
   const recognitionRef = useRef<any>(null)
+  // v3.31.0 — Traduction FR auto des phrases speaking
+  const [speakingTrans, setSpeakingTrans] = useState<Record<number, string>>({})
   // Discussion IA
   const [discussionQuestions, setDiscussionQuestions] = useState<string[] | null>(null)
   const [discussionLoading, setDiscussionLoading] = useState(false)
@@ -97,6 +99,25 @@ export function BookReader({ book, initialProgress }: Props) {
   }, [page, saveProgress, totalPages])
 
   useEffect(() => { return () => { stopAudio(); stopRecording() } }, [])
+
+  // v3.31.0 — Prefetch traduction FR de toutes les phrases speaking
+  useEffect(() => {
+    if (currentType === 'speaking' && book.speaking.length > 0) {
+      book.speaking.forEach((s, i) => {
+        if (speakingTrans[i]) return
+        const clean = s.replace(/[\"\u201C\u201D]/g, '').slice(0, 280)
+        setSpeakingTrans(prev => ({ ...prev, [i]: '\u23F3' }))
+        fetch('/api/translate-sentence', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sentence: clean }),
+        })
+          .then(r => r.json())
+          .then(d => setSpeakingTrans(prev => ({ ...prev, [i]: d.fr || 'N/A' })))
+          .catch(() => setSpeakingTrans(prev => ({ ...prev, [i]: 'Erreur' })))
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentType, book.id])
 
   // Charger les questions IA quand on arrive sur la page discussion
   useEffect(() => {
@@ -522,7 +543,12 @@ export function BookReader({ book, initialProgress }: Props) {
                   const isRecording = recording?.idx === i
                   return (
                     <div key={i} className="bg-white rounded-xl p-4 shadow border-l-4 border-blue-500">
-                      <div className="text-lg text-primary-900 mb-2">{s}</div>
+                      <div className="text-lg text-primary-900 mb-1">{s}</div>
+                      {/* v3.31.0 — Traduction FR automatique */}
+                      <div className="text-sm text-blue-700 italic mb-2 min-h-[1.25rem]">
+                        {speakingTrans[i] === '⏳' ? <span className="text-gray-400">Traduction…</span> :
+                         speakingTrans[i] ? <>🇫🇷 {speakingTrans[i]}</> : null}
+                      </div>
                       <div className="flex gap-2 flex-wrap">
                         {!isPlaying && !isRecording ? (
                           <button onClick={() => speakText(sentence, -1, 0.9)}
