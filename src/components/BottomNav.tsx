@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 
 const TABS = [
   { href: '/dashboard', label: 'Accueil', icon: '🏠' },
-  { href: '/jeux',      label: 'Jeux',    icon: '🎮' },
+  { href: '/bibliotheque', label: 'Lecture', icon: '📚' },
   { href: '/coach',     label: 'Coach',   icon: '💬' },
   { href: '/ligue',     label: 'Ligue',   icon: '🏆' },
   { href: '/profile',   label: 'Profil',  icon: '👤' },
