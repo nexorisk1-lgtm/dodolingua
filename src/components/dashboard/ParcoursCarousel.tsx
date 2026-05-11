@@ -183,7 +183,7 @@ export function ParcoursCarousel({ level }: Props) {
                   ))}
                 </div>
                 <div className="text-[10px] font-bold text-primary-900 mt-0.5 whitespace-nowrap">
-                  {course.kind === 'checkpoint' ? 'Checkpoint' : course.kind === 'grammar' ? course.name : `Leçon ${course.number}`}
+                  {course.kind === 'checkpoint' ? `Checkpoint ${course.number}` : course.name}
                 </div>
               </div>
             )
