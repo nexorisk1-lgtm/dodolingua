@@ -76,7 +76,7 @@ export default function SessionRunner() {
       isReviewRef.current = isReview
 
       // v3.21 — Reprise : check localStorage pour session non terminée < 24h
-      const storageKey = `dodolingua-session-${isReview ? 'rev' : courseId ? `course-${courseId}` : 'learn'}-${typeFilter || 'def'}`
+      const storageKey = `dodolingua-session-v2-${isReview ? 'rev' : courseId ? `course-${courseId}` : 'learn'}-${typeFilter || 'def'}`  // v3.31.5
       if (!forceNew) {
         try {
           const saved = localStorage.getItem(storageKey)
@@ -143,7 +143,7 @@ export default function SessionRunner() {
       const isReview = search.get('mode') === 'revision'
       const typeFilter = search.get('type') || undefined
       const courseId = search.get('course') || undefined
-      const storageKey = `dodolingua-session-${isReview ? 'rev' : courseId ? `course-${courseId}` : 'learn'}-${typeFilter || 'def'}`
+      const storageKey = `dodolingua-session-v2-${isReview ? 'rev' : courseId ? `course-${courseId}` : 'learn'}-${typeFilter || 'def'}`  // v3.31.5
       localStorage.setItem(storageKey, JSON.stringify({
         sessionId, plan, words, corrections, idx, results,
         remediationActive, remediationCount, savedAt: Date.now(),
@@ -159,7 +159,7 @@ export default function SessionRunner() {
       const isReview = search.get('mode') === 'revision'
       const typeFilter = search.get('type') || undefined
       const courseId = search.get('course') || undefined
-      const storageKey = `dodolingua-session-${isReview ? 'rev' : courseId ? `course-${courseId}` : 'learn'}-${typeFilter || 'def'}`
+      const storageKey = `dodolingua-session-v2-${isReview ? 'rev' : courseId ? `course-${courseId}` : 'learn'}-${typeFilter || 'def'}`  // v3.31.5
       localStorage.removeItem(storageKey)
     } catch (e) {}
   }, [done])
