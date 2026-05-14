@@ -1,11 +1,11 @@
 'use client'
 import { useState, useMemo } from 'react'
 import type { GameProps } from './types'
-import { shuffle } from './utils'
+import { shuffle, speak } from './utils'
 
 interface Cell { id: string; type: 'word' | 'trans'; key: string; matched: boolean }
 
-export function MemoryPairsGame({ words, onResult, onComplete }: GameProps) {
+export function MemoryPairsGame({ words, voiceName, onResult, onComplete }: GameProps) {
   const pairs = useMemo(() => words.slice(0, 6), [words])
   const initial = useMemo(() => shuffle<Cell>(pairs.flatMap(w => [
     { id: `${w.id}-w`, type: 'word', key: w.id, matched: false },
@@ -53,13 +53,28 @@ export function MemoryPairsGame({ words, onResult, onComplete }: GameProps) {
           const w = findWord(c.key)!
           const visible = c.matched || picked.includes(c.id)
           return (
-            <button key={c.id} onClick={() => flip(c.id)}
-              className={`aspect-square rounded-xl border-2 flex items-center justify-center text-center text-sm font-semibold p-2 ${
+            <button key={c.id} onClick={() => {
+                flip(c.id)
+                // v5 — auto-lecture du mot EN quand on retourne une carte "word"
+                if (!c.matched && !picked.includes(c.id) && c.type === 'word') {
+                  speak(w.lemma, voiceName)
+                }
+              }}
+              className={`relative aspect-square rounded-xl border-2 flex items-center justify-center text-center text-sm font-semibold p-2 ${
                 c.matched ? 'border-ok bg-green-50 text-ok' :
                 visible ? 'border-primary-500 bg-primary-50 text-primary-900' :
                 'border-rule bg-white text-transparent select-none'
               }`}>
               {visible ? (c.type === 'word' ? w.lemma : (w.translation || w.lemma)) : '★'}
+              {/* v5 — Bouton 🔊 sur cartes retournées contenant le mot EN */}
+              {visible && c.type === 'word' && !c.matched && (
+                <span
+                  role="button"
+                  onClick={(e) => { e.stopPropagation(); speak(w.lemma, voiceName) }}
+                  className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-[10px] flex items-center justify-center hover:bg-primary-200"
+                  aria-label={`Écouter ${w.lemma}`}
+                >🔊</span>
+              )}
             </button>
           )
         })}

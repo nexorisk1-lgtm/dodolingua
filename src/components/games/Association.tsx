@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import type { GameProps, GameWord } from './types'
-import { shuffle } from './utils'
+import { shuffle, speak } from './utils'
 import { ConceptImage } from '@/components/ConceptImage'
 
 /**
@@ -11,7 +11,7 @@ import { ConceptImage } from '@/components/ConceptImage'
  * v1.3 — Feedback visuel rouge sur mauvaise association (500ms),
  * puis désélection automatique. Vert maintenu sur paires validées.
  */
-export function AssociationGame({ words: all, onResult, onComplete }: GameProps) {
+export function AssociationGame({ words: all, voiceName, onResult, onComplete }: GameProps) {
   const words = all.filter(w => !!w.image_url)
   const pairs = useMemo(() => shuffle(words.slice(0, 6)), [words])
   const imagesShuffled = useMemo(() => shuffle(pairs), [pairs])
@@ -55,17 +55,27 @@ export function AssociationGame({ words: all, onResult, onComplete }: GameProps)
           {pairs.map(w => {
             const isWrongFlashed = wrongFlash?.wordId === w.id
             return (
-              <button key={w.id}
-                disabled={matched[w.id] || !!wrongFlash}
-                onClick={() => setSelectedWord(w.id)}
-                className={`w-full p-3 rounded-xl border-2 text-left font-semibold transition-colors ${
-                  matched[w.id] ? 'border-ok bg-green-50 text-ok line-through' :
-                  isWrongFlashed ? 'border-warn bg-red-100 text-warn' :
-                  selectedWord === w.id ? 'border-primary-500 bg-primary-50' :
-                  'border-rule bg-white'
-                }`}>
-                {w.lemma}
-              </button>
+              <div key={w.id} className="flex items-center gap-1">
+                <button
+                  disabled={matched[w.id] || !!wrongFlash}
+                  onClick={() => setSelectedWord(w.id)}
+                  className={`flex-1 p-3 rounded-xl border-2 text-left font-semibold transition-colors ${
+                    matched[w.id] ? 'border-ok bg-green-50 text-ok line-through' :
+                    isWrongFlashed ? 'border-warn bg-red-100 text-warn' :
+                    selectedWord === w.id ? 'border-primary-500 bg-primary-50' :
+                    'border-rule bg-white'
+                  }`}>
+                  {w.lemma}
+                </button>
+                {/* v5 — Haut-parleur sur chaque mot (accessibilité speaking-only) */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); speak(w.lemma, voiceName) }}
+                  aria-label={`Écouter ${w.lemma}`}
+                  className="shrink-0 w-8 h-8 rounded-full bg-primary-50 text-primary-700 text-sm hover:bg-primary-100"
+                >
+                  🔊
+                </button>
+              </div>
             )
           })}
         </div>

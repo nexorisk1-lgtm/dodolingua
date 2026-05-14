@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import type { GameProps } from './types'
-import { shuffle, pickDistractors } from './utils'
+import { shuffle, pickDistractors, speak } from './utils'
 
 // v1.3 — Feedback visuel : vert pour bonne réponse, rouge pour mauvaise,
 // avec un délai de 500ms avant de passer à la question suivante.
-export function SpeedRoundGame({ words, onResult, onComplete }: GameProps) {
+// v5 — Haut-parleur sur le mot affiché (accessibilité speaking-only).
+export function SpeedRoundGame({ words, voiceName, onResult, onComplete }: GameProps) {
   const [time, setTime] = useState(60)
   const [score, setScore] = useState(0)
   const [combo, setCombo] = useState(0)
@@ -64,6 +65,14 @@ export function SpeedRoundGame({ words, onResult, onComplete }: GameProps) {
       <div className="bg-white border border-rule rounded-2xl p-5 text-center">
         <div className="text-sm text-gray-500 mb-1">Sens de :</div>
         <div className="text-2xl font-extrabold text-primary-900">{w.lemma}</div>
+        {/* v5 — Haut-parleur sur le mot */}
+        <button
+          onClick={() => speak(w.lemma, voiceName)}
+          aria-label={`Écouter ${w.lemma}`}
+          className="mt-2 w-9 h-9 rounded-full bg-primary-50 text-primary-700 text-base hover:bg-primary-100"
+        >
+          🔊
+        </button>
       </div>
       <div className="space-y-2">
         {choices.map(c => {

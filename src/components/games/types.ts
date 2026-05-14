@@ -7,6 +7,8 @@ export interface GameWord {
   image_alt?: string | null
   translation?: string | null
   example?: string | null
+  /** v5 — Traduction française de la phrase exemple (utilisée par SentenceBuilder "Mise en contexte"). */
+  example_fr?: string | null
 }
 
 export interface GameResult {
@@ -21,6 +23,8 @@ export interface GameProps {
   voiceName?: string | null
   onResult: (result: GameResult) => void
   onComplete?: (results: GameResult[]) => void
+  /** v5 — Callback pour mise en pause de la session ("Continuer plus tard"). */
+  onPause?: (results: GameResult[]) => void
 }
 
 export const GAME_LIST = [
