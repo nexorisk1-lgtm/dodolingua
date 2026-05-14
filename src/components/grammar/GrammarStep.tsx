@@ -358,28 +358,12 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
     <div className="space-y-4">
       <StepHeader icon="✏️" label="Pratique" />
 
-      {/* v5.13 — Bloc question : 🔊 lit la QUESTION (pas la solution) pour ne pas spoiler */}
+      {/* v5.14 — Bloc question SANS 🔊 sur mcq/fill_blank
+         (avant : "I blank French" était lu littéralement, peu utile et confus)
+         Le 🔊 reste sur "Bonne réponse" (phrase complète) pour entendre la solution.
+         Pour reorder/translate : pas de 🔊 non plus (mots scramblés / texte FR à traduire) */}
       <div className="bg-white border border-rule rounded-xl p-4 space-y-2">
-        <div className="flex items-start gap-2">
-          <div className="flex-1 text-lg font-semibold text-primary-900">{c.question}</div>
-          {/* Le 🔊 sur la question doit lire la phrase TELLE QU'AFFICHÉE (avec ___ ou /) :
-             - mcq/fill_blank avec ___ : on lit la phrase en remplaçant ___ par "blanc"
-             - reorder : on saute (mots scramblés, n'a pas de sens)
-             - translate : la voix dépend de la langue de la question */}
-          {c.exercise_type === 'mcq' && (
-            <SpeakerBtn
-              text={(c.question || '').replace(/___/g, 'blank')}
-              voiceName={voiceName}
-            />
-          )}
-          {c.exercise_type === 'fill_blank' && (
-            <SpeakerBtn
-              text={(c.question || '').replace(/___/g, 'blank')}
-              voiceName={voiceName}
-            />
-          )}
-          {/* Pour translate : pas de 🔊 sur la question (texte FR à traduire) */}
-        </div>
+        <div className="text-lg font-semibold text-primary-900">{c.question}</div>
         {c.question_fr && (
           <div className="text-sm italic text-gray-600">→ {c.question_fr}</div>
         )}

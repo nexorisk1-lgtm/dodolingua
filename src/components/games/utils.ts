@@ -88,7 +88,13 @@ export function speak(text: string, voiceName?: string | null, optsOrRate: Speak
     : optsOrRate
 
   window.speechSynthesis.cancel()
-  const u = new SpeechSynthesisUtterance(text)
+  // v5.14 — Fix "capital I" sur les chips EN isolées (ex: bouton 🔊 sur "I" tout seul)
+  // Daniel/macOS épelle "I" comme une lettre. On étoffe en "I am" pour forcer le mode mot.
+  let textToSpeak = text
+  if (!opts.lang || opts.lang.startsWith('en')) {
+    if (/^I[.,!?;:]?$/.test(textToSpeak.trim())) textToSpeak = 'I am'
+  }
+  const u = new SpeechSynthesisUtterance(textToSpeak)
 
   // v5.5 — Si opts.lang est fourni (ex: 'fr-FR'), on prend une voix de cette langue
   // au lieu de la voix utilisateur par défaut. Permet de lire les textes français
@@ -145,7 +151,22 @@ function getBestFrVoice(): SpeechSynthesisVoice | null {
   return voices.find(x => x.lang === 'fr-FR') || voices.find(x => x.lang.startsWith('fr')) || null
 }
 
-/** Parse un texte mixte FR/EN : tokens entre **xxx** ou 'xxx' = EN, reste = FR */
+// v5.14 — Mots FR courants qui peuvent apparaître entre ** sans être de l'anglais
+// (ex: dans la leçon pronoms : "**je**, **tu**, **il**" sont du français mis en valeur)
+// Avant v5.14, parseMixedText les lisait avec la voix anglaise → Daniel disait "Tu" en anglais.
+const FR_WORDS = new Set([
+  'je', 'tu', 'il', 'elle', 'on', 'nous', 'vous', 'ils', 'elles',
+  'ce', 'cela', 'ça', 'cet', 'cette', 'ces',
+  'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses',
+  'notre', 'nos', 'votre', 'vos', 'leur', 'leurs',
+  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de',
+  'et', 'ou', 'mais', 'donc', 'car', 'si', 'que', 'qui',
+  'oui', 'non',
+  'pronoms', 'sujets', 'sujet', 'verbe', 'phrase',
+])
+
+/** Parse un texte mixte FR/EN : tokens entre **xxx** = EN par défaut,
+ *  sauf si tous les mots du token sont FR (blacklist ou présence d'accents). */
 function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'): MixedSegment[] {
   const segments: MixedSegment[] = []
   // v5.8 — Uniquement **xxx** pour marquer les mots EN.
@@ -165,7 +186,17 @@ function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'):
     // v5.7 — Pour une LISTE 'am / is / are' : on garde un SEUL segment EN avec virgules
     // (les virgules créent des pauses naturelles dans la voix EN, plus clair que 3 utterances séparées)
     const cleaned = enWord.replace(/\s*\/\s*/g, ', ')
-    if (cleaned) segments.push({ text: cleaned, lang: otherLang })
+
+    // v5.14 — Détection FR : si tous les mots sont dans la blacklist FR
+    // ou contiennent des accents FR → on garde la voix primaire (FR)
+    const words = cleaned.split(/[\s,]+/).filter(Boolean)
+    const isFrToken = words.length > 0 && words.every(w =>
+      FR_WORDS.has(w.toLowerCase().replace(/[^a-zà-ÿ-]/gi, '')) ||
+      /[éèêëàâäîïôöùûüçÿœæ]/i.test(w)
+    )
+    const segLang = isFrToken ? primaryLang : otherLang
+
+    if (cleaned) segments.push({ text: cleaned, lang: segLang })
     lastIndex = match.index + match[0].length
   }
   if (lastIndex < text.length) {
@@ -227,6 +258,12 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
     // 5. Skip ponctuation isolée
     if (/^[.,!?;:\-]+$/.test(cleanText)) continue
     if (!cleanText) continue
+    // v5.14 — Fix "capital I" : Daniel/macOS lit "I" isolé comme "capital I"
+    // Solution : étoffer en "I am" pour forcer la voix à le considérer comme un mot.
+    // Compromis pédagogique : on entend la forme complète au présent, cohérent avec to be.
+    if (seg.lang === 'en-GB' && /^I[.,!?;:]?$/.test(cleanText)) {
+      cleanText = 'I am'
+    }
     const u = new SpeechSynthesisUtterance(cleanText)
     let v: SpeechSynthesisVoice | null = null
     if (seg.lang === 'en-GB') {
@@ -242,5 +279,5 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   }
 }
 
-/** v5.13 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
-export const TTS_VERSION = 'v5.13'
+/** v5.14 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
+export const TTS_VERSION = 'v5.14'
