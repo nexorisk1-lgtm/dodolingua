@@ -101,8 +101,8 @@ function SpeakerBtn({
   const hasMixed = /\*\*[^*]+\*\*|'[^']+'/.test(text)
   const handleClick = () => {
     if (hasMixed) {
-      // Détection des mots EN dans un texte FR : alterner les voix
-      speakMixed(text, lang === 'en-GB' ? 'en-GB' : 'fr-FR')
+      // Détection des mots EN dans un texte FR : alterner les voix (async)
+      void speakMixed(text, lang === 'en-GB' ? 'en-GB' : 'fr-FR')
     } else {
       speak(text, voiceName, { lang })
     }

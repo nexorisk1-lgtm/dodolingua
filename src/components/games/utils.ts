@@ -129,68 +129,76 @@ export function speak(text: string, voiceName?: string | null, optsOrRate: Speak
 
 interface MixedSegment { text: string; lang: 'en-GB' | 'fr-FR' }
 
+/** v5.7 — Trouve la meilleure voix française dispo */
+function getBestFrVoice(): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null
+  const voices = window.speechSynthesis.getVoices()
+  // Voix françaises premium macOS / Windows en priorité
+  const PREFERRED_FR = ['Thomas', 'Amélie', 'Audrey', 'Aurélie',
+    'Microsoft Henri Online (Natural) - French (France)',
+    'Microsoft Denise Online (Natural) - French (France)',
+    'Microsoft Julie - French (France)']
+  for (const name of PREFERRED_FR) {
+    const v = voices.find(x => x.name === name || x.name.includes(name))
+    if (v) return v
+  }
+  return voices.find(x => x.lang === 'fr-FR') || voices.find(x => x.lang.startsWith('fr')) || null
+}
+
 /** Parse un texte mixte FR/EN : tokens entre **xxx** ou 'xxx' = EN, reste = FR */
 function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'): MixedSegment[] {
   const segments: MixedSegment[] = []
-  // Pattern : capture **xxx** ou 'xxx' (mots EN dans texte FR)
   const pattern = /\*\*([^*]+)\*\*|'([^']+)'/g
   let lastIndex = 0
   let match: RegExpExecArray | null
   const otherLang = primaryLang === 'fr-FR' ? 'en-GB' : 'fr-FR'
 
   while ((match = pattern.exec(text)) !== null) {
-    // Texte avant le match (langue principale)
     if (match.index > lastIndex) {
       const part = text.slice(lastIndex, match.index).trim()
       if (part) segments.push({ text: part, lang: primaryLang })
     }
-    // Le mot anglais (sans les délimiteurs)
     const enWord = (match[1] || match[2] || '').trim()
-    // Si plusieurs mots séparés par "/" ou "," : on les sépare pour pauses
-    if (enWord.includes('/') || enWord.includes(',')) {
-      enWord.split(/[\/,]/).forEach(w => {
-        const t = w.trim()
-        if (t) segments.push({ text: t, lang: otherLang })
-      })
-    } else {
-      segments.push({ text: enWord, lang: otherLang })
-    }
+    // v5.7 — Pour une LISTE 'am / is / are' : on garde un SEUL segment EN avec virgules
+    // (les virgules créent des pauses naturelles dans la voix EN, plus clair que 3 utterances séparées)
+    const cleaned = enWord.replace(/\s*\/\s*/g, ', ')
+    if (cleaned) segments.push({ text: cleaned, lang: otherLang })
     lastIndex = match.index + match[0].length
   }
-  // Reste après le dernier match
   if (lastIndex < text.length) {
     const part = text.slice(lastIndex).trim()
     if (part) segments.push({ text: part, lang: primaryLang })
   }
-  // Si rien n'a matché : tout en langue principale
   if (segments.length === 0 && text.trim()) {
     segments.push({ text: text.trim(), lang: primaryLang })
   }
   return segments
 }
 
-/** v5.6 — Lit un texte mixte FR/EN en alternant les voix. */
-export function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR') {
+/** v5.7 — Lit un texte mixte FR/EN en alternant les voix.
+ *  - Async : attend que les voix soient chargées avant de commencer
+ *  - Sélection robuste de voix EN/FR (force une voix de la bonne langue) */
+export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'): Promise<void> {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
+  // v5.7 — Attendre que les voix soient chargées (sinon getVoices() retourne [] au 1er appel)
+  await waitForVoices()
+
   window.speechSynthesis.cancel()
+  // Petit délai pour laisser cancel() se terminer (évite annulation des nouvelles utterances)
+  await new Promise(r => setTimeout(r, 30))
+
   const segments = parseMixedText(text, primaryLang)
-  const voices = window.speechSynthesis.getVoices()
 
   for (const seg of segments) {
     const u = new SpeechSynthesisUtterance(seg.text)
-    const langPrefix = seg.lang.split('-')[0]
-    // Trouver la meilleure voix pour cette langue
-    let v: SpeechSynthesisVoice | undefined
-    if (seg.lang === 'en-GB') {
-      // Pour l'anglais : utiliser getBestVoice qui privilégie les voix premium
-      v = getBestVoice('en') || undefined
+    let v: SpeechSynthesisVoice | null = null
+    if (seg.lang === 'en-GB' || seg.lang === 'en-US') {
+      v = getBestVoice('en')
     } else {
-      v = voices.find(x => x.lang === seg.lang)
-          || voices.find(x => x.lang.startsWith(langPrefix))
+      v = getBestFrVoice()
     }
     if (v) { u.voice = v; u.lang = v.lang }
     else u.lang = seg.lang
-    // Rate un peu plus lent pour clarté multi-langues
     u.rate = 0.9
     u.pitch = 1
     window.speechSynthesis.speak(u)
