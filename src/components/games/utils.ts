@@ -279,5 +279,5 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   }
 }
 
-/** v5.14 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
-export const TTS_VERSION = 'v5.14'
+/** v5.15 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
+export const TTS_VERSION = 'v5.15'

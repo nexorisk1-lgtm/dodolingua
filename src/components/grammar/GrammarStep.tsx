@@ -256,6 +256,8 @@ function StepMatch({ step, voiceName, onValidate }: { step: Step; voiceName?: st
 
       {c.question && <div className="text-base text-gray-700">{c.question}</div>}
 
+      {/* v5.15 — Accessibilité illettrés : un 🔊 sur CHAQUE colonne (EN à gauche, FR à droite).
+         Le 🔊 est SÉPARÉ du bouton de sélection pour ne pas déclencher le match en cliquant sur écoute. */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           {pairs.map(p => {
@@ -266,19 +268,24 @@ function StepMatch({ step, voiceName, onValidate }: { step: Step; voiceName?: st
             const isSelected = selectedLeft === p.left
             const isCorrect = feedback !== null && matchedVal === p.right
             const isWrong = feedback !== null && matchedVal !== undefined && matchedVal !== p.right
+            const disabled = matchedIdx !== undefined && feedback === null
             return (
-              <button key={p.left}
-                onClick={() => pickLeft(p.left)}
-                disabled={matchedIdx !== undefined && feedback === null}
-                className={`w-full p-3 rounded-xl border-2 font-semibold text-base ${
-                  isCorrect ? 'border-ok bg-green-50 text-ok' :
-                  isWrong ? 'border-warn bg-red-50 text-warn' :
-                  matchedVal ? 'border-primary-300 bg-primary-50 text-primary-700' :
-                  isSelected ? 'border-primary-500 bg-primary-100 text-primary-700' :
-                  'border-rule bg-white'
-                }`}>
-                {p.left} {matchedVal && <span className="text-xs font-normal">→ {matchedVal}</span>}
-              </button>
+              <div key={p.left} className="flex items-center gap-1">
+                <button
+                  onClick={() => pickLeft(p.left)}
+                  disabled={disabled}
+                  className={`flex-1 p-3 rounded-xl border-2 font-semibold text-base ${
+                    isCorrect ? 'border-ok bg-green-50 text-ok' :
+                    isWrong ? 'border-warn bg-red-50 text-warn' :
+                    matchedVal ? 'border-primary-300 bg-primary-50 text-primary-700' :
+                    isSelected ? 'border-primary-500 bg-primary-100 text-primary-700' :
+                    'border-rule bg-white'
+                  }`}>
+                  {p.left} {matchedVal && <span className="text-xs font-normal">→ {matchedVal}</span>}
+                </button>
+                {/* 🔊 EN sur la colonne gauche (pronom anglais) */}
+                <SpeakerBtn text={p.left} voiceName={voiceName} size="sm" lang="en-GB" />
+              </div>
             )
           })}
         </div>
@@ -287,17 +294,21 @@ function StepMatch({ step, voiceName, onValidate }: { step: Step; voiceName?: st
             // v5.5 — used par INDEX, pas par valeur
             const used = Object.values(matches).includes(r.idx)
             return (
-              <button key={r.idx}
-                onClick={() => pickRight(r.idx)}
-                disabled={used || feedback !== null}
-                className={`w-full p-3 rounded-xl border-2 font-semibold text-base flex items-center justify-between gap-2 ${
-                  used ? 'bg-gray-100 text-gray-400 line-through border-rule' :
-                  selectedLeft ? 'border-primary-500 bg-white hover:bg-primary-50' :
-                  'border-rule bg-white'
-                }`}>
-                <span>{r.val}</span>
-                {!used && <SpeakerBtn text={r.val} voiceName={voiceName} size="sm" />}
-              </button>
+              <div key={r.idx} className="flex items-center gap-1">
+                <button
+                  onClick={() => pickRight(r.idx)}
+                  disabled={used || feedback !== null}
+                  className={`flex-1 p-3 rounded-xl border-2 font-semibold text-base ${
+                    used ? 'bg-gray-100 text-gray-400 line-through border-rule' :
+                    selectedLeft ? 'border-primary-500 bg-white hover:bg-primary-50' :
+                    'border-rule bg-white'
+                  }`}>
+                  {r.val}
+                </button>
+                {/* v5.15 — 🔊 FR sur la colonne droite (traduction française)
+                   Avant v5.15 : lang non précisée → la voix EN lisait "elle" en anglais. */}
+                {!used && <SpeakerBtn text={r.val} voiceName={voiceName} size="sm" lang="fr-FR" />}
+              </div>
             )
           })}
         </div>
