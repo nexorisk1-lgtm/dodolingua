@@ -148,7 +148,10 @@ function getBestFrVoice(): SpeechSynthesisVoice | null {
 /** Parse un texte mixte FR/EN : tokens entre **xxx** ou 'xxx' = EN, reste = FR */
 function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'): MixedSegment[] {
   const segments: MixedSegment[] = []
-  const pattern = /\*\*([^*]+)\*\*|'([^']+)'/g
+  // v5.8 — Uniquement **xxx** pour marquer les mots EN.
+  // Le pattern 'xxx' a été retiré car il matchait aussi les apostrophes
+  // françaises dans "l'infinitif" → "l" était lu comme un mot anglais.
+  const pattern = /\*\*([^*]+)\*\*/g
   let lastIndex = 0
   let match: RegExpExecArray | null
   const otherLang = primaryLang === 'fr-FR' ? 'en-GB' : 'fr-FR'
@@ -158,7 +161,7 @@ function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'):
       const part = text.slice(lastIndex, match.index).trim()
       if (part) segments.push({ text: part, lang: primaryLang })
     }
-    const enWord = (match[1] || match[2] || '').trim()
+    const enWord = (match[1] || '').trim()
     // v5.7 — Pour une LISTE 'am / is / are' : on garde un SEUL segment EN avec virgules
     // (les virgules créent des pauses naturelles dans la voix EN, plus clair que 3 utterances séparées)
     const cleaned = enWord.replace(/\s*\/\s*/g, ', ')

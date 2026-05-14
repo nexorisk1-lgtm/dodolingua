@@ -98,7 +98,8 @@ function SpeakerBtn({
   lang?: 'fr-FR' | 'en-GB'
 }) {
   const sz = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-9 h-9 text-base'
-  const hasMixed = /\*\*[^*]+\*\*|'[^']+'/.test(text)
+  // v5.8 — Détection uniquement des **xxx** (les 'xxx' ambiguous avec l'apostrophe française)
+  const hasMixed = /\*\*[^*]+\*\*/.test(text)
   const handleClick = () => {
     if (hasMixed) {
       // Détection des mots EN dans un texte FR : alterner les voix (async)
