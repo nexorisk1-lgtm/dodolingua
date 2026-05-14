@@ -191,7 +191,7 @@ export function ParcoursCarousel({ level }: Props) {
               return <div key={course.id} className="shrink-0">{cardContent}</div>
             }
             return (
-              <Link key={course.id} href={(course.kind === 'grammar' ? `/grammar/${course.id.replace(/^grammar-/, '')}` : `/session?course=${course.id}`) as any} className="shrink-0">
+              <Link key={course.id} href={(course.kind === 'grammar' ? `/grammaire/${course.id.replace(/^grammar-/, '')}` : `/session?course=${course.id}`) as any} className="shrink-0">
                 {cardContent}
               </Link>
             )
