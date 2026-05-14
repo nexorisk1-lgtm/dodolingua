@@ -86,16 +86,21 @@ function MarkdownLite({ text }: { text: string }) {
   )
 }
 
-/** v5.2 — Petit bouton 🔊 réutilisable */
-function SpeakerBtn({ text, voiceName, size = 'md' }: { text: string; voiceName?: string | null; size?: 'sm' | 'md' }) {
+/** v5.5 — Bouton 🔊 réutilisable. Prop `lang` pour forcer la langue de lecture (FR ou EN). */
+function SpeakerBtn({ text, voiceName, size = 'md', lang }: { text: string; voiceName?: string | null; size?: 'sm' | 'md'; lang?: 'fr-FR' | 'en-GB' }) {
   const sz = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-9 h-9 text-base'
   return (
     <button
-      onClick={() => speak(text, voiceName)}
+      onClick={() => speak(text, voiceName, { lang })}
       aria-label={`Écouter : ${text}`}
       className={`shrink-0 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100 ${sz}`}
     >🔊</button>
   )
+}
+
+/** v5.5 — Retire le markdown ** des extraits pour TTS plus naturel */
+function stripMd(text: string): string {
+  return text.replace(/\*\*([^*]+)\*\*/g, '$1')
 }
 
 /** v5.2 — Phrase EN + traduction FR + 🔊 */
@@ -131,21 +136,29 @@ function StepLecture({ step, voiceName }: { step: Step; voiceName?: string | nul
   // Repérer les snippets EN dans le texte (entre **) pour ajouter un 🔊 dédié
   const enSnippets = (c.text || '').match(/\*\*([^*]+)\*\*/g)?.map(m => m.slice(2, -2)) || []
 
+  // v5.5 — Texte FR à lire à haute voix (pour parcours oral)
+  const textToSpeakFr = stripMd(c.text || '') + (c.text_fr ? '. ' + c.text_fr : '')
+
   return (
     <div className={step.type === 'tip' ? 'border-l-4 border-amber-400 bg-amber-50 p-4 rounded-r-lg space-y-3' : 'space-y-3'}>
       <StepHeader icon={icon} label={label} />
 
-      <div className="text-base leading-relaxed text-gray-900">
-        <MarkdownLite text={c.text || ''} />
+      {/* v5.5 — Bloc texte FR avec 🔊 général (lit tout le texte en français) */}
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <div className="text-base leading-relaxed text-gray-900">
+            <MarkdownLite text={c.text || ''} />
+          </div>
+          {c.text_fr && (
+            <div className="text-sm italic text-gray-600 mt-2">
+              → {c.text_fr}
+            </div>
+          )}
+        </div>
+        <SpeakerBtn text={textToSpeakFr} voiceName={voiceName} lang="fr-FR" />
       </div>
 
-      {c.text_fr && (
-        <div className="text-sm italic text-gray-600">
-          → {c.text_fr}
-        </div>
-      )}
-
-      {/* Boutons 🔊 sur les snippets EN repérés (ex: **to be**, **am**, **She's**) */}
+      {/* Boutons 🔊 sur les snippets EN repérés (ex: **to be**, **am**, **She's**) — en anglais */}
       {enSnippets.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-1">
           {enSnippets.map((s, i) => (
@@ -178,26 +191,36 @@ function StepLecture({ step, voiceName }: { step: Step; voiceName?: string | nul
 function StepMatch({ step, voiceName, onValidate }: { step: Step; voiceName?: string | null; onValidate: (correct: boolean) => void }) {
   const c = step.content_json
   const pairs = c.pairs || []
-  const [matches, setMatches] = useState<Record<string, string>>({}) // left -> right
+  // v5.5 — On stocke matches par INDEX (pas par valeur) pour gérer les doublons
+  // (ex: "is" ou "are" peuvent être à la fois pour He, She, It / You, We, They)
+  const [matches, setMatches] = useState<Record<string, number>>({}) // left -> index dans rightShuffled
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<boolean | null>(null)
 
-  const rightShuffled = useMemo(() => shuffle(pairs.map(p => p.right)), [pairs])
+  const rightShuffled = useMemo(
+    () => shuffle(pairs.map((p, i) => ({ idx: i, val: p.right }))),
+    [pairs]
+  )
 
   function pickLeft(l: string) {
-    if (matches[l] || feedback !== null) return
+    if (matches[l] !== undefined || feedback !== null) return
     setSelectedLeft(l)
   }
 
-  function pickRight(r: string) {
+  function pickRight(idx: number) {
     if (!selectedLeft || feedback !== null) return
-    if (Object.values(matches).includes(r)) return
-    const newMatches = { ...matches, [selectedLeft]: r }
+    // v5.5 — vérification par INDEX (pas par valeur) → gère les doublons
+    if (Object.values(matches).includes(idx)) return
+    const newMatches = { ...matches, [selectedLeft]: idx }
     setMatches(newMatches)
     setSelectedLeft(null)
     if (Object.keys(newMatches).length === pairs.length) {
-      // toutes les paires ont été faites
-      const allOk = pairs.every(p => newMatches[p.left] === p.right)
+      // Validation : pour chaque paire (left), la valeur droite à l'index choisi doit être la bonne
+      const allOk = pairs.every(p => {
+        const chosenIdx = newMatches[p.left]
+        const chosenVal = rightShuffled.find(r => r.idx === chosenIdx)?.val
+        return chosenVal === p.right
+      })
       setFeedback(allOk)
     }
   }
@@ -211,40 +234,44 @@ function StepMatch({ step, voiceName, onValidate }: { step: Step; voiceName?: st
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           {pairs.map(p => {
-            const matched = matches[p.left]
+            const matchedIdx = matches[p.left]
+            const matchedVal = matchedIdx !== undefined
+              ? rightShuffled.find(r => r.idx === matchedIdx)?.val
+              : undefined
             const isSelected = selectedLeft === p.left
-            const isCorrect = feedback !== null && matched === p.right
-            const isWrong = feedback !== null && matched !== undefined && matched !== p.right
+            const isCorrect = feedback !== null && matchedVal === p.right
+            const isWrong = feedback !== null && matchedVal !== undefined && matchedVal !== p.right
             return (
               <button key={p.left}
                 onClick={() => pickLeft(p.left)}
-                disabled={!!matched && feedback === null}
+                disabled={matchedIdx !== undefined && feedback === null}
                 className={`w-full p-3 rounded-xl border-2 font-semibold text-base ${
                   isCorrect ? 'border-ok bg-green-50 text-ok' :
                   isWrong ? 'border-warn bg-red-50 text-warn' :
-                  matched ? 'border-primary-300 bg-primary-50 text-primary-700' :
+                  matchedVal ? 'border-primary-300 bg-primary-50 text-primary-700' :
                   isSelected ? 'border-primary-500 bg-primary-100 text-primary-700' :
                   'border-rule bg-white'
                 }`}>
-                {p.left} {matched && <span className="text-xs font-normal">→ {matched}</span>}
+                {p.left} {matchedVal && <span className="text-xs font-normal">→ {matchedVal}</span>}
               </button>
             )
           })}
         </div>
         <div className="space-y-2">
           {rightShuffled.map(r => {
-            const used = Object.values(matches).includes(r)
+            // v5.5 — used par INDEX, pas par valeur
+            const used = Object.values(matches).includes(r.idx)
             return (
-              <button key={r}
-                onClick={() => pickRight(r)}
+              <button key={r.idx}
+                onClick={() => pickRight(r.idx)}
                 disabled={used || feedback !== null}
                 className={`w-full p-3 rounded-xl border-2 font-semibold text-base flex items-center justify-between gap-2 ${
                   used ? 'bg-gray-100 text-gray-400 line-through border-rule' :
                   selectedLeft ? 'border-primary-500 bg-white hover:bg-primary-50' :
                   'border-rule bg-white'
                 }`}>
-                <span>{r}</span>
-                {!used && <SpeakerBtn text={r} voiceName={voiceName} size="sm" />}
+                <span>{r.val}</span>
+                {!used && <SpeakerBtn text={r.val} voiceName={voiceName} size="sm" />}
               </button>
             )
           })}
@@ -395,9 +422,13 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
             </div>
             {c.question_fr && <div className="text-base italic text-gray-700">→ {c.question_fr}</div>}
           </div>
+          {/* v5.5 — Astuce/rappel avec 🔊 dédié (lecture FR pour parcours oral) */}
           {c.explanation && (
-            <div className="text-sm italic text-gray-700 bg-white/60 p-2 rounded-lg">
-              💡 {c.explanation}
+            <div className="flex items-start gap-2 bg-white/60 p-2 rounded-lg">
+              <div className="flex-1 text-sm italic text-gray-700">
+                💡 {c.explanation}
+              </div>
+              <SpeakerBtn text={c.explanation} voiceName={voiceName} lang="fr-FR" size="sm" />
             </div>
           )}
           <button onClick={() => onContinue(feedback.correct)}
