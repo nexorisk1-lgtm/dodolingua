@@ -358,16 +358,27 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
     <div className="space-y-4">
       <StepHeader icon="✏️" label="Pratique" />
 
-      {/* Bloc question : EN + 🔊 + traduction FR */}
+      {/* v5.13 — Bloc question : 🔊 lit la QUESTION (pas la solution) pour ne pas spoiler */}
       <div className="bg-white border border-rule rounded-xl p-4 space-y-2">
         <div className="flex items-start gap-2">
           <div className="flex-1 text-lg font-semibold text-primary-900">{c.question}</div>
-          {c.exercise_type !== 'translate' && (
+          {/* Le 🔊 sur la question doit lire la phrase TELLE QU'AFFICHÉE (avec ___ ou /) :
+             - mcq/fill_blank avec ___ : on lit la phrase en remplaçant ___ par "blanc"
+             - reorder : on saute (mots scramblés, n'a pas de sens)
+             - translate : la voix dépend de la langue de la question */}
+          {c.exercise_type === 'mcq' && (
             <SpeakerBtn
-              text={(c.question || '').replace(/___/g, c.answer || '').replace(/\s*\/\s*/g, ' ')}
+              text={(c.question || '').replace(/___/g, 'blank')}
               voiceName={voiceName}
             />
           )}
+          {c.exercise_type === 'fill_blank' && (
+            <SpeakerBtn
+              text={(c.question || '').replace(/___/g, 'blank')}
+              voiceName={voiceName}
+            />
+          )}
+          {/* Pour translate : pas de 🔊 sur la question (texte FR à traduire) */}
         </div>
         {c.question_fr && (
           <div className="text-sm italic text-gray-600">→ {c.question_fr}</div>
@@ -377,11 +388,20 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
       {!feedback && c.exercise_type === 'mcq' && c.options && (
         <div className="space-y-2">
           {c.options.map(opt => (
-            <button key={opt} onClick={() => check(opt)}
-              className="w-full p-3 rounded-xl border-2 border-rule bg-white text-left text-base font-semibold hover:bg-primary-50 flex items-center justify-between gap-2">
-              <span>{opt}</span>
-              <SpeakerBtn text={opt} voiceName={voiceName} size="sm" />
-            </button>
+            <div key={opt} className="flex items-center gap-1">
+              {/* v5.13 — 🔊 SÉPARÉ du bouton de sélection (avant : cliquer 🔊 sélectionnait l'option) */}
+              <button
+                onClick={() => check(opt)}
+                className="flex-1 p-3 rounded-xl border-2 border-rule bg-white text-left text-base font-semibold hover:bg-primary-50">
+                {opt}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); speak(opt, voiceName) }}
+                aria-label={`Écouter ${opt}`}
+                className="shrink-0 w-9 h-9 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100">
+                🔊
+              </button>
+            </div>
           ))}
         </div>
       )}

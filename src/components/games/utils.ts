@@ -210,13 +210,22 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
     //  - Convertit les mots TOUT EN MAJUSCULES en minuscules pour la lecture
     //    (sinon "TO" → "tout" en FR, "I" → "capital I" en EN)
     let cleanText = seg.text.replace(/\*\*/g, '').trim()
-    // v5.12 — Convertir mots majuscules→minuscules SAUF "I" (pronom anglais qui doit rester majuscule)
-    cleanText = cleanText.replace(/\b[A-Z]{1,4}\b/g, (m) => m === 'I' ? 'I' : m.toLowerCase())
-    // v5.12 — Normaliser les "..", "..." en un seul "." pour éviter les pauses bizarres
+    // v5.13 — Nettoyage exhaustif pour TTS naturel :
+    // 1. Mots tout-majuscules → minuscules (sauf "I" pronom anglais)
+    cleanText = cleanText.replace(/\b[A-Z]{1,6}\b/g, (m) => m === 'I' ? 'I' : m.toLowerCase())
+    // 2. Symboles parlés littéralement par les voix → remplacer ou supprimer
+    cleanText = cleanText
+      .replace(/\s*\+\s*/g, ' et ')             // "+" → "et" (était lu "plus")
+      .replace(/\s*[→←↔]\s*/g, ', ')             // flèches → virgule (étaient lues "flèche...")
+      .replace(/[()]/g, '')                       // parenthèses (étaient lues "parenthèse ouverte")
+      .replace(/\s*\/\s*/g, ', ')                 // slash → virgule (pour les listes)
+    // 3. Doubles points et points orphelins
     cleanText = cleanText.replace(/\.{2,}/g, '.').replace(/\s*\.\s*\./g, '.')
-    // v5.12 — Strip "." en début ou fin isolés (résidus de concaténation)
     cleanText = cleanText.replace(/^\s*\.\s*/, '').replace(/\s+\./g, '.')
-    if (/^[.,!?;:]+$/.test(cleanText)) continue
+    // 4. Multi-espaces → 1 seul
+    cleanText = cleanText.replace(/\s{2,}/g, ' ').trim()
+    // 5. Skip ponctuation isolée
+    if (/^[.,!?;:\-]+$/.test(cleanText)) continue
     if (!cleanText) continue
     const u = new SpeechSynthesisUtterance(cleanText)
     let v: SpeechSynthesisVoice | null = null
@@ -233,5 +242,5 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   }
 }
 
-/** v5.12 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
-export const TTS_VERSION = 'v5.12'
+/** v5.13 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
+export const TTS_VERSION = 'v5.13'
