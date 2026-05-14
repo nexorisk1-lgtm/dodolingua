@@ -209,7 +209,9 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
     if (!cleanText) continue
     const u = new SpeechSynthesisUtterance(cleanText)
     let v: SpeechSynthesisVoice | null = null
-    if (seg.lang === 'en-GB' || seg.lang === 'en-US') {
+    // v5.10 — Fix erreur TS : MixedSegment.lang ne contient que 'en-GB' | 'fr-FR'.
+    // La comparaison '|| seg.lang === en-US' était dead code → retirée.
+    if (seg.lang === 'en-GB') {
       v = getBestVoice('en')
     } else {
       v = getBestFrVoice()
@@ -222,5 +224,5 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   }
 }
 
-/** v5.9 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
-export const TTS_VERSION = 'v5.9'
+/** v5.10 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
+export const TTS_VERSION = 'v5.10'
