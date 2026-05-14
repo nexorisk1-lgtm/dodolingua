@@ -88,13 +88,10 @@ export function speak(text: string, voiceName?: string | null, optsOrRate: Speak
     : optsOrRate
 
   window.speechSynthesis.cancel()
-  // v5.14 — Fix "capital I" sur les chips EN isolées (ex: bouton 🔊 sur "I" tout seul)
-  // Daniel/macOS épelle "I" comme une lettre. On étoffe en "I am" pour forcer le mode mot.
-  let textToSpeak = text
-  if (!opts.lang || opts.lang.startsWith('en')) {
-    if (/^I[.,!?;:]?$/.test(textToSpeak.trim())) textToSpeak = 'I am'
-  }
-  const u = new SpeechSynthesisUtterance(textToSpeak)
+  // v5.16 — Rollback du fix v5.14 "I → I am" : ça créait des bugs visibles
+  // ("le sujet est I am" au lieu de "le sujet est I"). À retraiter dans V6
+  // via reformulation BDD pour ne plus jamais isoler "I".
+  const u = new SpeechSynthesisUtterance(text)
 
   // v5.5 — Si opts.lang est fourni (ex: 'fr-FR'), on prend une voix de cette langue
   // au lieu de la voix utilisateur par défaut. Permet de lire les textes français
@@ -258,12 +255,8 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
     // 5. Skip ponctuation isolée
     if (/^[.,!?;:\-]+$/.test(cleanText)) continue
     if (!cleanText) continue
-    // v5.14 — Fix "capital I" : Daniel/macOS lit "I" isolé comme "capital I"
-    // Solution : étoffer en "I am" pour forcer la voix à le considérer comme un mot.
-    // Compromis pédagogique : on entend la forme complète au présent, cohérent avec to be.
-    if (seg.lang === 'en-GB' && /^I[.,!?;:]?$/.test(cleanText)) {
-      cleanText = 'I am'
-    }
+    // v5.16 — Rollback du fix v5.14 "I → I am" : créait "le sujet est I am".
+    // Le problème "capital I" sera traité en V6 par reformulation BDD systématique.
     const u = new SpeechSynthesisUtterance(cleanText)
     let v: SpeechSynthesisVoice | null = null
     if (seg.lang === 'en-GB') {
@@ -279,5 +272,5 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   }
 }
 
-/** v5.15 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
-export const TTS_VERSION = 'v5.15'
+/** v5.16 — Rollback "I → I am" + préparation V6 (refonte complète à venir) */
+export const TTS_VERSION = 'v5.16'
