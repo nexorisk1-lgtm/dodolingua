@@ -163,15 +163,20 @@ function StepLecture({ step, voiceName }: { step: Step; voiceName?: string | nul
     <div className={step.type === 'tip' ? 'border-l-4 border-amber-400 bg-amber-50 p-4 rounded-r-lg space-y-3' : 'space-y-3'}>
       <StepHeader icon={icon} label={label} />
 
-      {/* v5.5 — Bloc texte FR avec 🔊 général (lit tout le texte en français) */}
+      {/* v5.11 — Bloc texte FR avec 🔊 général + traduction MISE EN VALEUR */}
       <div className="flex items-start gap-2">
-        <div className="flex-1">
+        <div className="flex-1 space-y-3">
           <div className="text-base leading-relaxed text-gray-900">
             <MarkdownLite text={c.text || ''} />
           </div>
           {c.text_fr && (
-            <div className="text-sm italic text-gray-600 mt-2">
-              → {c.text_fr}
+            <div className="bg-blue-50 border-l-4 border-primary-500 px-3 py-2 rounded-r-lg">
+              <div className="text-[10px] uppercase font-bold text-primary-600 tracking-wide mb-0.5">
+                Règle clé
+              </div>
+              <div className="text-base font-semibold text-primary-900 leading-snug">
+                <MarkdownLite text={c.text_fr} />
+              </div>
             </div>
           )}
         </div>
@@ -442,11 +447,16 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
             </div>
             {c.question_fr && <div className="text-base italic text-gray-700">→ {c.question_fr}</div>}
           </div>
-          {/* v5.5 — Astuce/rappel avec 🔊 dédié (lecture FR pour parcours oral) */}
+          {/* v5.11 — Astuce/rappel MISE EN VALEUR (fond ambré + gras) avec 🔊 dédié */}
           {c.explanation && (
-            <div className="flex items-start gap-2 bg-white/60 p-2 rounded-lg">
-              <div className="flex-1 text-sm italic text-gray-700">
-                💡 {c.explanation}
+            <div className="flex items-start gap-2 bg-amber-50 border-l-4 border-amber-400 p-3 rounded-r-lg">
+              <div className="flex-1">
+                <div className="text-[10px] uppercase font-bold text-amber-700 tracking-wide mb-1">
+                  💡 À retenir
+                </div>
+                <div className="text-base font-semibold text-gray-900 leading-snug">
+                  <MarkdownLite text={c.explanation} />
+                </div>
               </div>
               <SpeakerBtn text={c.explanation} voiceName={voiceName} lang="fr-FR" size="sm" />
             </div>

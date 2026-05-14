@@ -204,13 +204,19 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   const segments = parseMixedText(text, primaryLang)
 
   for (const seg of segments) {
-    // v5.9 — Sécurité : strip les ** Markdown qui pourraient persister
-    const cleanText = seg.text.replace(/\*\*/g, '').trim()
+    // v5.11 — Nettoyage robuste avant TTS :
+    //  - Strip les ** Markdown
+    //  - Strip les ponctuations finales seules (sinon "." est lu "point")
+    //  - Convertit les mots TOUT EN MAJUSCULES en minuscules pour la lecture
+    //    (sinon "TO" → "tout" en FR, "I" → "capital I" en EN)
+    let cleanText = seg.text.replace(/\*\*/g, '').trim()
+    // Convertir mots tout-majuscules en minuscules (mais pas les acronymes 3+ lettres connus)
+    cleanText = cleanText.replace(/\b[A-Z]{1,4}\b/g, (m) => m.toLowerCase())
+    // Strip ponctuation finale isolée si segment d'1-2 chars (ex: ".")
+    if (/^[.,!?;:]+$/.test(cleanText)) continue
     if (!cleanText) continue
     const u = new SpeechSynthesisUtterance(cleanText)
     let v: SpeechSynthesisVoice | null = null
-    // v5.10 — Fix erreur TS : MixedSegment.lang ne contient que 'en-GB' | 'fr-FR'.
-    // La comparaison '|| seg.lang === en-US' était dead code → retirée.
     if (seg.lang === 'en-GB') {
       v = getBestVoice('en')
     } else {
@@ -224,5 +230,5 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   }
 }
 
-/** v5.10 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
-export const TTS_VERSION = 'v5.10'
+/** v5.11 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
+export const TTS_VERSION = 'v5.11'

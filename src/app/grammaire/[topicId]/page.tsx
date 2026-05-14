@@ -145,18 +145,33 @@ export default function GrammarTopicPage() {
 
   const stepProgress = steps.length > 0 ? Math.round(((stepIdx + 1) / steps.length) * 100) : 0
 
+  // v5.11 — "Reprendre plus tard" : sauvegarde la progression et retourne au dashboard
+  async function pauseAndReturnHome() {
+    await saveProgress()
+    router.push('/dashboard')
+  }
+
   return (
     <Container className="max-w-md py-6 space-y-4">
-      {/* Header : niveau + emoji + retour */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs bg-primary-50 text-primary-700 font-bold px-2 py-0.5 rounded">
-            {topic.level}
-          </span>
-          <span className="text-2xl">{topic.emoji || '📘'}</span>
-          <span className="text-sm font-bold text-primary-900 truncate">{topic.title_fr}</span>
-        </div>
-        <Button size="sm" variant="ghost" onClick={() => router.push('/grammaire')}>← Liste</Button>
+      {/* v5.11 — Header avec retour + reprendre plus tard (cohérent avec le parcours vocabulaire) */}
+      <div className="flex items-center justify-between gap-2">
+        <Button size="sm" variant="ghost" onClick={() => router.push('/dashboard')}>
+          ← Retour
+        </Button>
+        <button
+          onClick={pauseAndReturnHome}
+          className="text-sm text-gray-600 hover:text-primary-700 underline">
+          💾 Reprendre plus tard
+        </button>
+      </div>
+
+      {/* Bandeau niveau + emoji + titre */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs bg-primary-50 text-primary-700 font-bold px-2 py-0.5 rounded">
+          {topic.level}
+        </span>
+        <span className="text-2xl">{topic.emoji || '📘'}</span>
+        <span className="text-sm font-bold text-primary-900 truncate flex-1">{topic.title_fr}</span>
       </div>
 
       {/* Barre de progression (mode steps) */}
