@@ -178,12 +178,23 @@ function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'):
   return segments
 }
 
-/** v5.7 — Lit un texte mixte FR/EN en alternant les voix.
+// v5.9 — Lock global anti-double-call (StrictMode React déclenche 2x les events)
+let __speakingLock = false
+
+/** v5.9 — Lit un texte mixte FR/EN en alternant les voix.
  *  - Async : attend que les voix soient chargées avant de commencer
- *  - Sélection robuste de voix EN/FR (force une voix de la bonne langue) */
+ *  - Sélection robuste de voix EN/FR (force une voix de la bonne langue)
+ *  - Strip systématique des ** dans tous les segments (sécurité)
+ *  - Anti-double-call avec lock 200ms */
 export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'): Promise<void> {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
-  // v5.7 — Attendre que les voix soient chargées (sinon getVoices() retourne [] au 1er appel)
+
+  // v5.9 — Anti-double-call : ignore si une lecture est déjà en cours
+  if (__speakingLock) return
+  __speakingLock = true
+  setTimeout(() => { __speakingLock = false }, 200)
+
+  // Attendre que les voix soient chargées (sinon getVoices() retourne [] au 1er appel)
   await waitForVoices()
 
   window.speechSynthesis.cancel()
@@ -193,7 +204,10 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   const segments = parseMixedText(text, primaryLang)
 
   for (const seg of segments) {
-    const u = new SpeechSynthesisUtterance(seg.text)
+    // v5.9 — Sécurité : strip les ** Markdown qui pourraient persister
+    const cleanText = seg.text.replace(/\*\*/g, '').trim()
+    if (!cleanText) continue
+    const u = new SpeechSynthesisUtterance(cleanText)
     let v: SpeechSynthesisVoice | null = null
     if (seg.lang === 'en-GB' || seg.lang === 'en-US') {
       v = getBestVoice('en')
@@ -207,3 +221,6 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
     window.speechSynthesis.speak(u)
   }
 }
+
+/** v5.9 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
+export const TTS_VERSION = 'v5.9'

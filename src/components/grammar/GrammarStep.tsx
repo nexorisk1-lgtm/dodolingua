@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { shuffle, speak, speakMixed } from '@/components/games/utils'
+import { shuffle, speak, speakMixed, TTS_VERSION } from '@/components/games/utils'
 
 /**
  * v5.2 — Affichage d'UNE étape d'une micro-séquence grammaticale.
@@ -575,6 +575,10 @@ export function GrammarStep({ step, voiceName, onContinue, onBack, isLast, canGo
           ← Étape précédente
         </button>
       )}
+      {/* v5.9 — Indicateur de version pour debug : visible uniquement par data-attribute */}
+      <div data-tts-version={TTS_VERSION} className="text-[8px] text-gray-300 text-center select-none">
+        TTS {TTS_VERSION}
+      </div>
     </div>
   )
 }
