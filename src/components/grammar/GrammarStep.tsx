@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { shuffle, speak } from '@/components/games/utils'
+import { shuffle, speak, speakMixed } from '@/components/games/utils'
 
 /**
  * v5.2 — Affichage d'UNE étape d'une micro-séquence grammaticale.
@@ -86,19 +86,37 @@ function MarkdownLite({ text }: { text: string }) {
   )
 }
 
-/** v5.5 — Bouton 🔊 réutilisable. Prop `lang` pour forcer la langue de lecture (FR ou EN). */
-function SpeakerBtn({ text, voiceName, size = 'md', lang }: { text: string; voiceName?: string | null; size?: 'sm' | 'md'; lang?: 'fr-FR' | 'en-GB' }) {
+/** v5.6 — Bouton 🔊 intelligent :
+ *  - Si le texte contient des mots anglais entre **xxx** ou 'xxx' → speakMixed (FR + EN alternés)
+ *  - Sinon lecture simple avec la langue demandée */
+function SpeakerBtn({
+  text, voiceName, size = 'md', lang,
+}: {
+  text: string
+  voiceName?: string | null
+  size?: 'sm' | 'md'
+  lang?: 'fr-FR' | 'en-GB'
+}) {
   const sz = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-9 h-9 text-base'
+  const hasMixed = /\*\*[^*]+\*\*|'[^']+'/.test(text)
+  const handleClick = () => {
+    if (hasMixed) {
+      // Détection des mots EN dans un texte FR : alterner les voix
+      speakMixed(text, lang === 'en-GB' ? 'en-GB' : 'fr-FR')
+    } else {
+      speak(text, voiceName, { lang })
+    }
+  }
   return (
     <button
-      onClick={() => speak(text, voiceName, { lang })}
-      aria-label={`Écouter : ${text}`}
+      onClick={handleClick}
+      aria-label="Écouter"
       className={`shrink-0 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100 ${sz}`}
     >🔊</button>
   )
 }
 
-/** v5.5 — Retire le markdown ** des extraits pour TTS plus naturel */
+/** v5.5 — Retire le markdown ** pour affichage texte. */
 function stripMd(text: string): string {
   return text.replace(/\*\*([^*]+)\*\*/g, '$1')
 }
@@ -136,8 +154,9 @@ function StepLecture({ step, voiceName }: { step: Step; voiceName?: string | nul
   // Repérer les snippets EN dans le texte (entre **) pour ajouter un 🔊 dédié
   const enSnippets = (c.text || '').match(/\*\*([^*]+)\*\*/g)?.map(m => m.slice(2, -2)) || []
 
-  // v5.5 — Texte FR à lire à haute voix (pour parcours oral)
-  const textToSpeakFr = stripMd(c.text || '') + (c.text_fr ? '. ' + c.text_fr : '')
+  // v5.6 — Texte à lire avec markdown CONSERVÉ pour que SpeakerBtn détecte
+  // les mots anglais et alterne les voix (FR pour le texte, EN pour les mots **xxx**)
+  const textToSpeakFr = (c.text || '') + (c.text_fr ? '. ' + c.text_fr : '')
 
   return (
     <div className={step.type === 'tip' ? 'border-l-4 border-amber-400 bg-amber-50 p-4 rounded-r-lg space-y-3' : 'space-y-3'}>

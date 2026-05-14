@@ -114,3 +114,85 @@ export function speak(text: string, voiceName?: string | null, optsOrRate: Speak
   u.pitch = 1
   window.speechSynthesis.speak(u)
 }
+
+// ===========================================================
+// v5.6 — TTS MULTILINGUE : speakMixed()
+// ===========================================================
+//
+// Quand un texte français contient des mots anglais (ex: "Avec **I**,
+// le verbe **to be** devient **am**"), on doit alterner les voix :
+// - Texte FR → voix française
+// - Mots EN (entre **...** ou '...') → voix anglaise
+//
+// Le Web Speech API met en queue les utterances → on peut chaîner les
+// segments avec différentes voix.
+
+interface MixedSegment { text: string; lang: 'en-GB' | 'fr-FR' }
+
+/** Parse un texte mixte FR/EN : tokens entre **xxx** ou 'xxx' = EN, reste = FR */
+function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'): MixedSegment[] {
+  const segments: MixedSegment[] = []
+  // Pattern : capture **xxx** ou 'xxx' (mots EN dans texte FR)
+  const pattern = /\*\*([^*]+)\*\*|'([^']+)'/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  const otherLang = primaryLang === 'fr-FR' ? 'en-GB' : 'fr-FR'
+
+  while ((match = pattern.exec(text)) !== null) {
+    // Texte avant le match (langue principale)
+    if (match.index > lastIndex) {
+      const part = text.slice(lastIndex, match.index).trim()
+      if (part) segments.push({ text: part, lang: primaryLang })
+    }
+    // Le mot anglais (sans les délimiteurs)
+    const enWord = (match[1] || match[2] || '').trim()
+    // Si plusieurs mots séparés par "/" ou "," : on les sépare pour pauses
+    if (enWord.includes('/') || enWord.includes(',')) {
+      enWord.split(/[\/,]/).forEach(w => {
+        const t = w.trim()
+        if (t) segments.push({ text: t, lang: otherLang })
+      })
+    } else {
+      segments.push({ text: enWord, lang: otherLang })
+    }
+    lastIndex = match.index + match[0].length
+  }
+  // Reste après le dernier match
+  if (lastIndex < text.length) {
+    const part = text.slice(lastIndex).trim()
+    if (part) segments.push({ text: part, lang: primaryLang })
+  }
+  // Si rien n'a matché : tout en langue principale
+  if (segments.length === 0 && text.trim()) {
+    segments.push({ text: text.trim(), lang: primaryLang })
+  }
+  return segments
+}
+
+/** v5.6 — Lit un texte mixte FR/EN en alternant les voix. */
+export function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR') {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  window.speechSynthesis.cancel()
+  const segments = parseMixedText(text, primaryLang)
+  const voices = window.speechSynthesis.getVoices()
+
+  for (const seg of segments) {
+    const u = new SpeechSynthesisUtterance(seg.text)
+    const langPrefix = seg.lang.split('-')[0]
+    // Trouver la meilleure voix pour cette langue
+    let v: SpeechSynthesisVoice | undefined
+    if (seg.lang === 'en-GB') {
+      // Pour l'anglais : utiliser getBestVoice qui privilégie les voix premium
+      v = getBestVoice('en') || undefined
+    } else {
+      v = voices.find(x => x.lang === seg.lang)
+          || voices.find(x => x.lang.startsWith(langPrefix))
+    }
+    if (v) { u.voice = v; u.lang = v.lang }
+    else u.lang = seg.lang
+    // Rate un peu plus lent pour clarté multi-langues
+    u.rate = 0.9
+    u.pitch = 1
+    window.speechSynthesis.speak(u)
+  }
+}
