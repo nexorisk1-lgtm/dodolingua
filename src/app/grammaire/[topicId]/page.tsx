@@ -97,6 +97,11 @@ export default function GrammarTopicPage() {
     }
   }
 
+  // v5.2 — Retour à l'étape précédente sans perdre l'avancement
+  function handleStepBack() {
+    if (stepIdx > 0) setStepIdx(stepIdx - 1)
+  }
+
   /* ---------- Mode ancien format (lesson + exercises) ---------- */
   async function recordResult(correct: boolean) {
     setScore(s => ({ correct: s.correct + (correct ? 1 : 0), total: s.total + 1 }))
@@ -168,13 +173,17 @@ export default function GrammarTopicPage() {
         </>
       )}
 
-      {/* Mode micro-séquence */}
+      {/* Mode micro-séquence — v5.3 : key={step.id} force le remount entre étapes
+          pour éviter que l'état (feedback, userText) ne persiste d'une étape à l'autre */}
       {phase === 'steps' && steps[stepIdx] && (
         <Card>
           <GrammarStep
+            key={steps[stepIdx].id}
             step={steps[stepIdx]}
             voiceName={voiceName}
             onContinue={handleStepContinue}
+            onBack={handleStepBack}
+            canGoBack={stepIdx > 0}
             isLast={stepIdx + 1 >= steps.length}
           />
         </Card>

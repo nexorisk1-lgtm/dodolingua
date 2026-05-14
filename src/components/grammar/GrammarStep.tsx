@@ -3,32 +3,46 @@ import { useState, useMemo } from 'react'
 import { shuffle, speak } from '@/components/games/utils'
 
 /**
- * v5 — Affichage d'UNE étape d'une micro-séquence grammaticale.
+ * v5.2 — Affichage d'UNE étape d'une micro-séquence grammaticale.
+ *
+ * Refonte suite feedback Raïssa (mai 2026) :
+ *  - Typographie uniforme (text-base partout pour le contenu, text-2xl pour la "Bonne réponse")
+ *  - Bouton 🔊 sur TOUS les types d'étapes (accessibilité illettrés/oraux purs)
+ *  - Traduction FR systématique sous chaque phrase EN
+ *  - Nouveau type d'exercice "match" (relier 2 colonnes par tap, pas de drag&drop)
+ *  - Plus de typing libre en A1 (les "translate" sont remplacés par "match" ou "mcq")
  *
  * Types d'étapes :
- *  - discover : intro courte (1-2 phrases) qui pose le contexte
+ *  - discover : intro courte (1-2 phrases)
  *  - concept  : mini-règle isolée (1 phrase, 1 idée)
- *  - structure: formule visuelle colorée (Sujet + BE + complément)
+ *  - structure: formule visuelle colorée
  *  - tip      : astuce/contractions
- *  - practice : 1 exercice ciblé (mcq / fill_blank / reorder / translate)
+ *  - practice : 1 exercice (mcq / fill_blank / reorder / translate / match)
  *  - recap    : 2-3 exercices mélangés sans aide
  */
 
 export interface StepContent {
   text?: string
+  text_fr?: string                                    // v5.2 — Traduction FR optionnelle
   highlight?: string[]
   formula?: { label: string; color: string }[]
-  exercise_type?: 'mcq' | 'fill_blank' | 'reorder' | 'translate'
+  exercise_type?: 'mcq' | 'fill_blank' | 'reorder' | 'translate' | 'match'
   question?: string
+  question_fr?: string                                // v5.2
   options?: string[]
   answer?: string
+  answer_fr?: string                                  // v5.2 — Traduction FR de la bonne réponse
   explanation?: string
+  pairs?: { left: string; right: string }[]          // v5.2 — Pour exercice "match"
   intro?: string
   exercises?: Array<{
     exercise_type: string
     question: string
+    question_fr?: string
     options?: string[]
     answer: string
+    answer_fr?: string
+    pairs?: { left: string; right: string }[]
   }>
 }
 
@@ -43,24 +57,23 @@ interface Props {
   step: Step
   voiceName?: string | null
   onContinue: (correct?: boolean) => void
+  onBack?: () => void
   isLast: boolean
+  canGoBack: boolean
 }
 
-// v5 — Code couleur grammatical aligné sur la convention DodoLingua existante
-// (rule_md des grammar_topics : Sujet=BLEU, Verbe=ROUGE, Complément=VERT).
 const COLOR_MAP: Record<string, string> = {
   blue:   'bg-primary-500 text-white',     // Sujet
   red:    'bg-warn text-white',            // Verbe
   green:  'bg-ok text-white',              // Complément
-  yellow: 'bg-yellow-400 text-gray-900',   // Auxiliaire (do/does)
-  purple: 'bg-purple-500 text-white',      // Adverbe / mot de liaison
-  white:  'bg-white text-gray-700 border border-rule',  // Autres
+  yellow: 'bg-yellow-400 text-gray-900',   // Auxiliaire
+  purple: 'bg-purple-500 text-white',      // Adverbe
+  white:  'bg-white text-gray-700 border border-rule',
 }
 
-/* ---------- Sous-composants par type ---------- */
+/* ---------- Helpers ---------- */
 
 function MarkdownLite({ text }: { text: string }) {
-  // Parse **bold** uniquement (suffisant pour notre usage)
   const parts = text.split(/(\*\*[^*]+\*\*)/g)
   return (
     <>
@@ -73,44 +86,85 @@ function MarkdownLite({ text }: { text: string }) {
   )
 }
 
-function StepDiscover({ step }: { step: Step }) {
+/** v5.2 — Petit bouton 🔊 réutilisable */
+function SpeakerBtn({ text, voiceName, size = 'md' }: { text: string; voiceName?: string | null; size?: 'sm' | 'md' }) {
+  const sz = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-9 h-9 text-base'
   return (
-    <div className="space-y-3">
-      <div className="text-3xl">💡</div>
-      <div className="text-base leading-relaxed text-gray-800">
-        <MarkdownLite text={step.content_json.text || ''} />
+    <button
+      onClick={() => speak(text, voiceName)}
+      aria-label={`Écouter : ${text}`}
+      className={`shrink-0 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100 ${sz}`}
+    >🔊</button>
+  )
+}
+
+/** v5.2 — Phrase EN + traduction FR + 🔊 */
+function PhraseBlock({ en, fr, voiceName }: { en: string; fr?: string; voiceName?: string | null }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-start gap-2">
+        <div className="flex-1 text-base font-medium text-primary-900">{en}</div>
+        <SpeakerBtn text={en} voiceName={voiceName} />
       </div>
+      {fr && <div className="text-sm italic text-gray-600 pl-1">→ {fr}</div>}
     </div>
   )
 }
 
-function StepConcept({ step }: { step: Step }) {
+/* ---------- Étapes "lecture" (discover, concept, structure, tip) ---------- */
+
+function StepHeader({ icon, label }: { icon: string; label: string }) {
   return (
-    <div className="space-y-3">
-      <div className="text-2xl">🎯</div>
-      <div className="text-lg font-medium leading-relaxed text-gray-900">
-        <MarkdownLite text={step.content_json.text || ''} />
-      </div>
+    <div className="text-xs uppercase font-bold text-primary-500 tracking-wider flex items-center gap-2">
+      <span className="text-base">{icon}</span> {label}
     </div>
   )
 }
 
-function StepStructure({ step }: { step: Step }) {
-  const formula = step.content_json.formula || []
+function StepLecture({ step, voiceName }: { step: Step; voiceName?: string | null }) {
+  const c = step.content_json
+  const ICONS = { discover: '💡', concept: '🎯', structure: '📐', tip: '💡' } as const
+  const LABELS = { discover: 'Découverte', concept: 'Règle', structure: 'Structure', tip: 'À retenir' } as const
+  const icon = ICONS[step.type as keyof typeof ICONS]
+  const label = LABELS[step.type as keyof typeof LABELS]
+
+  // Repérer les snippets EN dans le texte (entre **) pour ajouter un 🔊 dédié
+  const enSnippets = (c.text || '').match(/\*\*([^*]+)\*\*/g)?.map(m => m.slice(2, -2)) || []
+
   return (
-    <div className="space-y-4">
-      <div className="text-2xl">📐</div>
-      <div className="text-base text-gray-800">
-        <MarkdownLite text={step.content_json.text || ''} />
+    <div className={step.type === 'tip' ? 'border-l-4 border-amber-400 bg-amber-50 p-4 rounded-r-lg space-y-3' : 'space-y-3'}>
+      <StepHeader icon={icon} label={label} />
+
+      <div className="text-base leading-relaxed text-gray-900">
+        <MarkdownLite text={c.text || ''} />
       </div>
-      {formula.length > 0 && (
+
+      {c.text_fr && (
+        <div className="text-sm italic text-gray-600">
+          → {c.text_fr}
+        </div>
+      )}
+
+      {/* Boutons 🔊 sur les snippets EN repérés (ex: **to be**, **am**, **She's**) */}
+      {enSnippets.length > 0 && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {enSnippets.map((s, i) => (
+            <button key={i} onClick={() => speak(s, voiceName)}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-50 text-primary-700 text-sm font-semibold hover:bg-primary-100">
+              🔊 {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {step.type === 'structure' && c.formula && c.formula.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-2 p-4 bg-gray-50 rounded-xl">
-          {formula.map((slot, i) => (
+          {c.formula.map((slot, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className={`px-3 py-1.5 rounded-lg text-sm font-bold ${COLOR_MAP[slot.color] || COLOR_MAP.white}`}>
                 {slot.label}
               </span>
-              {i < formula.length - 1 && <span className="text-gray-400 text-xl">+</span>}
+              {i < c.formula!.length - 1 && <span className="text-gray-400 text-xl">+</span>}
             </div>
           ))}
         </div>
@@ -119,21 +173,119 @@ function StepStructure({ step }: { step: Step }) {
   )
 }
 
-function StepTip({ step }: { step: Step }) {
+/* ---------- Étape MATCH (relier sujet ↔ verbe par tap) ---------- */
+
+function StepMatch({ step, voiceName, onValidate }: { step: Step; voiceName?: string | null; onValidate: (correct: boolean) => void }) {
+  const c = step.content_json
+  const pairs = c.pairs || []
+  const [matches, setMatches] = useState<Record<string, string>>({}) // left -> right
+  const [selectedLeft, setSelectedLeft] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<boolean | null>(null)
+
+  const rightShuffled = useMemo(() => shuffle(pairs.map(p => p.right)), [pairs])
+
+  function pickLeft(l: string) {
+    if (matches[l] || feedback !== null) return
+    setSelectedLeft(l)
+  }
+
+  function pickRight(r: string) {
+    if (!selectedLeft || feedback !== null) return
+    if (Object.values(matches).includes(r)) return
+    const newMatches = { ...matches, [selectedLeft]: r }
+    setMatches(newMatches)
+    setSelectedLeft(null)
+    if (Object.keys(newMatches).length === pairs.length) {
+      // toutes les paires ont été faites
+      const allOk = pairs.every(p => newMatches[p.left] === p.right)
+      setFeedback(allOk)
+    }
+  }
+
   return (
-    <div className="border-l-4 border-amber-400 bg-amber-50 p-4 rounded-r-lg space-y-2">
-      <div className="text-xs uppercase font-bold text-amber-700">💡 À retenir</div>
-      <div className="text-sm leading-relaxed text-gray-800">
-        <MarkdownLite text={step.content_json.text || ''} />
+    <div className="space-y-4">
+      <StepHeader icon="🔗" label="Relie chaque sujet à sa forme" />
+
+      {c.question && <div className="text-base text-gray-700">{c.question}</div>}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          {pairs.map(p => {
+            const matched = matches[p.left]
+            const isSelected = selectedLeft === p.left
+            const isCorrect = feedback !== null && matched === p.right
+            const isWrong = feedback !== null && matched !== undefined && matched !== p.right
+            return (
+              <button key={p.left}
+                onClick={() => pickLeft(p.left)}
+                disabled={!!matched && feedback === null}
+                className={`w-full p-3 rounded-xl border-2 font-semibold text-base ${
+                  isCorrect ? 'border-ok bg-green-50 text-ok' :
+                  isWrong ? 'border-warn bg-red-50 text-warn' :
+                  matched ? 'border-primary-300 bg-primary-50 text-primary-700' :
+                  isSelected ? 'border-primary-500 bg-primary-100 text-primary-700' :
+                  'border-rule bg-white'
+                }`}>
+                {p.left} {matched && <span className="text-xs font-normal">→ {matched}</span>}
+              </button>
+            )
+          })}
+        </div>
+        <div className="space-y-2">
+          {rightShuffled.map(r => {
+            const used = Object.values(matches).includes(r)
+            return (
+              <button key={r}
+                onClick={() => pickRight(r)}
+                disabled={used || feedback !== null}
+                className={`w-full p-3 rounded-xl border-2 font-semibold text-base flex items-center justify-between gap-2 ${
+                  used ? 'bg-gray-100 text-gray-400 line-through border-rule' :
+                  selectedLeft ? 'border-primary-500 bg-white hover:bg-primary-50' :
+                  'border-rule bg-white'
+                }`}>
+                <span>{r}</span>
+                {!used && <SpeakerBtn text={r} voiceName={voiceName} size="sm" />}
+              </button>
+            )
+          })}
+        </div>
       </div>
+
+      {feedback !== null && (
+        <div className={`border-l-4 p-4 rounded-r-lg space-y-2 ${feedback ? 'border-ok bg-green-50' : 'border-warn bg-yellow-50'}`}>
+          <div className={`text-sm font-bold ${feedback ? 'text-ok' : 'text-warn'}`}>
+            {feedback ? '✓ Tout est juste !' : '✗ Quelques erreurs.'}
+          </div>
+          {!feedback && (
+            <div className="text-sm text-gray-700 space-y-1">
+              {pairs.map(p => (
+                <div key={p.left}>
+                  <span className="font-semibold">{p.left}</span> → <span className="text-ok font-bold">{p.right}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {c.explanation && <div className="text-xs italic text-gray-600">💡 {c.explanation}</div>}
+          <button onClick={() => onValidate(feedback)}
+            className="w-full mt-2 p-3 bg-primary-700 text-white rounded-xl font-semibold hover:bg-primary-900">
+            Continuer →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-/* ---------- Étape PRATIQUE (1 exercice) ---------- */
+/* ---------- Étape PRACTICE (mcq / fill_blank / reorder / translate) ---------- */
 
 function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?: string | null; onContinue: (correct: boolean) => void }) {
   const c = step.content_json
+
+  // v5.2 — Si type = match, on délègue au composant dédié
+  if (c.exercise_type === 'match') {
+    return <StepMatch step={step} voiceName={voiceName} onValidate={onContinue} />
+  }
+
   const [feedback, setFeedback] = useState<{ correct: boolean; userAnswer: string } | null>(null)
   const [userText, setUserText] = useState('')
   const [reorderTokens, setReorderTokens] = useState<{ t: string; i: number }[]>([])
@@ -152,18 +304,21 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
 
   return (
     <div className="space-y-4">
-      <div className="text-xs uppercase font-bold text-primary-500 tracking-wider">
-        ✏️ Pratique
-      </div>
+      <StepHeader icon="✏️" label="Pratique" />
 
-      <div className="bg-white border border-rule rounded-xl p-4 flex items-start gap-2">
-        <div className="flex-1 text-base font-medium text-primary-900">{c.question}</div>
-        {c.exercise_type !== 'translate' && (
-          <button
-            onClick={() => speak((c.question || '').replace(/___/g, c.answer || '').replace(/\s*\/\s*/g, ' '), voiceName)}
-            aria-label="Écouter"
-            className="shrink-0 w-9 h-9 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100"
-          >🔊</button>
+      {/* Bloc question : EN + 🔊 + traduction FR */}
+      <div className="bg-white border border-rule rounded-xl p-4 space-y-2">
+        <div className="flex items-start gap-2">
+          <div className="flex-1 text-lg font-semibold text-primary-900">{c.question}</div>
+          {c.exercise_type !== 'translate' && (
+            <SpeakerBtn
+              text={(c.question || '').replace(/___/g, c.answer || '').replace(/\s*\/\s*/g, ' ')}
+              voiceName={voiceName}
+            />
+          )}
+        </div>
+        {c.question_fr && (
+          <div className="text-sm italic text-gray-600">→ {c.question_fr}</div>
         )}
       </div>
 
@@ -171,8 +326,9 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
         <div className="space-y-2">
           {c.options.map(opt => (
             <button key={opt} onClick={() => check(opt)}
-              className="w-full p-3 rounded-xl border-2 border-rule bg-white text-left font-semibold hover:bg-primary-50">
-              {opt}
+              className="w-full p-3 rounded-xl border-2 border-rule bg-white text-left text-base font-semibold hover:bg-primary-50 flex items-center justify-between gap-2">
+              <span>{opt}</span>
+              <SpeakerBtn text={opt} voiceName={voiceName} size="sm" />
             </button>
           ))}
         </div>
@@ -182,7 +338,7 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
         <form onSubmit={e => { e.preventDefault(); check(userText) }} className="space-y-2">
           <input type="text" autoFocus value={userText} onChange={e => setUserText(e.target.value)}
             placeholder={c.exercise_type === 'fill_blank' ? 'Le mot manquant…' : 'Traduction anglaise…'}
-            className="w-full p-3 border-2 border-rule rounded-xl font-semibold focus:border-primary-500 outline-none" />
+            className="w-full p-3 border-2 border-rule rounded-xl text-base font-semibold focus:border-primary-500 outline-none" />
           <button type="submit" disabled={!userText.trim()}
             className="w-full p-3 bg-primary-700 text-white rounded-xl font-semibold disabled:opacity-50">
             Valider
@@ -195,7 +351,7 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
           <div className="min-h-[56px] p-3 border-2 border-dashed border-primary-300 rounded-xl flex flex-wrap gap-2">
             {reorderTokens.map(p => (
               <button key={p.i} onClick={() => setReorderTokens(reorderTokens.filter(x => x.i !== p.i))}
-                className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary-700 text-white">{p.t}</button>
+                className="px-3 py-2 rounded-lg text-base font-semibold bg-primary-700 text-white">{p.t}</button>
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -203,7 +359,7 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
               const used = reorderTokens.find(x => x.i === p.i)
               return (
                 <button key={p.i} disabled={!!used} onClick={() => setReorderTokens([...reorderTokens, p])}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${used ? 'bg-gray-100 text-gray-400 line-through' : 'bg-white border border-rule'}`}>
+                  className={`px-3 py-2 rounded-lg text-base font-semibold ${used ? 'bg-gray-100 text-gray-400 line-through' : 'bg-white border border-rule'}`}>
                   {p.t}
                 </button>
               )
@@ -218,19 +374,32 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
       )}
 
       {feedback && (
-        <div className={`border-l-4 p-4 rounded-r-lg space-y-2 ${feedback.correct ? 'border-ok bg-green-50' : 'border-warn bg-yellow-50'}`}>
+        <div className={`border-l-4 p-4 rounded-r-lg space-y-3 ${feedback.correct ? 'border-ok bg-green-50' : 'border-warn bg-yellow-50'}`}>
           <div className={`text-sm font-bold ${feedback.correct ? 'text-ok' : 'text-warn'}`}>
             {feedback.correct ? '✓ Correct !' : '✗ Pas tout à fait.'}
           </div>
           {!feedback.correct && (
             <div className="text-sm text-gray-500">Ta réponse : <span className="line-through">{feedback.userAnswer || '—'}</span></div>
           )}
-          <div className="flex items-center gap-2">
-            <div className="flex-1 text-sm font-semibold text-ok">Bonne réponse : {c.answer}</div>
-            <button onClick={() => speak(c.answer || '', voiceName)} aria-label="Écouter"
-              className="shrink-0 w-9 h-9 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100">🔊</button>
+          {/* v5.3 — La PHRASE COMPLÈTE en GRAND + 🔊 lit la phrase complète, pas juste le mot */}
+          <div className="space-y-1">
+            <div className="text-xs uppercase font-bold text-ok">Bonne réponse</div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 text-2xl font-extrabold text-ok leading-tight">
+                {(c.question || '').replace(/___/g, c.answer || '').replace(/\s*\/\s*/g, ' ')}
+              </div>
+              <SpeakerBtn
+                text={(c.question || '').replace(/___/g, c.answer || '').replace(/\s*\/\s*/g, ' ')}
+                voiceName={voiceName}
+              />
+            </div>
+            {c.question_fr && <div className="text-base italic text-gray-700">→ {c.question_fr}</div>}
           </div>
-          {c.explanation && <div className="text-xs italic text-gray-600">💡 {c.explanation}</div>}
+          {c.explanation && (
+            <div className="text-sm italic text-gray-700 bg-white/60 p-2 rounded-lg">
+              💡 {c.explanation}
+            </div>
+          )}
           <button onClick={() => onContinue(feedback.correct)}
             className="w-full mt-2 p-3 bg-primary-700 text-white rounded-xl font-semibold hover:bg-primary-900">
             Continuer →
@@ -250,6 +419,7 @@ function StepRecap({ step, voiceName, onContinue }: { step: Step; voiceName?: st
   const [done, setDone] = useState(false)
   const ex = exercises[idx]
   const [userText, setUserText] = useState('')
+  const [picked, setPicked] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<boolean | null>(null)
 
   function check(answer: string) {
@@ -258,10 +428,10 @@ function StepRecap({ step, voiceName, onContinue }: { step: Step; voiceName?: st
     setFeedback(ok)
     if (ok) setScore(s => s + 1)
     setTimeout(() => {
-      setFeedback(null); setUserText('')
+      setFeedback(null); setUserText(''); setPicked(null)
       if (idx + 1 >= exercises.length) setDone(true)
       else setIdx(idx + 1)
-    }, 1200)
+    }, 1400)
   }
 
   if (done) {
@@ -269,9 +439,7 @@ function StepRecap({ step, voiceName, onContinue }: { step: Step; voiceName?: st
     return (
       <div className="space-y-4 text-center">
         <div className="text-5xl">{allOk ? '🏆' : '👍'}</div>
-        <div className="text-xl font-bold text-primary-900">
-          Synthèse : {score}/{exercises.length}
-        </div>
+        <div className="text-xl font-bold text-primary-900">Synthèse : {score}/{exercises.length}</div>
         <p className="text-sm text-gray-600">
           {allOk ? 'Parfait ! Tu maîtrises cette règle.' : 'Pas mal, tu peux refaire la leçon pour consolider.'}
         </p>
@@ -285,20 +453,25 @@ function StepRecap({ step, voiceName, onContinue }: { step: Step; voiceName?: st
 
   return (
     <div className="space-y-4">
-      <div className="text-xs uppercase font-bold text-primary-500 tracking-wider">
-        🏆 Synthèse · {idx + 1} / {exercises.length}
-      </div>
+      <StepHeader icon="🏆" label={`Synthèse · ${idx + 1} / ${exercises.length}`} />
       {step.content_json.intro && idx === 0 && (
         <div className="text-sm italic text-gray-600">{step.content_json.intro}</div>
       )}
-      <div className="bg-white border border-rule rounded-xl p-4 text-base font-medium text-primary-900">
-        {ex.question}
+      <div className="bg-white border border-rule rounded-xl p-4 space-y-2">
+        <div className="flex items-start gap-2">
+          <div className="flex-1 text-lg font-semibold text-primary-900">{ex.question}</div>
+          {ex.exercise_type !== 'translate' && (
+            <SpeakerBtn text={ex.question.replace(/___/g, ex.answer).replace(/\s*\/\s*/g, ' ')} voiceName={voiceName} />
+          )}
+        </div>
+        {ex.question_fr && <div className="text-sm italic text-gray-600">→ {ex.question_fr}</div>}
       </div>
-      {!feedback === null && ex.exercise_type === 'mcq' && ex.options && (
+
+      {feedback === null && ex.exercise_type === 'mcq' && ex.options && (
         <div className="space-y-2">
           {ex.options.map(opt => (
-            <button key={opt} onClick={() => check(opt)} disabled={feedback !== null}
-              className="w-full p-3 rounded-xl border-2 border-rule bg-white text-left font-semibold hover:bg-primary-50 disabled:opacity-50">
+            <button key={opt} onClick={() => { setPicked(opt); check(opt) }} disabled={picked !== null}
+              className="w-full p-3 rounded-xl border-2 border-rule bg-white text-left text-base font-semibold hover:bg-primary-50 disabled:opacity-50">
               {opt}
             </button>
           ))}
@@ -307,14 +480,18 @@ function StepRecap({ step, voiceName, onContinue }: { step: Step; voiceName?: st
       {feedback === null && (ex.exercise_type === 'fill_blank' || ex.exercise_type === 'translate') && (
         <form onSubmit={e => { e.preventDefault(); check(userText) }} className="space-y-2">
           <input type="text" autoFocus value={userText} onChange={e => setUserText(e.target.value)}
-            className="w-full p-3 border-2 border-rule rounded-xl font-semibold focus:border-primary-500 outline-none" />
+            className="w-full p-3 border-2 border-rule rounded-xl text-base font-semibold focus:border-primary-500 outline-none" />
           <button type="submit" disabled={!userText.trim()}
             className="w-full p-3 bg-primary-700 text-white rounded-xl font-semibold disabled:opacity-50">Valider</button>
         </form>
       )}
       {feedback !== null && (
-        <div className={`p-3 rounded-xl text-center font-bold ${feedback ? 'bg-green-50 text-ok' : 'bg-yellow-50 text-warn'}`}>
-          {feedback ? '✓ Correct' : `✗ Réponse : ${ex.answer}`}
+        <div className={`p-4 rounded-xl text-center space-y-1 ${feedback ? 'bg-green-50' : 'bg-yellow-50'}`}>
+          <div className={`text-sm font-bold ${feedback ? 'text-ok' : 'text-warn'}`}>
+            {feedback ? '✓ Correct' : '✗ Faux'}
+          </div>
+          <div className="text-2xl font-extrabold text-ok">{ex.answer}</div>
+          {ex.answer_fr && <div className="text-sm italic text-gray-600">→ {ex.answer_fr}</div>}
         </div>
       )}
     </div>
@@ -323,24 +500,30 @@ function StepRecap({ step, voiceName, onContinue }: { step: Step; voiceName?: st
 
 /* ---------- Composant principal ---------- */
 
-export function GrammarStep({ step, voiceName, onContinue, isLast }: Props) {
-  if (step.type === 'practice') {
-    return <StepPractice step={step} voiceName={voiceName} onContinue={onContinue} />
-  }
-  if (step.type === 'recap') {
-    return <StepRecap step={step} voiceName={voiceName} onContinue={onContinue} />
-  }
-  // discover / concept / structure / tip : juste lecture + bouton continuer
+export function GrammarStep({ step, voiceName, onContinue, onBack, isLast, canGoBack }: Props) {
   return (
-    <div className="space-y-5">
-      {step.type === 'discover' && <StepDiscover step={step} />}
-      {step.type === 'concept' && <StepConcept step={step} />}
-      {step.type === 'structure' && <StepStructure step={step} />}
-      {step.type === 'tip' && <StepTip step={step} />}
-      <button onClick={() => onContinue()}
-        className="w-full p-3 bg-primary-700 text-white rounded-xl font-semibold hover:bg-primary-900">
-        {isLast ? 'Terminer la leçon →' : 'J\'ai compris →'}
-      </button>
+    <div className="space-y-4">
+      {step.type === 'practice' ? (
+        <StepPractice step={step} voiceName={voiceName} onContinue={onContinue} />
+      ) : step.type === 'recap' ? (
+        <StepRecap step={step} voiceName={voiceName} onContinue={onContinue} />
+      ) : (
+        <>
+          <StepLecture step={step} voiceName={voiceName} />
+          <button onClick={() => onContinue()}
+            className="w-full p-3 bg-primary-700 text-white rounded-xl font-semibold hover:bg-primary-900">
+            {isLast ? 'Terminer la leçon →' : 'J\'ai compris →'}
+          </button>
+        </>
+      )}
+
+      {/* v5.2 — Bouton précédent (en bas, discret) */}
+      {canGoBack && onBack && (
+        <button onClick={onBack}
+          className="w-full p-2 text-sm text-gray-500 hover:text-primary-700 hover:bg-gray-50 rounded-lg">
+          ← Étape précédente
+        </button>
+      )}
     </div>
   )
 }
