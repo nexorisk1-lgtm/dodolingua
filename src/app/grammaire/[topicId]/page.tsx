@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { GrammarLesson } from '@/components/grammar/GrammarLesson'
 import { GrammarExercise, type GrammarExerciseData } from '@/components/grammar/GrammarExercise'
 import { GrammarStep, type Step } from '@/components/grammar/GrammarStep'
+import { GrammarStepV6, type StepV6 } from '@/components/grammar/GrammarStepV6'
 
 interface Topic {
   id: string
@@ -16,6 +17,7 @@ interface Topic {
   rule_md: string
   emoji: string | null
   examples_json: { en: string; fr: string }[]
+  lesson_format_version?: 'v5' | 'v6'  // V6 — flag de format
 }
 
 /**
@@ -49,7 +51,7 @@ export default function GrammarTopicPage() {
 
       const [topicRes, stepsRes, exoRes, voiceRes] = await Promise.all([
         supabase.from('grammar_topics')
-          .select('id, level, title_fr, rule_md, emoji, examples_json')
+          .select('id, level, title_fr, rule_md, emoji, examples_json, lesson_format_version')
           .eq('id', topicId).maybeSingle(),
         supabase.from('grammar_steps')
           .select('id, position, type, content_json')
@@ -188,9 +190,23 @@ export default function GrammarTopicPage() {
         </>
       )}
 
-      {/* Mode micro-séquence — v5.3 : key={step.id} force le remount entre étapes
-          pour éviter que l'état (feedback, userText) ne persiste d'une étape à l'autre */}
-      {phase === 'steps' && steps[stepIdx] && (
+      {/* V6 — Routage selon lesson_format_version :
+          - 'v6' (refonte 13 étapes) → GrammarStepV6 (clic=audio, tap-to-build, code couleur)
+          - 'v5' ou null → GrammarStep ancien (compat ascendante pour 278 topics non migrés) */}
+      {phase === 'steps' && steps[stepIdx] && topic.lesson_format_version === 'v6' && (
+        <Card>
+          <GrammarStepV6
+            key={steps[stepIdx].id}
+            step={steps[stepIdx] as unknown as StepV6}
+            onContinue={handleStepContinue}
+            onBack={handleStepBack}
+            canGoBack={stepIdx > 0}
+            isLast={stepIdx + 1 >= steps.length}
+            mode="complete"
+          />
+        </Card>
+      )}
+      {phase === 'steps' && steps[stepIdx] && topic.lesson_format_version !== 'v6' && (
         <Card>
           <GrammarStep
             key={steps[stepIdx].id}

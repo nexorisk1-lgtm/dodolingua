@@ -272,5 +272,87 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   }
 }
 
-/** v5.16 — Rollback "I → I am" + préparation V6 (refonte complète à venir) */
-export const TTS_VERSION = 'v5.16'
+// ===========================================================
+// V6 — speakSequence : wrapper TTS avec pauses configurables
+// ===========================================================
+//
+// Permet de chaîner audio FR/EN avec contrôle fin des pauses.
+// Usage :
+//   await speakSequence([
+//     { text: "Voici la règle :", lang: 'fr-FR', pauseAfter: 2000 },
+//     { text: "I am French", lang: 'en-GB', pauseAfter: 600 },
+//     { text: "Je suis français", lang: 'fr-FR' }
+//   ])
+//
+// Avantages vs speak() / speakMixed() :
+//  - Pauses contrôlées entre segments (vs enchaînement sans respiration)
+//  - Vitesse configurable globalement (mode oral 0.8, complet 0.9)
+//  - Respect du brief V6 : 400-2000ms selon contexte
+
+export interface SequenceSegment {
+  text: string
+  lang: 'fr-FR' | 'en-GB'
+  /** Pause en ms APRÈS ce segment (default 400ms) */
+  pauseAfter?: number
+  /** Vitesse spécifique (sinon utilise rate global) */
+  rate?: number
+}
+
+let __sequenceLock = false
+
+/**
+ * Lit une séquence de segments avec pauses entre chaque.
+ * @param segments Liste des segments à lire
+ * @param globalRate Vitesse par défaut (0.8 pour mode oral, 0.9 pour complet)
+ */
+export async function speakSequence(
+  segments: SequenceSegment[],
+  globalRate: number = 0.9
+): Promise<void> {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  if (__sequenceLock) return
+  __sequenceLock = true
+
+  try {
+    await waitForVoices()
+    window.speechSynthesis.cancel()
+    await new Promise(r => setTimeout(r, 50))
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i]
+      const cleanText = seg.text.replace(/\*\*/g, '').trim()
+      if (!cleanText) continue
+
+      // Lecture du segment
+      await new Promise<void>((resolve) => {
+        const u = new SpeechSynthesisUtterance(cleanText)
+        const voice = seg.lang === 'en-GB' ? getBestVoice('en') : getBestFrVoice()
+        if (voice) { u.voice = voice; u.lang = voice.lang }
+        else u.lang = seg.lang
+        u.rate = seg.rate ?? globalRate
+        u.pitch = 1
+        u.onend = () => resolve()
+        u.onerror = () => resolve()
+        window.speechSynthesis.speak(u)
+      })
+
+      // Pause après le segment (sauf le dernier)
+      const pause = seg.pauseAfter ?? 400
+      if (i < segments.length - 1 && pause > 0) {
+        await new Promise(r => setTimeout(r, pause))
+      }
+    }
+  } finally {
+    __sequenceLock = false
+  }
+}
+
+/** Stop immédiat de toute lecture en cours */
+export function stopSpeaking(): void {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  window.speechSynthesis.cancel()
+  __sequenceLock = false
+}
+
+/** v6.0 — Refonte grammaire : 13 étapes, clic=audio auto, tap-to-build, code couleur */
+export const TTS_VERSION = 'v6.0'
