@@ -425,7 +425,15 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
         </>
       )}
 
-      {feedback && (
+      {feedback && (() => {
+        // v5.12 — Calcul de la phrase complète selon le type d'exercice
+        // - mcq, fill_blank : on remplace ___ dans la question par la réponse
+        // - reorder, translate : on affiche directement c.answer (pas la question avec mots à ordonner)
+        // - match : c.answer (déjà géré par StepMatch séparément)
+        const completeSentence = (c.exercise_type === 'mcq' || c.exercise_type === 'fill_blank')
+          ? (c.question || '').replace(/___/g, c.answer || '')
+          : (c.answer || '')
+        return (
         <div className={`border-l-4 p-4 rounded-r-lg space-y-3 ${feedback.correct ? 'border-ok bg-green-50' : 'border-warn bg-yellow-50'}`}>
           <div className={`text-sm font-bold ${feedback.correct ? 'text-ok' : 'text-warn'}`}>
             {feedback.correct ? '✓ Correct !' : '✗ Pas tout à fait.'}
@@ -433,15 +441,14 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
           {!feedback.correct && (
             <div className="text-sm text-gray-500">Ta réponse : <span className="line-through">{feedback.userAnswer || '—'}</span></div>
           )}
-          {/* v5.3 — La PHRASE COMPLÈTE en GRAND + 🔊 lit la phrase complète, pas juste le mot */}
           <div className="space-y-1">
             <div className="text-xs uppercase font-bold text-ok">Bonne réponse</div>
             <div className="flex items-center gap-2">
               <div className="flex-1 text-2xl font-extrabold text-ok leading-tight">
-                {(c.question || '').replace(/___/g, c.answer || '').replace(/\s*\/\s*/g, ' ')}
+                {completeSentence}
               </div>
               <SpeakerBtn
-                text={(c.question || '').replace(/___/g, c.answer || '').replace(/\s*\/\s*/g, ' ')}
+                text={completeSentence}
                 voiceName={voiceName}
               />
             </div>
@@ -466,7 +473,8 @@ function StepPractice({ step, voiceName, onContinue }: { step: Step; voiceName?:
             Continuer →
           </button>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

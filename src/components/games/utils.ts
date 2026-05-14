@@ -210,9 +210,12 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
     //  - Convertit les mots TOUT EN MAJUSCULES en minuscules pour la lecture
     //    (sinon "TO" → "tout" en FR, "I" → "capital I" en EN)
     let cleanText = seg.text.replace(/\*\*/g, '').trim()
-    // Convertir mots tout-majuscules en minuscules (mais pas les acronymes 3+ lettres connus)
-    cleanText = cleanText.replace(/\b[A-Z]{1,4}\b/g, (m) => m.toLowerCase())
-    // Strip ponctuation finale isolée si segment d'1-2 chars (ex: ".")
+    // v5.12 — Convertir mots majuscules→minuscules SAUF "I" (pronom anglais qui doit rester majuscule)
+    cleanText = cleanText.replace(/\b[A-Z]{1,4}\b/g, (m) => m === 'I' ? 'I' : m.toLowerCase())
+    // v5.12 — Normaliser les "..", "..." en un seul "." pour éviter les pauses bizarres
+    cleanText = cleanText.replace(/\.{2,}/g, '.').replace(/\s*\.\s*\./g, '.')
+    // v5.12 — Strip "." en début ou fin isolés (résidus de concaténation)
+    cleanText = cleanText.replace(/^\s*\.\s*/, '').replace(/\s+\./g, '.')
     if (/^[.,!?;:]+$/.test(cleanText)) continue
     if (!cleanText) continue
     const u = new SpeechSynthesisUtterance(cleanText)
@@ -230,5 +233,5 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
   }
 }
 
-/** v5.11 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
-export const TTS_VERSION = 'v5.11'
+/** v5.12 — Marqueur de version visible côté client (pour vérifier que le bon build est servi) */
+export const TTS_VERSION = 'v5.12'
