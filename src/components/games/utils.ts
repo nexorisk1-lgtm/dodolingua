@@ -88,10 +88,14 @@ export function speak(text: string, voiceName?: string | null, optsOrRate: Speak
     : optsOrRate
 
   window.speechSynthesis.cancel()
-  // v5.16 — Rollback du fix v5.14 "I → I am" : ça créait des bugs visibles
-  // ("le sujet est I am" au lieu de "le sujet est I"). À retraiter dans V6
-  // via reformulation BDD pour ne plus jamais isoler "I".
-  const u = new SpeechSynthesisUtterance(text)
+  // v6.1 — Fix DÉFINITIF "capital I" : Daniel/macOS épelle "I" comme une lettre.
+  // Solution : utiliser l'homophone "eye" qui se prononce strictement /aɪ/
+  // (identique au pronom "I"). Visuel inchangé, audio parfait.
+  let textToSpeak = text
+  if (!opts.lang || opts.lang.startsWith('en')) {
+    if (/^I[.,!?;:]?$/.test(textToSpeak.trim())) textToSpeak = 'eye'
+  }
+  const u = new SpeechSynthesisUtterance(textToSpeak)
 
   // v5.5 — Si opts.lang est fourni (ex: 'fr-FR'), on prend une voix de cette langue
   // au lieu de la voix utilisateur par défaut. Permet de lire les textes français
@@ -255,8 +259,11 @@ export async function speakMixed(text: string, primaryLang: 'fr-FR' | 'en-GB' = 
     // 5. Skip ponctuation isolée
     if (/^[.,!?;:\-]+$/.test(cleanText)) continue
     if (!cleanText) continue
-    // v5.16 — Rollback du fix v5.14 "I → I am" : créait "le sujet est I am".
-    // Le problème "capital I" sera traité en V6 par reformulation BDD systématique.
+    // v6.1 — Fix "capital I" via homophone "eye" (/aɪ/ = pronom I exact).
+    // Visuel inchangé, son strictement identique au pronom anglais.
+    if (seg.lang === 'en-GB' && /^I[.,!?;:]?$/.test(cleanText)) {
+      cleanText = 'eye'
+    }
     const u = new SpeechSynthesisUtterance(cleanText)
     let v: SpeechSynthesisVoice | null = null
     if (seg.lang === 'en-GB') {
@@ -320,8 +327,12 @@ export async function speakSequence(
 
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i]
-      const cleanText = seg.text.replace(/\*\*/g, '').trim()
+      let cleanText = seg.text.replace(/\*\*/g, '').trim()
       if (!cleanText) continue
+      // v6.1 — Fix "capital I" via homophone "eye"
+      if (seg.lang === 'en-GB' && /^I[.,!?;:]?$/.test(cleanText)) {
+        cleanText = 'eye'
+      }
 
       // Lecture du segment
       await new Promise<void>((resolve) => {
@@ -354,5 +365,5 @@ export function stopSpeaking(): void {
   __sequenceLock = false
 }
 
-/** v6.0 — Refonte grammaire : 13 étapes, clic=audio auto, tap-to-build, code couleur */
-export const TTS_VERSION = 'v6.0'
+/** v6.1 — Fix capital I via homophone 'eye' + ajustements UX */
+export const TTS_VERSION = 'v6.1'

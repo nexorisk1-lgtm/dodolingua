@@ -18,6 +18,8 @@ import { speak, speakSequence, stopSpeaking, TTS_VERSION, type SequenceSegment }
 // ============================================================================
 
 export type StepTypeV6 =
+  | 'intro'             // v6.1 — mini-leçon contextuelle au début
+  | 'role_explanation'  // v6.1 — "Comment lire cette phrase ?" avec icônes par rôle
   | 'immersion' | 'discover_text' | 'recognition' | 'pattern' | 'match'
   | 'listen_target' | 'tap_build' | 'gap_fill' | 'variants'
   | 'contractions_intro' | 'contractions_recognition' | 'contractions_build'
@@ -28,6 +30,8 @@ export interface ColorToken {
   role?: string
   color?: 'blue' | 'red' | 'green' | 'yellow' | 'purple'
   is_gap?: boolean
+  emoji?: string       // v6.1 — Mini-icône sous le token (👤 ⚡ 📘)
+  meaning_fr?: string  // v6.1 — Sens FR sous le token ("Moi", "être", "français")
 }
 
 export interface StepV6 {
@@ -137,6 +141,175 @@ function StepHeader({ icon, label, onReplay }: { icon: string; label: string; on
 }
 
 // ============================================================================
+// 0. INTRO — mini-leçon contextuelle (v6.1)
+// "Pour dire qui on est, on utilise le verbe to be" + règle infinitif
+// ============================================================================
+
+function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () => void; rate: number }) {
+  const c = step.content_json as {
+    audio_intro?: string;
+    title_fr?: string;
+    rules?: { icon: string; text_fr: string; examples_en?: string[]; examples_fr?: string[] }[];
+  }
+  const rules = c.rules || []
+
+  // Audio auto au mount : intro + chaque règle FR + chaque exemple EN
+  const segments: SequenceSegment[] = useMemo(() => {
+    const segs: SequenceSegment[] = []
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1500 })
+    rules.forEach((r) => {
+      segs.push({ text: r.text_fr.replace(/\*\*/g, ''), lang: 'fr-FR', pauseAfter: 1000 })
+      ;(r.examples_en || []).forEach(ex => {
+        segs.push({ text: ex, lang: 'en-GB', pauseAfter: 600 })
+      })
+    })
+    return segs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useAutoIntro(segments, rate)
+  const replay = () => void speakSequence(segments, rate)
+
+  return (
+    <div className="space-y-5">
+      <StepHeader icon="📚" label="Pour commencer" onReplay={replay} />
+      {c.title_fr && (
+        <h2 className="text-2xl font-extrabold text-primary-900 text-center">{c.title_fr}</h2>
+      )}
+      <div className="space-y-3">
+        {rules.map((r, i) => (
+          <div key={i} className="bg-blue-50 border-l-4 border-primary-500 p-4 rounded-r-lg">
+            <div className="flex items-start gap-3">
+              <span className="text-3xl">{r.icon}</span>
+              <div className="flex-1 space-y-2">
+                <div className="text-lg font-semibold text-primary-900 leading-snug">
+                  {r.text_fr.split(/(\*\*[^*]+\*\*)/).map((part, j) =>
+                    part.startsWith('**') && part.endsWith('**')
+                      ? <strong key={j} className="text-primary-700 font-extrabold">{part.slice(2, -2)}</strong>
+                      : <span key={j}>{part}</span>
+                  )}
+                </div>
+                {/* v6.1 — Si examples_fr est fourni, on appaire EN ↔ FR (ex: to be → être) */}
+                {r.examples_en && r.examples_en.length > 0 && r.examples_fr && r.examples_fr.length === r.examples_en.length && (
+                  <div className="grid grid-cols-1 gap-1.5 pt-1">
+                    {r.examples_en.map((ex, k) => (
+                      <button key={k} onClick={() => speak(ex)}
+                        className="px-3 py-2 rounded-lg bg-white border-2 border-red-300 hover:bg-red-50 flex items-center gap-2 text-left">
+                        <span className="text-red-500">🔊</span>
+                        <span className="font-extrabold text-red-700">{ex}</span>
+                        <span className="text-gray-400">→</span>
+                        <span className="font-semibold text-gray-700">{r.examples_fr![k]}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Sinon : juste les exemples EN en chips */}
+                {r.examples_en && r.examples_en.length > 0 && !r.examples_fr && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {r.examples_en.map((ex, k) => (
+                      <button key={k} onClick={() => speak(ex)}
+                        className="px-3 py-1.5 rounded-lg bg-white border-2 border-red-300 text-red-700 font-bold hover:bg-red-50 flex items-center gap-1.5">
+                        🔊 {ex}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button onClick={onContinue}
+        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
+        C&apos;est compris, on commence ! →
+      </button>
+    </div>
+  )
+}
+
+// ============================================================================
+// 0bis. ROLE_EXPLANATION — "Comment lire cette phrase ?" avec icônes par rôle
+// ============================================================================
+
+function StepRoleExplanation({ step, onContinue, rate }: { step: StepV6; onContinue: () => void; rate: number }) {
+  const c = step.content_json as {
+    audio_intro?: string;
+    title_fr?: string;
+    code_color_legend?: { color: string; label: string; emoji: string }[];
+    tokens_with_role?: { text: string; color: string; role_fr: string; meaning_fr: string; emoji: string }[];
+    audio_full?: string;
+    audio_full_fr?: string;
+  }
+  const tokens = c.tokens_with_role || []
+  const legend = c.code_color_legend || []
+
+  const segments: SequenceSegment[] = useMemo(() => {
+    const segs: SequenceSegment[] = []
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
+    tokens.forEach(t => {
+      segs.push({ text: `${t.text}, ${t.role_fr}, ${t.meaning_fr}`, lang: 'fr-FR', pauseAfter: 800 })
+    })
+    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB', pauseAfter: 600 })
+    if (c.audio_full_fr) segs.push({ text: c.audio_full_fr, lang: 'fr-FR' })
+    return segs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useAutoIntro(segments, rate)
+  const replay = () => void speakSequence(segments, rate)
+
+  return (
+    <div className="space-y-5">
+      <StepHeader icon="🔍" label="Lecture guidée" onReplay={replay} />
+      {c.title_fr && (
+        <h2 className="text-xl font-extrabold text-primary-900 text-center">{c.title_fr}</h2>
+      )}
+
+      {/* Phrase complète tout en haut */}
+      {c.audio_full && (
+        <button onClick={() => speak(c.audio_full!)}
+          className="w-full bg-gray-50 rounded-xl p-3 text-center hover:bg-gray-100">
+          <div className="text-2xl font-extrabold text-primary-900">🔊 {c.audio_full}</div>
+          {c.audio_full_fr && <div className="text-sm italic text-gray-600 mt-1">→ {c.audio_full_fr}</div>}
+        </button>
+      )}
+
+      {/* Décomposition mot par mot avec rôle + sens FR */}
+      <div className="space-y-2">
+        {tokens.map((t, i) => (
+          <button key={i} onClick={() => speak(t.text)}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 hover:scale-[1.02] transition-transform ${colorClass(t.color as 'blue' | 'red' | 'green')}`}>
+            <span className="text-2xl">{t.emoji}</span>
+            <div className="flex-1 text-left">
+              <div className="text-2xl font-extrabold">{t.text}</div>
+              <div className="text-xs font-medium opacity-80">{t.role_fr} → <span className="font-bold">{t.meaning_fr}</span></div>
+            </div>
+            <span className="text-base">🔊</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Légende code couleur */}
+      {legend.length > 0 && (
+        <div className="bg-gray-50 rounded-xl p-3">
+          <div className="text-[11px] uppercase font-bold text-gray-500 tracking-wide mb-2 text-center">Le code couleur</div>
+          <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+            {legend.map((l, i) => (
+              <span key={i} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg font-bold ${colorClass(l.color)}`}>
+                {l.emoji} {l.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button onClick={onContinue}
+        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
+        J&apos;ai compris →
+      </button>
+    </div>
+  )
+}
+
+// ============================================================================
 // 1. IMMERSION — écoute simple
 // ============================================================================
 
@@ -194,13 +367,20 @@ function StepDiscoverText({ step, onContinue, rate }: { step: StepV6; onContinue
       <StepHeader icon="🎨" label="Découverte" onReplay={replay} />
       <div className="text-center space-y-4 py-4">
         {c.media?.emoji && <div className="text-5xl">{c.media.emoji}</div>}
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        {/* v6.1 — Tokens avec emoji + meaning_fr en dessous (ancrage cognitif renforcé) */}
+        <div className="flex flex-wrap items-end justify-center gap-2">
           {tokens.map((t, i) => (
             <button
               key={i}
               onClick={() => speak(t.text)}
-              className={`rounded-lg border-2 font-bold text-2xl px-4 py-2 hover:scale-105 transition-transform ${colorClass(t.color)}`}>
-              {t.text}
+              className={`flex flex-col items-center gap-1 rounded-lg border-2 font-bold px-3 py-2 hover:scale-105 transition-transform ${colorClass(t.color)}`}>
+              <span className="text-2xl">{t.text}</span>
+              {(t.emoji || t.meaning_fr) && (
+                <span className="text-[11px] font-medium opacity-90 leading-none">
+                  {t.emoji && <span className="text-base mr-1">{t.emoji}</span>}
+                  {t.meaning_fr}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -231,11 +411,13 @@ function StepRecognition({
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
+  // v6.1 — Audio auto au mount : intro + question FR + audio EN cible (la bonne phrase)
+  // L'utilisateur entend la phrase EN avant de choisir → entraîne le lien audio↔structure↔sens
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
-    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB', pauseAfter: 800 })
-    if (c.question_fr) segs.push({ text: c.question_fr, lang: 'fr-FR' })
+    if (c.question_fr) segs.push({ text: c.question_fr, lang: 'fr-FR', pauseAfter: 800 })
+    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB' })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -250,7 +432,6 @@ function StepRecognition({
       setTimeout(() => onContinue(true), 900)
     } else {
       setShown('wrong')
-      // Permettre de réessayer : reset après 1200ms
       setTimeout(() => { setPicked(null); setShown('idle') }, 1200)
     }
   }
@@ -260,14 +441,15 @@ function StepRecognition({
       <StepHeader icon="🎯" label="Reconnaissance" onReplay={replay} />
       <div className="text-center space-y-2 py-3">
         {c.media?.emoji && <div className="text-5xl">{c.media.emoji}</div>}
-        {c.audio_full && (
-          <button onClick={() => speak(c.audio_full!)}
-            className="text-2xl font-bold text-primary-900 hover:text-primary-700 inline-flex items-center gap-2">
-            🔊 {c.audio_full}
-          </button>
-        )}
         {c.question_fr && (
           <div className="text-lg font-semibold text-primary-900">{c.question_fr}</div>
+        )}
+        {/* v6.1 — Bouton audio EN visible pour réécouter la phrase cible */}
+        {c.audio_full && (
+          <button onClick={() => speak(c.audio_full!)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-800 rounded-full font-bold hover:bg-primary-200">
+            🔊 Réécouter
+          </button>
         )}
       </div>
       <div className="space-y-2">
@@ -460,7 +642,21 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
             </div>
           )}
           {c.explanation_fr && (
-            <div className="text-sm italic text-gray-700">💡 {c.explanation_fr.replace(/\*\*/g, '')}</div>
+            <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg flex items-start gap-3 mt-2">
+              <div className="flex-1">
+                <div className="text-[11px] uppercase font-bold text-amber-700 tracking-wide mb-1">
+                  💡 À retenir
+                </div>
+                <div className="text-base font-semibold text-gray-900 leading-snug">
+                  {c.explanation_fr.replace(/\*\*/g, '')}
+                </div>
+              </div>
+              <button onClick={() => speak(c.explanation_fr!.replace(/\*\*/g, ''), null, { lang: 'fr-FR' })}
+                aria-label="Écouter l'astuce"
+                className="shrink-0 w-10 h-10 rounded-full bg-amber-200 text-amber-900 hover:bg-amber-300 text-base">
+                🔊
+              </button>
+            </div>
           )}
           <button onClick={() => onContinue(feedback)}
             className="w-full p-3 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900">
@@ -683,6 +879,7 @@ function StepGapFill({
 }) {
   const c = (data || step.content_json) as {
     audio_intro?: string;
+    audio_intro_fr?: string;  // v6.1 — FR auto au mount pour les illettrés
     sentence_tokens?: ColorToken[];
     sentence_fr_tokens?: ColorToken[];
     sentence_fr?: string;
@@ -696,10 +893,16 @@ function StepGapFill({
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
   const [filled, setFilled] = useState<string | null>(null)
 
-  const segments: SequenceSegment[] = useMemo(() =>
-    c.audio_intro ? [{ text: c.audio_intro, lang: 'fr-FR' }] : []
+  // v6.1 — Audio FR auto au mount : on lit la phrase en français
+  // pour que les illettrés comprennent ce qu'on attend AVANT de choisir.
+  const segments: SequenceSegment[] = useMemo(() => {
+    const segs: SequenceSegment[] = []
+    if (c.audio_intro_fr) segs.push({ text: c.audio_intro_fr, lang: 'fr-FR' })
+    else if (c.sentence_fr) segs.push({ text: c.sentence_fr, lang: 'fr-FR' })
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR' })
+    return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [step.id])
+  }, [step.id])
   useAutoIntro(segments, rate)
 
   function pick(idx: number) {
@@ -769,8 +972,21 @@ function StepGapFill({
         })}
       </div>
       {c.explanation_fr && picked !== null && options[picked].correct && (
-        <div className="bg-amber-50 border-l-4 border-amber-400 p-3 rounded-r-lg text-sm">
-          💡 {c.explanation_fr.replace(/\*\*/g, '')}
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg flex items-start gap-3">
+          <div className="flex-1">
+            <div className="text-[11px] uppercase font-bold text-amber-700 tracking-wide mb-1">
+              💡 À retenir
+            </div>
+            <div className="text-base font-semibold text-gray-900 leading-snug">
+              {c.explanation_fr.replace(/\*\*/g, '')}
+            </div>
+          </div>
+          {/* v6.1 — Bouton 🔊 visible pour réécouter l'astuce */}
+          <button onClick={() => speak(c.explanation_fr!.replace(/\*\*/g, ''), null, { lang: 'fr-FR' })}
+            aria-label="Écouter l'astuce"
+            className="shrink-0 w-10 h-10 rounded-full bg-amber-200 text-amber-900 hover:bg-amber-300 text-base">
+            🔊
+          </button>
         </div>
       )}
     </div>
@@ -976,6 +1192,8 @@ export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mod
 
   return (
     <div className="space-y-4">
+      {step.type === 'intro' && <StepIntro step={step} onContinue={() => handleContinue()} rate={rate} />}
+      {step.type === 'role_explanation' && <StepRoleExplanation step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'immersion' && <StepImmersion step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'discover_text' && <StepDiscoverText step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'recognition' && <StepRecognition step={step} onContinue={handleContinue} rate={rate} />}
@@ -1001,8 +1219,10 @@ export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mod
         <div className="text-xs text-center text-gray-400">Dernière étape</div>
       )}
 
-      <div data-tts-version={TTS_VERSION} className="text-[8px] text-gray-300 text-center select-none">
-        TTS {TTS_VERSION}
+      <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 select-none">
+        <span data-tts-version={TTS_VERSION}>TTS {TTS_VERSION}</span>
+        <span>·</span>
+        <span>Parcours : {mode === 'speaking' ? '🎧 Speaking pur' : '📘 Complet'}</span>
       </div>
     </div>
   )
