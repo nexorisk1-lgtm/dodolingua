@@ -365,5 +365,5 @@ export function stopSpeaking(): void {
   __sequenceLock = false
 }
 
-/** v6.1 — Fix capital I via homophone 'eye' + ajustements UX */
-export const TTS_VERSION = 'v6.1'
+/** v7.0 — Refonte cours BE en 46 étapes + types repeat/dialog/validation_final + couleurs pastel */
+export const TTS_VERSION = 'v7.0'

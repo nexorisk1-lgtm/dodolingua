@@ -20,6 +20,9 @@ import { speak, speakSequence, stopSpeaking, TTS_VERSION, type SequenceSegment }
 export type StepTypeV6 =
   | 'intro'             // v6.1 — mini-leçon contextuelle au début
   | 'role_explanation'  // v6.1 — "Comment lire cette phrase ?" avec icônes par rôle
+  | 'repeat'            // v7.0 — 🔊 + 🎤 répétition orale (Phase 1)
+  | 'dialog'            // v7.0 — Q/R "Are you French? → Yes, I am" (Phase 11)
+  | 'validation_final'  // v7.0 — Écran 🎉 Bravo + résumé (Phase 13)
   | 'immersion' | 'discover_text' | 'recognition' | 'pattern' | 'match'
   | 'listen_target' | 'tap_build' | 'gap_fill' | 'variants'
   | 'contractions_intro' | 'contractions_recognition' | 'contractions_build'
@@ -55,20 +58,14 @@ interface Props {
 // PALETTE DE COULEURS
 // ============================================================================
 
+// v7.0 — Code couleur PASTEL uniquement (reco ChatGPT : doit aider, pas fatiguer A1)
+// Bleu pastel = sujet/personne · Rouge pastel = verbe · Vert pastel = info · Violet = contraction · Jaune = auxiliaire
 const COLOR_BG: Record<string, string> = {
   blue: 'bg-blue-100 text-blue-900 border-blue-300',
   red: 'bg-red-100 text-red-900 border-red-300',
   green: 'bg-green-100 text-green-900 border-green-300',
   yellow: 'bg-yellow-100 text-yellow-900 border-yellow-300',
   purple: 'bg-purple-100 text-purple-900 border-purple-300',
-}
-
-const COLOR_BG_STRONG: Record<string, string> = {
-  blue: 'bg-blue-500 text-white border-blue-600',
-  red: 'bg-red-500 text-white border-red-600',
-  green: 'bg-green-500 text-white border-green-600',
-  yellow: 'bg-yellow-500 text-yellow-900 border-yellow-600',
-  purple: 'bg-purple-500 text-white border-purple-600',
 }
 
 function colorClass(c?: string): string {
@@ -304,6 +301,181 @@ function StepRoleExplanation({ step, onContinue, rate }: { step: StepV6; onConti
       <button onClick={onContinue}
         className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
         J&apos;ai compris →
+      </button>
+    </div>
+  )
+}
+
+// ============================================================================
+// 0ter. REPEAT — répétition orale (v7.0)
+// 🔊 lit la phrase, l'utilisateur la répète après. Pas d'évaluation stricte.
+// ============================================================================
+
+function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () => void; rate: number }) {
+  const c = step.content_json as {
+    audio_intro?: string;
+    audio_full?: string;
+    audio_fr?: string;
+    media?: { emoji?: string };
+  }
+
+  const segments: SequenceSegment[] = useMemo(() => {
+    const segs: SequenceSegment[] = []
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
+    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB', pauseAfter: 800 })
+    if (c.audio_fr) segs.push({ text: c.audio_fr, lang: 'fr-FR' })
+    return segs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useAutoIntro(segments, rate)
+  const replay = () => c.audio_full && speak(c.audio_full)
+
+  return (
+    <div className="space-y-5">
+      <StepHeader icon="🎤" label="Répète à voix haute" onReplay={replay} />
+      <div className="text-center py-6 space-y-4">
+        {c.media?.emoji && <div className="text-6xl">{c.media.emoji}</div>}
+        {c.audio_full && (
+          <button onClick={replay}
+            className="w-full bg-primary-50 hover:bg-primary-100 rounded-2xl p-6 transition-colors">
+            <div className="text-4xl mb-2">🔊</div>
+            <div className="text-2xl font-extrabold text-primary-900">{c.audio_full}</div>
+            {c.audio_fr && <div className="text-sm italic text-gray-600 mt-1">→ {c.audio_fr}</div>}
+          </button>
+        )}
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg text-left">
+          <div className="text-2xl mb-1">🎤</div>
+          <div className="text-base font-semibold text-gray-900">
+            Maintenant, répète à voix haute après moi.
+          </div>
+          <div className="text-xs text-gray-600 mt-1">Pas besoin d&apos;être parfait. L&apos;objectif est d&apos;habituer ton oreille et ta bouche.</div>
+        </div>
+      </div>
+      <button onClick={onContinue}
+        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
+        J&apos;ai répété →
+      </button>
+    </div>
+  )
+}
+
+// ============================================================================
+// 0quater. DIALOG — mini-dialogue Q/R (v7.0)
+// 🔊 Q + 🟩 R + traduction. Pas d'exo, juste écoute du pattern conversationnel.
+// ============================================================================
+
+function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () => void; rate: number }) {
+  const c = step.content_json as {
+    audio_intro?: string;
+    question_en?: string;
+    answer_tokens?: ColorToken[];
+    answer_fr?: string;
+    answer_en_full?: string;
+  }
+  const answerTokens = c.answer_tokens || []
+  const answerFull = c.answer_en_full || answerTokens.map(t => t.text).join(' ')
+
+  const segments: SequenceSegment[] = useMemo(() => {
+    const segs: SequenceSegment[] = []
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1000 })
+    if (c.question_en) segs.push({ text: c.question_en, lang: 'en-GB', pauseAfter: 1200 })
+    if (answerFull) segs.push({ text: answerFull, lang: 'en-GB', pauseAfter: 800 })
+    if (c.answer_fr) segs.push({ text: c.answer_fr, lang: 'fr-FR' })
+    return segs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useAutoIntro(segments, rate)
+  const replay = () => void speakSequence(segments, rate)
+
+  return (
+    <div className="space-y-5">
+      <StepHeader icon="💬" label="Mini-dialogue" onReplay={replay} />
+
+      {/* Question */}
+      {c.question_en && (
+        <button onClick={() => speak(c.question_en!)}
+          className="w-full bg-gray-50 hover:bg-gray-100 rounded-xl p-4 text-left transition-colors">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🔊</span>
+            <div className="flex-1">
+              <div className="text-xs uppercase font-bold text-gray-500 tracking-wide">Question</div>
+              <div className="text-xl font-bold text-primary-900 mt-1">{c.question_en}</div>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* Réponse avec tokens colorés */}
+      {answerTokens.length > 0 && (
+        <button onClick={() => speak(answerFull)}
+          className="w-full bg-green-50 hover:bg-green-100 rounded-xl p-4 text-left transition-colors border-2 border-green-200">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🔊</span>
+            <div className="flex-1">
+              <div className="text-xs uppercase font-bold text-green-700 tracking-wide">Réponse</div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {answerTokens.map((t, i) => <TokenChip key={i} token={t} />)}
+              </div>
+              {c.answer_fr && <div className="text-sm italic text-gray-700 mt-2">→ {c.answer_fr}</div>}
+            </div>
+          </div>
+        </button>
+      )}
+
+      <button onClick={onContinue}
+        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
+        Continuer →
+      </button>
+    </div>
+  )
+}
+
+// ============================================================================
+// 0quinquies. VALIDATION_FINAL — écran 🎉 Bravo + résumé (v7.0)
+// ============================================================================
+
+function StepValidationFinal({ step, onContinue, rate }: { step: StepV6; onContinue: () => void; rate: number }) {
+  const c = step.content_json as {
+    audio_intro?: string;
+    title_fr?: string;
+    achievements?: string[];
+    next_step_fr?: string;
+  }
+  const items = c.achievements || []
+
+  const segments: SequenceSegment[] = useMemo(() => {
+    const segs: SequenceSegment[] = []
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR' })
+    return segs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useAutoIntro(segments, rate)
+
+  return (
+    <div className="space-y-5 text-center">
+      <div className="text-7xl">🎉</div>
+      <h2 className="text-2xl font-extrabold text-primary-900">
+        {c.title_fr || 'Bravo !'}
+      </h2>
+      {items.length > 0 && (
+        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg text-left">
+          <div className="text-sm uppercase font-bold text-green-700 tracking-wide mb-2">Tu sais maintenant :</div>
+          <ul className="space-y-2">
+            {items.map((it, i) => (
+              <li key={i} className="flex items-start gap-2 text-base font-semibold text-gray-900">
+                <span className="text-green-600">✓</span>
+                <span>{it}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {c.next_step_fr && (
+        <div className="text-sm italic text-gray-600">{c.next_step_fr}</div>
+      )}
+      <button onClick={onContinue}
+        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
+        Terminer la leçon →
       </button>
     </div>
   )
@@ -1194,6 +1366,9 @@ export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mod
     <div className="space-y-4">
       {step.type === 'intro' && <StepIntro step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'role_explanation' && <StepRoleExplanation step={step} onContinue={() => handleContinue()} rate={rate} />}
+      {step.type === 'repeat' && <StepRepeat step={step} onContinue={() => handleContinue()} rate={rate} />}
+      {step.type === 'dialog' && <StepDialog step={step} onContinue={() => handleContinue()} rate={rate} />}
+      {step.type === 'validation_final' && <StepValidationFinal step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'immersion' && <StepImmersion step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'discover_text' && <StepDiscoverText step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'recognition' && <StepRecognition step={step} onContinue={handleContinue} rate={rate} />}
