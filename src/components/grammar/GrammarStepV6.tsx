@@ -169,15 +169,15 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
   }
   const rules = c.rules || []
 
-  // Audio auto au mount : intro + chaque règle FR + chaque exemple EN
+  // v7.3 — Audio auto au mount : on envoie le texte AVEC les marqueurs **xxx**
+  // pour que speakSequence détecte les mots EN et bascule sur la voix anglaise.
+  // Avant v7.3 on faisait .replace(/\*\*/g, '') ICI ce qui cassait tout le système mixed.
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1500 })
     rules.forEach((r) => {
-      segs.push({ text: r.text_fr.replace(/\*\*/g, ''), lang: 'fr-FR', pauseAfter: 1000 })
-      ;(r.examples_en || []).forEach(ex => {
-        segs.push({ text: ex, lang: 'en-GB', pauseAfter: 600 })
-      })
+      // Pas de strip **xxx** ici, speakSequence le gère et bascule voix EN
+      segs.push({ text: r.text_fr, lang: 'fr-FR', pauseAfter: 1000 })
     })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1290,8 +1290,8 @@ function StepGapFill({
               {c.explanation_fr.replace(/\*\*/g, '')}
             </div>
           </div>
-          {/* v6.1 — Bouton 🔊 visible pour réécouter l'astuce */}
-          <button onClick={() => speak(c.explanation_fr!.replace(/\*\*/g, ''), null, { lang: 'fr-FR' })}
+          {/* v7.3 — Bouton 🔊 mixed-aware (voix EN sur **xxx**) */}
+          <button onClick={() => void speakSequence([{ text: c.explanation_fr!, lang: 'fr-FR' }], rate)}
             aria-label="Écouter l'astuce"
             className="shrink-0 w-10 h-10 rounded-full bg-amber-200 text-amber-900 hover:bg-amber-300 text-base">
             🔊
