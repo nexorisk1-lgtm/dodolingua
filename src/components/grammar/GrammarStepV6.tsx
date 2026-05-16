@@ -1,6 +1,6 @@
 'use client'
-import { useState, useMemo, useEffect } from 'react'
-import { speak, speakSequence, stopSpeaking, TTS_VERSION, type SequenceSegment } from '@/components/games/utils'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { speak, speakSequence, stopSpeaking, TTS_VERSION, recognizeSpeech, type SequenceSegment } from '@/components/games/utils'
 
 /**
  * V6 — Composant unifié pour les 13 types d'étapes du nouveau format grammaire.
@@ -319,6 +319,13 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     media?: { emoji?: string };
   }
 
+  // v7.1 — Enregistrement réel via Speech Recognition API (Chrome/Edge)
+  const [recording, setRecording] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const [lastResult, setLastResult] = useState<{ transcript: string; similarity: number; unsupported?: boolean } | null>(null)
+  const MAX_ATTEMPTS = 3
+  const SUCCESS_THRESHOLD = 0.75
+
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
@@ -330,30 +337,81 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
   useAutoIntro(segments, rate)
   const replay = () => c.audio_full && speak(c.audio_full)
 
+  async function startRecording() {
+    if (!c.audio_full || recording) return
+    setRecording(true)
+    setLastResult(null)
+    try {
+      const result = await recognizeSpeech(c.audio_full, 'en-GB')
+      setLastResult(result)
+      setAttempt(a => a + 1)
+      if (result.unsupported) return
+      // Bonne réponse → auto-next 1.5s plus tard
+      if (result.similarity >= SUCCESS_THRESHOLD) {
+        setTimeout(() => onContinue(), 1500)
+      }
+    } finally {
+      setRecording(false)
+    }
+  }
+
+  const isSuccess = lastResult && !lastResult.unsupported && lastResult.similarity >= SUCCESS_THRESHOLD
+  const isFail = lastResult && !lastResult.unsupported && lastResult.similarity < SUCCESS_THRESHOLD
+  const exhausted = attempt >= MAX_ATTEMPTS
+
   return (
     <div className="space-y-5">
       <StepHeader icon="🎤" label="Répète à voix haute" onReplay={replay} />
-      <div className="text-center py-6 space-y-4">
-        {c.media?.emoji && <div className="text-6xl">{c.media.emoji}</div>}
+      <div className="text-center py-4 space-y-4">
+        {c.media?.emoji && <div className="text-5xl">{c.media.emoji}</div>}
+        {/* Modèle à imiter */}
         {c.audio_full && (
           <button onClick={replay}
-            className="w-full bg-primary-50 hover:bg-primary-100 rounded-2xl p-6 transition-colors">
-            <div className="text-4xl mb-2">🔊</div>
+            className="w-full bg-primary-50 hover:bg-primary-100 rounded-2xl p-5 transition-colors">
+            <div className="text-3xl mb-1">🔊</div>
             <div className="text-2xl font-extrabold text-primary-900">{c.audio_full}</div>
             {c.audio_fr && <div className="text-sm italic text-gray-600 mt-1">→ {c.audio_fr}</div>}
+            <div className="text-xs text-gray-500 mt-2">Tape pour réécouter</div>
           </button>
         )}
-        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg text-left">
-          <div className="text-2xl mb-1">🎤</div>
-          <div className="text-base font-semibold text-gray-900">
-            Maintenant, répète à voix haute après moi.
+
+        {/* Bouton micro */}
+        <button onClick={startRecording} disabled={recording || isSuccess || exhausted}
+          className={`w-full p-5 rounded-2xl font-bold text-lg transition-all ${
+            recording ? 'bg-red-500 text-white animate-pulse' :
+            isSuccess ? 'bg-green-500 text-white' :
+            exhausted ? 'bg-gray-300 text-gray-500' :
+            'bg-amber-400 hover:bg-amber-500 text-amber-950'
+          }`}>
+          {recording ? '🎤 Je t’écoute...' :
+           isSuccess ? '✓ Bravo, tu as bien dit !' :
+           exhausted ? '⏭️ Continue, tu réessayeras' :
+           `🎤 ${attempt === 0 ? 'Appuie et répète' : `Réessaie (${attempt}/${MAX_ATTEMPTS})`}`}
+        </button>
+
+        {/* Résultat */}
+        {lastResult?.unsupported && (
+          <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded-r-lg text-left text-sm">
+            🎧 Ton navigateur ne supporte pas l&apos;enregistrement. Sur Chrome ou Edge, tu pourras répéter et obtenir un score.
           </div>
-          <div className="text-xs text-gray-600 mt-1">Pas besoin d&apos;être parfait. L&apos;objectif est d&apos;habituer ton oreille et ta bouche.</div>
-        </div>
+        )}
+        {lastResult && !lastResult.unsupported && (
+          <div className={`border-l-4 p-3 rounded-r-lg text-left ${isSuccess ? 'border-green-500 bg-green-50' : 'border-amber-400 bg-amber-50'}`}>
+            <div className="text-xs uppercase font-bold text-gray-500 mb-1">Ce que j&apos;ai entendu :</div>
+            <div className="text-lg font-bold text-gray-900">{lastResult.transcript || '(rien entendu)'}</div>
+            <div className="text-sm mt-1">
+              Score : <span className={`font-bold ${isSuccess ? 'text-green-700' : 'text-amber-700'}`}>{Math.round(lastResult.similarity * 100)}%</span>
+            </div>
+            {isFail && !exhausted && (
+              <div className="text-xs text-gray-600 mt-1">Essaie encore, écoute bien le modèle 🔊</div>
+            )}
+          </div>
+        )}
       </div>
+
       <button onClick={onContinue}
-        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
-        J&apos;ai répété →
+        className="w-full p-3 bg-white border-2 border-primary-300 text-primary-700 rounded-xl font-bold hover:bg-primary-50">
+        Passer cette étape →
       </button>
     </div>
   )
@@ -453,10 +511,12 @@ function StepValidationFinal({ step, onContinue, rate }: { step: StepV6; onConti
 
   return (
     <div className="space-y-5 text-center">
-      <div className="text-7xl">🎉</div>
+      {/* v7.1 — Mascotte Dodo en cohérence avec la partie vocabulaire */}
+      <div className="text-8xl">🦤</div>
       <h2 className="text-2xl font-extrabold text-primary-900">
         {c.title_fr || 'Bravo !'}
       </h2>
+      <div className="text-base text-gray-600">— Dodo</div>
       {items.length > 0 && (
         <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg text-left">
           <div className="text-sm uppercase font-bold text-green-700 tracking-wide mb-2">Tu sais maintenant :</div>
@@ -492,7 +552,21 @@ function StepImmersion({ step, onContinue, rate }: { step: StepV6; onContinue: (
     ...(c.audio_full ? [{ text: c.audio_full, lang: 'en-GB' as const, pauseAfter: 1000 }] : []),
     ...(c.audio_fr ? [{ text: c.audio_fr, lang: 'fr-FR' as const }] : []),
   ], [c.audio_intro, c.audio_full, c.audio_fr])
-  useAutoIntro(segments, rate)
+
+  // v7.1 — Auto-next 2 secondes après la fin de l'audio (accessibilité illettrés)
+  // L'utilisateur peut aussi cliquer le bouton pour passer plus vite.
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      await speakSequence(segments, rate)
+      if (!cancelled) {
+        setTimeout(() => { if (!cancelled) onContinue() }, 2000)
+      }
+    }
+    const t = setTimeout(() => void run(), 300)
+    return () => { cancelled = true; clearTimeout(t); stopSpeaking() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const replay = () => void speakSequence(segments, rate)
 
   return (
@@ -509,7 +583,7 @@ function StepImmersion({ step, onContinue, rate }: { step: StepV6; onContinue: (
       </div>
       <button onClick={onContinue}
         className="w-full p-4 bg-primary-700 text-white rounded-xl font-semibold hover:bg-primary-900 text-lg">
-        J&apos;ai écouté →
+        Suivant →
       </button>
     </div>
   )
@@ -734,14 +808,8 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     const newMatches = { ...matches, [selectedLeft]: idx }
     setMatches(newMatches)
     setSelectedLeft(null)
-    if (Object.keys(newMatches).length === pairs.length) {
-      const allOk = pairs.every(p => {
-        const chosenIdx = newMatches[p.left]
-        const chosenVal = rightShuffled.find(r => r.idx === chosenIdx)?.val
-        return chosenVal === p.right
-      })
-      setFeedback(allOk)
-    }
+    // v7.1 — NE PLUS auto-valider. L'utilisateur doit cliquer "Valider" lui-même
+    // pour pouvoir changer ses choix avant validation.
   }
 
   /** v6.0 — Permettre de défaire un match avant validation finale */
@@ -750,6 +818,27 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     const next = { ...matches }
     delete next[l]
     setMatches(next)
+    // v7.1 — Auto-resélectionner le left démantelé pour faciliter la correction
+    setSelectedLeft(l)
+  }
+
+  /** v7.1 — Validation manuelle (bouton "Valider") */
+  function validateMatch() {
+    if (Object.keys(matches).length !== pairs.length || feedback !== null) return
+    const allOk = pairs.every(p => {
+      const chosenIdx = matches[p.left]
+      const chosenVal = rightShuffled.find(r => r.idx === chosenIdx)?.val
+      return chosenVal === p.right
+    })
+    setFeedback(allOk)
+  }
+
+  /** v7.1 — Tout effacer pour recommencer */
+  function resetMatches() {
+    if (feedback === true) return
+    setMatches({})
+    setSelectedLeft(null)
+    setFeedback(null)
   }
 
   return (
@@ -799,6 +888,22 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
           })}
         </div>
       </div>
+      {/* v7.1 — Boutons Valider / Effacer (validation manuelle) */}
+      {feedback === null && Object.keys(matches).length > 0 && (
+        <div className="flex gap-2">
+          <button onClick={resetMatches}
+            className="flex-1 p-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50">
+            Tout effacer
+          </button>
+          {Object.keys(matches).length === pairs.length && (
+            <button onClick={validateMatch}
+              className="flex-1 p-3 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900">
+              Valider →
+            </button>
+          )}
+        </div>
+      )}
+
       {feedback !== null && (
         <div className={`border-l-4 p-4 rounded-r-lg space-y-3 ${feedback ? 'border-ok bg-green-50' : 'border-warn bg-yellow-50'}`}>
           <div className={`text-base font-bold ${feedback ? 'text-ok' : 'text-warn'}`}>
@@ -823,17 +928,25 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
                   {c.explanation_fr.replace(/\*\*/g, '')}
                 </div>
               </div>
-              <button onClick={() => speak(c.explanation_fr!.replace(/\*\*/g, ''), null, { lang: 'fr-FR' })}
+              <button onClick={() => void speakSequence([{ text: c.explanation_fr!, lang: 'fr-FR' }], rate)}
                 aria-label="Écouter l'astuce"
                 className="shrink-0 w-10 h-10 rounded-full bg-amber-200 text-amber-900 hover:bg-amber-300 text-base">
                 🔊
               </button>
             </div>
           )}
-          <button onClick={() => onContinue(feedback)}
-            className="w-full p-3 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900">
-            Continuer →
-          </button>
+          {!feedback && (
+            <button onClick={resetMatches}
+              className="w-full p-3 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900">
+              Réessayer
+            </button>
+          )}
+          {feedback && (
+            <button onClick={() => onContinue(true)}
+              className="w-full p-3 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900">
+              Continuer →
+            </button>
+          )}
         </div>
       )}
     </div>

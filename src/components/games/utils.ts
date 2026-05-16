@@ -325,8 +325,30 @@ export async function speakSequence(
     window.speechSynthesis.cancel()
     await new Promise(r => setTimeout(r, 50))
 
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i]
+    // v7.1 — Déplier chaque segment FR contenant des **xxx** en sous-segments alternés FR/EN
+    // pour que les mots anglais soient TOUJOURS lus par la voix anglaise.
+    const expanded: SequenceSegment[] = []
+    for (const seg of segments) {
+      // Si segment EN pur ou pas de marqueurs : push tel quel
+      if (seg.lang === 'en-GB' || !/\*\*[^*]+\*\*/.test(seg.text)) {
+        expanded.push(seg)
+        continue
+      }
+      // Sinon : segment FR avec mots EN entre **xxx** → décomposer
+      const sub = parseMixedText(seg.text, seg.lang)
+      sub.forEach((s, idx) => {
+        expanded.push({
+          text: s.text,
+          lang: s.lang,
+          rate: seg.rate,
+          // Petite pause entre sous-segments mixed, vraie pause à la fin
+          pauseAfter: idx === sub.length - 1 ? seg.pauseAfter : 200,
+        })
+      })
+    }
+
+    for (let i = 0; i < expanded.length; i++) {
+      const seg = expanded[i]
       let cleanText = seg.text.replace(/\*\*/g, '').trim()
       if (!cleanText) continue
       // v6.1 — Fix "capital I" via homophone "eye"
@@ -349,7 +371,7 @@ export async function speakSequence(
 
       // Pause après le segment (sauf le dernier)
       const pause = seg.pauseAfter ?? 400
-      if (i < segments.length - 1 && pause > 0) {
+      if (i < expanded.length - 1 && pause > 0) {
         await new Promise(r => setTimeout(r, pause))
       }
     }
@@ -365,5 +387,59 @@ export function stopSpeaking(): void {
   __sequenceLock = false
 }
 
-/** v7.0 — Refonte cours BE en 46 étapes + types repeat/dialog/validation_final + couleurs pastel */
-export const TTS_VERSION = 'v7.0'
+// ===========================================================
+// V7.1 — Speech Recognition pour l'étape "repeat"
+// Permet à l'utilisateur d'enregistrer sa voix et de comparer
+// avec le modèle EN (texte attendu). Compatible Chrome/Edge.
+// ===========================================================
+
+export interface SpeechRecognitionResult {
+  transcript: string
+  /** Score entre 0 et 1, basé sur la similarité avec l'attendu */
+  similarity: number
+  /** True si le navigateur ne supporte pas */
+  unsupported?: boolean
+}
+
+/** Démarre la reconnaissance vocale et retourne ce qui a été entendu. */
+export function recognizeSpeech(expected: string, lang = 'en-GB'): Promise<SpeechRecognitionResult> {
+  return new Promise((resolve) => {
+    // @ts-expect-error — webkitSpeechRecognition n'est pas typé partout
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) return resolve({ transcript: '', similarity: 0, unsupported: true })
+    const recognition = new SR()
+    recognition.lang = lang
+    recognition.interimResults = false
+    recognition.maxAlternatives = 3
+
+    recognition.onresult = (event: { results: { 0: { transcript: string } }[] }) => {
+      const transcript = event.results[0][0].transcript.trim()
+      resolve({
+        transcript,
+        similarity: computeSimilarity(transcript.toLowerCase(), expected.toLowerCase()),
+      })
+    }
+    recognition.onerror = () => resolve({ transcript: '', similarity: 0 })
+    recognition.onend = () => { /* géré par onresult/onerror */ }
+
+    try {
+      recognition.start()
+    } catch {
+      resolve({ transcript: '', similarity: 0 })
+    }
+  })
+}
+
+/** Calcule une similarité simple basée sur les mots communs (0 à 1). */
+function computeSimilarity(a: string, b: string): number {
+  const normalize = (s: string) => s.replace(/[^a-zÀ-ſ'\s]/gi, '').toLowerCase().trim()
+  const wordsA = normalize(a).split(/\s+/).filter(Boolean)
+  const wordsB = normalize(b).split(/\s+/).filter(Boolean)
+  if (wordsB.length === 0) return 0
+  const setB = new Set(wordsB)
+  const matches = wordsA.filter(w => setB.has(w)).length
+  return Math.min(1, matches / wordsB.length)
+}
+
+/** v7.1 — Audio mixed-aware (speakSequence détecte **xxx** → voix EN) + Speech Recognition */
+export const TTS_VERSION = 'v7.1'
