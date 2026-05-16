@@ -117,6 +117,25 @@ function useAutoIntro(segments: SequenceSegment[], rate: number) {
   }, [])
 }
 
+/** v7.2 — Joue l'audio puis auto-next 2s après la fin.
+ *  Pour les étapes passives (intro, role_explanation, discover_text, pattern,
+ *  dialog, contractions_intro) où l'utilisateur n'a pas de choix à faire.
+ *  Accessibilité illettrés : pas besoin de comprendre le texte du bouton. */
+function useAutoIntroWithAutoNext(segments: SequenceSegment[], rate: number, onContinue: () => void) {
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      if (segments.length > 0) await speakSequence(segments, rate)
+      if (!cancelled) {
+        setTimeout(() => { if (!cancelled) onContinue() }, 2000)
+      }
+    }
+    const t = setTimeout(() => void run(), 300)
+    return () => { cancelled = true; clearTimeout(t); stopSpeaking() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+}
+
 // ============================================================================
 // HEADER GÉNÉRIQUE (icône + label + bouton replay)
 // ============================================================================
@@ -163,7 +182,8 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useAutoIntro(segments, rate)
+  // v7.2 — Auto-next : étape passive, l'utilisateur n'a rien à faire activement
+  useAutoIntroWithAutoNext(segments, rate, onContinue)
   const replay = () => void speakSequence(segments, rate)
 
   return (
@@ -216,8 +236,8 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
         ))}
       </div>
       <button onClick={onContinue}
-        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
-        C&apos;est compris, on commence ! →
+        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-xl flex items-center justify-center gap-2">
+        Suivant <span className="text-2xl">→</span>
       </button>
     </div>
   )
@@ -250,7 +270,8 @@ function StepRoleExplanation({ step, onContinue, rate }: { step: StepV6; onConti
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useAutoIntro(segments, rate)
+  // v7.2 — Auto-next : étape passive
+  useAutoIntroWithAutoNext(segments, rate, onContinue)
   const replay = () => void speakSequence(segments, rate)
 
   return (
@@ -300,7 +321,7 @@ function StepRoleExplanation({ step, onContinue, rate }: { step: StepV6; onConti
 
       <button onClick={onContinue}
         className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
-        J&apos;ai compris →
+        Suivant →
       </button>
     </div>
   )
@@ -442,7 +463,8 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useAutoIntro(segments, rate)
+  // v7.2 — Auto-next : dialog est passif (juste écoute Q/R)
+  useAutoIntroWithAutoNext(segments, rate, onContinue)
   const replay = () => void speakSequence(segments, rate)
 
   return (
@@ -481,8 +503,8 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
       )}
 
       <button onClick={onContinue}
-        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
-        Continuer →
+        className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-xl flex items-center justify-center gap-2">
+        Suivant <span className="text-2xl">→</span>
       </button>
     </div>
   )
@@ -605,7 +627,8 @@ function StepDiscoverText({ step, onContinue, rate }: { step: StepV6; onContinue
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useAutoIntro(segments, rate)
+  // v7.2 — Auto-next : discover_text est passif (visualisation tokens)
+  useAutoIntroWithAutoNext(segments, rate, onContinue)
   const replay = () => void speakSequence(segments, rate)
 
   return (
@@ -635,7 +658,7 @@ function StepDiscoverText({ step, onContinue, rate }: { step: StepV6; onContinue
       </div>
       <button onClick={onContinue}
         className="w-full p-4 bg-primary-700 text-white rounded-xl font-semibold hover:bg-primary-900 text-lg">
-        J&apos;ai compris →
+        Suivant →
       </button>
     </div>
   )
@@ -742,7 +765,8 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useAutoIntro(segments, rate)
+  // v7.2 — Auto-next : pattern est passif (lecture du tableau)
+  useAutoIntroWithAutoNext(segments, rate, onContinue)
   const replay = () => void speakSequence(segments, rate)
 
   return (
@@ -763,7 +787,7 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
       </div>
       <button onClick={onContinue}
         className="w-full p-4 bg-primary-700 text-white rounded-xl font-semibold hover:bg-primary-900 text-lg">
-        J&apos;ai compris →
+        Suivant →
       </button>
     </div>
   )
@@ -1356,7 +1380,8 @@ function StepContractionsIntro({ step, onContinue, rate }: { step: StepV6; onCon
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useAutoIntro(segments, rate)
+  // v7.2 — Auto-next : contractions_intro est passif (visualisation transformations)
+  useAutoIntroWithAutoNext(segments, rate, onContinue)
   const replay = () => void speakSequence(segments, rate)
 
   return (
@@ -1384,7 +1409,7 @@ function StepContractionsIntro({ step, onContinue, rate }: { step: StepV6; onCon
       )}
       <button onClick={onContinue}
         className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
-        J&apos;ai compris →
+        Suivant →
       </button>
     </div>
   )

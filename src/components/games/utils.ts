@@ -441,5 +441,5 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v7.1 — Audio mixed-aware (speakSequence détecte **xxx** → voix EN) + Speech Recognition */
-export const TTS_VERSION = 'v7.1'
+/** v7.2 — Auto-next sur tous les types passifs (intro, role_explanation, discover_text, pattern, dialog, contractions_intro) */
+export const TTS_VERSION = 'v7.2'
