@@ -401,18 +401,31 @@ export interface SpeechRecognitionResult {
   unsupported?: boolean
 }
 
+// v7.4 — Typage minimal de SpeechRecognition (pas dans lib.dom.d.ts pour webkit*)
+interface SpeechRecognitionInstance {
+  lang: string
+  interimResults: boolean
+  maxAlternatives: number
+  onresult: (event: { results: { 0: { transcript: string } }[] }) => void
+  onerror: () => void
+  onend: () => void
+  start(): void
+}
+type SRConstructor = new () => SpeechRecognitionInstance
+
 /** Démarre la reconnaissance vocale et retourne ce qui a été entendu. */
 export function recognizeSpeech(expected: string, lang = 'en-GB'): Promise<SpeechRecognitionResult> {
   return new Promise((resolve) => {
-    // @ts-expect-error — webkitSpeechRecognition n'est pas typé partout
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    // v7.4 — Cast TypeScript propre (la directive précédente était devenue unused en TS strict moderne)
+    const w = window as unknown as { SpeechRecognition?: SRConstructor; webkitSpeechRecognition?: SRConstructor }
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition
     if (!SR) return resolve({ transcript: '', similarity: 0, unsupported: true })
     const recognition = new SR()
     recognition.lang = lang
     recognition.interimResults = false
     recognition.maxAlternatives = 3
 
-    recognition.onresult = (event: { results: { 0: { transcript: string } }[] }) => {
+    recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript.trim()
       resolve({
         transcript,
@@ -441,5 +454,5 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v7.3 — Fix critique : ne plus stripper les **xxx** avant l'audio (cassait tout le mixed FR/EN) */
-export const TTS_VERSION = 'v7.3'
+/** v7.4 — Fix build (typage SpeechRecognition propre) + v7.3 (ne plus stripper les **xxx** avant audio) */
+export const TTS_VERSION = 'v7.4'
