@@ -332,7 +332,24 @@ export interface SequenceSegment {
   rate?: number
 }
 
+// v8.0 — Cancellation token : chaque speakSequence prend un ID au démarrage.
+// stopSpeaking() incrémente __sequenceId. À chaque itération, on vérifie l'ID.
+// Si changé → la séquence en cours abandonne immédiatement.
+// Avant v8.0 : la boucle for async continuait à jouer les segments suivants
+// même après stopSpeaking(), créant le bug de décalage audio entre étapes.
 let __sequenceLock = false
+let __sequenceId = 0
+
+// v8.0 — Helper d'écoute "est-ce que le TTS est en train de parler"
+// Permet aux composants UI de verrouiller "Suivant" pendant la lecture.
+const __speakingListeners = new Set<(speaking: boolean) => void>()
+export function onSpeakingChange(cb: (speaking: boolean) => void): () => void {
+  __speakingListeners.add(cb)
+  return () => __speakingListeners.delete(cb)
+}
+function __notifySpeaking(s: boolean) {
+  __speakingListeners.forEach(cb => { try { cb(s) } catch {} })
+}
 
 /**
  * Lit une séquence de segments avec pauses entre chaque.
@@ -346,37 +363,40 @@ export async function speakSequence(
   if (typeof window === 'undefined' || !window.speechSynthesis) return
   if (__sequenceLock) return
   __sequenceLock = true
+  const myId = ++__sequenceId  // v8.0 — mon ID, comparé à chaque itération
+  __notifySpeaking(true)
 
   try {
     await waitForVoices()
+    if (myId !== __sequenceId) return  // v8.0 — abandonné entre temps
     window.speechSynthesis.cancel()
     await new Promise(r => setTimeout(r, 50))
+    if (myId !== __sequenceId) return
 
     // v7.1 — Déplier chaque segment FR contenant des **xxx** en sous-segments alternés FR/EN
-    // pour que les mots anglais soient TOUJOURS lus par la voix anglaise.
     const expanded: SequenceSegment[] = []
     for (const seg of segments) {
-      // Si segment EN pur ou pas de marqueurs : push tel quel
       if (seg.lang === 'en-GB' || !/\*\*[^*]+\*\*/.test(seg.text)) {
         expanded.push(seg)
         continue
       }
-      // Sinon : segment FR avec mots EN entre **xxx** → décomposer
       const sub = parseMixedText(seg.text, seg.lang)
       sub.forEach((s, idx) => {
         expanded.push({
           text: s.text,
           lang: s.lang,
           rate: seg.rate,
-          // Petite pause entre sous-segments mixed, vraie pause à la fin
           pauseAfter: idx === sub.length - 1 ? seg.pauseAfter : 200,
         })
       })
     }
 
     for (let i = 0; i < expanded.length; i++) {
+      if (myId !== __sequenceId) return  // v8.0 — abandon avant chaque segment
       const seg = expanded[i]
       let cleanText = seg.text.replace(/\*\*/g, '').trim()
+      // v8.0 — Filtre ponctuation isolée (point, virgule seuls = bruit parasite)
+      if (/^[.,!?;:\-\s]*$/.test(cleanText)) continue
       if (!cleanText) continue
       // v6.1 — Fix "capital I" via homophone "eye"
       if (seg.lang === 'en-GB' && /^I[.,!?;:]?$/.test(cleanText)) {
@@ -385,6 +405,7 @@ export async function speakSequence(
 
       // Lecture du segment
       await new Promise<void>((resolve) => {
+        if (myId !== __sequenceId) { resolve(); return }
         const u = new SpeechSynthesisUtterance(cleanText)
         const voice = seg.lang === 'en-GB' ? getBestVoice('en') : getBestFrVoice()
         if (voice) { u.voice = voice; u.lang = voice.lang }
@@ -396,22 +417,27 @@ export async function speakSequence(
         window.speechSynthesis.speak(u)
       })
 
-      // Pause après le segment (sauf le dernier)
+      if (myId !== __sequenceId) return  // v8.0 — abandon après le segment
       const pause = seg.pauseAfter ?? 400
       if (i < expanded.length - 1 && pause > 0) {
         await new Promise(r => setTimeout(r, pause))
       }
     }
   } finally {
-    __sequenceLock = false
+    if (myId === __sequenceId) {
+      __sequenceLock = false
+      __notifySpeaking(false)
+    }
   }
 }
 
-/** Stop immédiat de toute lecture en cours */
+/** Stop immédiat de toute lecture en cours (invalide les sequences async actives) */
 export function stopSpeaking(): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
   window.speechSynthesis.cancel()
   __sequenceLock = false
+  __sequenceId++  // v8.0 — invalide toute speakSequence en cours
+  __notifySpeaking(false)
 }
 
 // ===========================================================
@@ -481,5 +507,5 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v7.5 — FR_WORDS étendu + refonte UX étape repeat + mascotte Dodo image */
-export const TTS_VERSION = 'v7.5'
+/** v8.0 — Cancellation token (fix décalage audio) + filtre ponctuation + listeners speaking */
+export const TTS_VERSION = 'v8.0'

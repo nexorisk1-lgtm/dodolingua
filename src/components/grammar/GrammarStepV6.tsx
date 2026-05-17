@@ -85,6 +85,21 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+/** v8.0 — Rend un texte avec markdown **xxx** en gras (au lieu de l'afficher brut).
+ *  Avant v8.0, "Tu viens d'entendre **She's happy**" s'affichait avec les astérisques. */
+function MixedText({ text, className }: { text: string; className?: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/)
+  return (
+    <span className={className}>
+      {parts.map((part, i) =>
+        part.startsWith('**') && part.endsWith('**') && part.length > 4
+          ? <strong key={i} className="font-extrabold text-primary-700">{part.slice(2, -2)}</strong>
+          : <span key={i}>{part}</span>
+      )}
+    </span>
+  )
+}
+
 /** Composant utilitaire : token coloré (chip code couleur) */
 function TokenChip({ token, size = 'md' }: { token: ColorToken; size?: 'sm' | 'md' | 'lg' }) {
   const sz = size === 'sm' ? 'px-2 py-1 text-sm' : size === 'lg' ? 'px-4 py-2 text-xl' : 'px-3 py-1.5 text-base'
@@ -364,8 +379,18 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     if (!c.audio_full || recording) return
     setRecording(true)
     setLastResult(null)
+    // v8.0 — Timeout de sécurité 8s : si le micro ne reçoit rien (silencieux,
+    // pas de permission, etc.), on ne reste pas bloqué indéfiniment.
+    let timedOut = false
+    const safetyTimeout = setTimeout(() => {
+      timedOut = true
+      setRecording(false)
+      void speakSequence([{ text: 'Je n\'ai rien entendu. Appuie à nouveau ou continue.', lang: 'fr-FR' }], rate)
+    }, 8000)
     try {
       const result = await recognizeSpeech(c.audio_full, 'en-GB')
+      clearTimeout(safetyTimeout)
+      if (timedOut) return
       setLastResult(result)
       const nextAttempt = attempt + 1
       setAttempt(nextAttempt)
@@ -389,7 +414,8 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
         setTimeout(() => onContinue(), 2200)
       }
     } finally {
-      setRecording(false)
+      clearTimeout(safetyTimeout)
+      if (!timedOut) setRecording(false)
     }
   }
 
@@ -756,7 +782,7 @@ function StepRecognition({
       <div className="text-center space-y-2 py-3">
         {c.media?.emoji && <div className="text-5xl">{c.media.emoji}</div>}
         {c.question_fr && (
-          <div className="text-lg font-semibold text-primary-900">{c.question_fr}</div>
+          <MixedText text={c.question_fr} className="text-lg font-semibold text-primary-900 block" />
         )}
         {/* v6.1 — Bouton audio EN visible pour réécouter la phrase cible */}
         {c.audio_full && (
@@ -1069,7 +1095,7 @@ function StepListenTarget({ step, onContinue, rate }: { step: StepV6; onContinue
         <div className="text-xs mt-2 text-gray-500">Tape pour réécouter</div>
       </div>
       {c.question_fr && (
-        <div className="text-center text-base font-semibold text-primary-900">{c.question_fr}</div>
+        <MixedText text={c.question_fr} className="text-center text-base font-semibold text-primary-900 block" />
       )}
       <div className="space-y-2">
         {options.map((opt, idx) => {
