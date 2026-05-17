@@ -603,9 +603,9 @@ function StepValidationFinal({ step, onContinue, rate }: { step: StepV6; onConti
 
   return (
     <div className="space-y-5 text-center">
-      {/* v7.5 — Mascotte Dodo officielle (image) au lieu de l'emoji 🦤 */}
+      {/* v8.1 — Mascotte Dodo champion (avec coupe d'or) pour fin de leçon */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/dodo-quest.png" alt="Dodo" className="w-40 h-40 mx-auto object-contain" />
+      <img src="/dodo-champion.png" alt="Dodo champion" className="w-48 h-48 mx-auto object-contain" />
       <h2 className="text-2xl font-extrabold text-primary-900">
         {c.title_fr || 'Bravo !'}
       </h2>

@@ -507,5 +507,5 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v8.0 — Cancellation token (fix décalage audio) + filtre ponctuation + listeners speaking */
-export const TTS_VERSION = 'v8.0'
+/** v8.1 — Mascotte dodo-champion pour fin de leçon (au lieu de dodo-quest) */
+export const TTS_VERSION = 'v8.1'
