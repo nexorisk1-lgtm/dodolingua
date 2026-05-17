@@ -152,18 +152,45 @@ function getBestFrVoice(): SpeechSynthesisVoice | null {
   return voices.find(x => x.lang === 'fr-FR') || voices.find(x => x.lang.startsWith('fr')) || null
 }
 
-// v5.14 — Mots FR courants qui peuvent apparaître entre ** sans être de l'anglais
-// (ex: dans la leçon pronoms : "**je**, **tu**, **il**" sont du français mis en valeur)
-// Avant v5.14, parseMixedText les lisait avec la voix anglaise → Daniel disait "Tu" en anglais.
+// v7.5 — Blacklist FR étendue : mots FR courants en A1 sans accent.
+// Avant v7.5, "heureux", "parle", "toujours", "information" étaient lus en EN
+// car pas dans la blacklist et pas d'accents pour les détecter.
 const FR_WORDS = new Set([
+  // Pronoms et déterminants
   'je', 'tu', 'il', 'elle', 'on', 'nous', 'vous', 'ils', 'elles',
   'ce', 'cela', 'ça', 'cet', 'cette', 'ces',
   'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses',
   'notre', 'nos', 'votre', 'vos', 'leur', 'leurs',
-  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de',
-  'et', 'ou', 'mais', 'donc', 'car', 'si', 'que', 'qui',
+  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'd',
+  // Conjonctions
+  'et', 'ou', 'mais', 'donc', 'car', 'si', 'que', 'qui', 'quoi', 'dont',
+  'comme', 'quand', 'parce',
   'oui', 'non',
-  'pronoms', 'sujets', 'sujet', 'verbe', 'phrase',
+  // Métalangage grammatical (sans accent)
+  'pronoms', 'pronom', 'sujets', 'sujet', 'verbe', 'verbes', 'phrase', 'phrases',
+  'mot', 'mots', 'forme', 'formes', 'base', 'exemple', 'exemples',
+  'information', 'informations', 'info', 'infos',
+  'contraction', 'contractions', 'auxiliaire',
+  // Adverbes et quantifieurs sans accent
+  'toujours', 'jamais', 'souvent', 'parfois', 'maintenant',
+  'aussi', 'encore', 'presque', 'vraiment', 'surtout', 'tout', 'tous', 'toute', 'toutes',
+  'bien', 'mal', 'bon', 'bonne', 'mauvais', 'mauvaise',
+  'petit', 'petite', 'grand', 'grande',
+  // Adjectifs FR A1 sans accent
+  'heureux', 'heureuse', 'heureuses',
+  'malade', 'malades', 'fatigant', 'content', 'contente',
+  'fier', 'fiere', 'simple', 'simples',
+  // Prépositions
+  'avec', 'sans', 'pour', 'par', 'dans', 'sur', 'sous', 'entre', 'chez', 'vers',
+  // Verbes très courants
+  'parle', 'parler', 'parles', 'parlons', 'parlez', 'parlent',
+  'dire', 'dit', 'dis', 'disent', 'disons',
+  'voir', 'vois', 'voit', 'voient', 'voyons',
+  'savoir', 'sais', 'sait', 'savent',
+  'faire', 'fais', 'fait', 'font', 'faisons',
+  'aller', 'va', 'vas', 'vont', 'allons',
+  // Mots-outils pédago
+  'astuce', 'truc', 'point',
 ])
 
 /** Parse un texte mixte FR/EN : tokens entre **xxx** = EN par défaut,
@@ -454,5 +481,5 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v7.4 — Fix build (typage SpeechRecognition propre) + v7.3 (ne plus stripper les **xxx** avant audio) */
-export const TTS_VERSION = 'v7.4'
+/** v7.5 — FR_WORDS étendu + refonte UX étape repeat + mascotte Dodo image */
+export const TTS_VERSION = 'v7.5'

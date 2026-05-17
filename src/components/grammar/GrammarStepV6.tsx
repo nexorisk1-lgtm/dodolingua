@@ -340,23 +340,25 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     media?: { emoji?: string };
   }
 
-  // v7.1 — Enregistrement réel via Speech Recognition API (Chrome/Edge)
+  // v7.5 — Refonte UX : gros bouton micro central + écouter séparé + guide vocal + feedback 3 essais
   const [recording, setRecording] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [lastResult, setLastResult] = useState<{ transcript: string; similarity: number; unsupported?: boolean } | null>(null)
   const MAX_ATTEMPTS = 3
   const SUCCESS_THRESHOLD = 0.75
 
+  // v7.5 — Intro vocale : phrase + modèle + traduction + guide "À toi de parler"
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
     if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB', pauseAfter: 800 })
-    if (c.audio_fr) segs.push({ text: c.audio_fr, lang: 'fr-FR' })
+    if (c.audio_fr) segs.push({ text: c.audio_fr, lang: 'fr-FR', pauseAfter: 1000 })
+    segs.push({ text: 'À toi de parler. Appuie sur le bouton pour parler.', lang: 'fr-FR', pauseAfter: 0 })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoIntro(segments, rate)
-  const replay = () => c.audio_full && speak(c.audio_full)
+  const replayModel = () => c.audio_full && speak(c.audio_full)
 
   async function startRecording() {
     if (!c.audio_full || recording) return
@@ -365,11 +367,26 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     try {
       const result = await recognizeSpeech(c.audio_full, 'en-GB')
       setLastResult(result)
-      setAttempt(a => a + 1)
+      const nextAttempt = attempt + 1
+      setAttempt(nextAttempt)
       if (result.unsupported) return
-      // Bonne réponse → auto-next 1.5s plus tard
-      if (result.similarity >= SUCCESS_THRESHOLD) {
+      const success = result.similarity >= SUCCESS_THRESHOLD
+      // v7.5 — Feedback vocal selon score et tentative
+      if (success) {
+        void speakSequence([{ text: 'Bravo, tu as bien dit !', lang: 'fr-FR' }], rate)
         setTimeout(() => onContinue(), 1500)
+      } else if (nextAttempt < MAX_ATTEMPTS) {
+        const msg = nextAttempt === 1
+          ? 'Essaye encore une fois.'
+          : 'Dernière fois, écoute bien le modèle.'
+        void speakSequence([
+          { text: msg, lang: 'fr-FR', pauseAfter: 600 },
+          ...(c.audio_full ? [{ text: c.audio_full, lang: 'en-GB' as const }] : []),
+        ], rate)
+      } else {
+        // 3e échec → message bienveillant + auto-next
+        void speakSequence([{ text: 'On reverra ça plus tard. On continue.', lang: 'fr-FR' }], rate)
+        setTimeout(() => onContinue(), 2200)
       }
     } finally {
       setRecording(false)
@@ -379,61 +396,88 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
   const isSuccess = lastResult && !lastResult.unsupported && lastResult.similarity >= SUCCESS_THRESHOLD
   const isFail = lastResult && !lastResult.unsupported && lastResult.similarity < SUCCESS_THRESHOLD
   const exhausted = attempt >= MAX_ATTEMPTS
+  const remaining = Math.max(0, MAX_ATTEMPTS - attempt)
 
   return (
     <div className="space-y-5">
-      <StepHeader icon="🎤" label="Répète à voix haute" onReplay={replay} />
-      <div className="text-center py-4 space-y-4">
-        {c.media?.emoji && <div className="text-5xl">{c.media.emoji}</div>}
-        {/* Modèle à imiter */}
-        {c.audio_full && (
-          <button onClick={replay}
-            className="w-full bg-primary-50 hover:bg-primary-100 rounded-2xl p-5 transition-colors">
-            <div className="text-3xl mb-1">🔊</div>
-            <div className="text-2xl font-extrabold text-primary-900">{c.audio_full}</div>
-            {c.audio_fr && <div className="text-sm italic text-gray-600 mt-1">→ {c.audio_fr}</div>}
-            <div className="text-xs text-gray-500 mt-2">Tape pour réécouter</div>
-          </button>
-        )}
+      <StepHeader icon="🎤" label="Répète à voix haute" />
 
-        {/* Bouton micro */}
-        <button onClick={startRecording} disabled={recording || isSuccess || exhausted}
-          className={`w-full p-5 rounded-2xl font-bold text-lg transition-all ${
-            recording ? 'bg-red-500 text-white animate-pulse' :
+      {/* Emoji contextuel */}
+      {c.media?.emoji && <div className="text-center text-5xl">{c.media.emoji}</div>}
+
+      {/* Modèle à imiter — bouton dédié "Écouter le modèle" */}
+      {c.audio_full && (
+        <button onClick={replayModel}
+          className="w-full bg-primary-50 hover:bg-primary-100 active:bg-primary-200 rounded-2xl p-5 transition-colors border-2 border-primary-200">
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <span className="text-4xl">🔊</span>
+            <span className="text-sm font-bold uppercase text-primary-700 tracking-wider">Écouter le modèle</span>
+          </div>
+          <div className="text-2xl font-extrabold text-primary-900 leading-tight">{c.audio_full}</div>
+          {c.audio_fr && <div className="text-sm italic text-gray-600 mt-1">→ {c.audio_fr}</div>}
+        </button>
+      )}
+
+      {/* Compteur d'essais */}
+      {attempt > 0 && !isSuccess && !exhausted && (
+        <div className="text-center text-sm font-semibold text-gray-600">
+          Essai {attempt} sur {MAX_ATTEMPTS} · il te reste {remaining} essai{remaining > 1 ? 's' : ''}
+        </div>
+      )}
+
+      {/* GROS BOUTON MICRO CENTRAL */}
+      <div className="flex flex-col items-center gap-3 py-2">
+        <button
+          onClick={startRecording}
+          disabled={recording || !!isSuccess || exhausted}
+          aria-label="Appuie pour parler"
+          className={`w-36 h-36 rounded-full flex items-center justify-center text-6xl shadow-lg transition-all ${
+            recording ? 'bg-red-500 text-white animate-pulse scale-110' :
             isSuccess ? 'bg-green-500 text-white' :
             exhausted ? 'bg-gray-300 text-gray-500' :
-            'bg-amber-400 hover:bg-amber-500 text-amber-950'
+            'bg-amber-400 hover:bg-amber-500 active:scale-95 text-amber-950'
           }`}>
-          {recording ? '🎤 Je t’écoute...' :
-           isSuccess ? '✓ Bravo, tu as bien dit !' :
-           exhausted ? '⏭️ Continue, tu réessayeras' :
-           `🎤 ${attempt === 0 ? 'Appuie et répète' : `Réessaie (${attempt}/${MAX_ATTEMPTS})`}`}
+          {recording ? '🎙️' : isSuccess ? '✓' : exhausted ? '⏭️' : '🎤'}
         </button>
-
-        {/* Résultat */}
-        {lastResult?.unsupported && (
-          <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded-r-lg text-left text-sm">
-            🎧 Ton navigateur ne supporte pas l&apos;enregistrement. Sur Chrome ou Edge, tu pourras répéter et obtenir un score.
-          </div>
-        )}
-        {lastResult && !lastResult.unsupported && (
-          <div className={`border-l-4 p-3 rounded-r-lg text-left ${isSuccess ? 'border-green-500 bg-green-50' : 'border-amber-400 bg-amber-50'}`}>
-            <div className="text-xs uppercase font-bold text-gray-500 mb-1">Ce que j&apos;ai entendu :</div>
-            <div className="text-lg font-bold text-gray-900">{lastResult.transcript || '(rien entendu)'}</div>
-            <div className="text-sm mt-1">
-              Score : <span className={`font-bold ${isSuccess ? 'text-green-700' : 'text-amber-700'}`}>{Math.round(lastResult.similarity * 100)}%</span>
-            </div>
-            {isFail && !exhausted && (
-              <div className="text-xs text-gray-600 mt-1">Essaie encore, écoute bien le modèle 🔊</div>
-            )}
-          </div>
-        )}
+        <div className={`text-lg font-bold ${
+          recording ? 'text-red-600' :
+          isSuccess ? 'text-green-700' :
+          exhausted ? 'text-gray-500' :
+          'text-amber-800'
+        }`}>
+          {recording ? 'Je t’écoute…' :
+           isSuccess ? 'Bravo !' :
+           exhausted ? 'On reverra ça plus tard' :
+           attempt === 0 ? 'Appuie pour parler' : 'Réessaye'}
+        </div>
       </div>
 
-      <button onClick={onContinue}
-        className="w-full p-3 bg-white border-2 border-primary-300 text-primary-700 rounded-xl font-bold hover:bg-primary-50">
-        Passer cette étape →
-      </button>
+      {/* Feedback résultat */}
+      {lastResult?.unsupported && (
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded-r-lg text-sm">
+          🎧 Ton navigateur ne supporte pas l&apos;enregistrement. Sur Chrome ou Edge, tu pourras répéter et obtenir un score.
+        </div>
+      )}
+      {lastResult && !lastResult.unsupported && (
+        <div className={`border-l-4 p-3 rounded-r-lg ${isSuccess ? 'border-green-500 bg-green-50' : 'border-amber-400 bg-amber-50'}`}>
+          <div className="text-xs uppercase font-bold text-gray-500 mb-1">Ce que j&apos;ai entendu :</div>
+          <div className="text-lg font-bold text-gray-900">{lastResult.transcript || '(rien entendu)'}</div>
+          <div className="text-sm mt-1">
+            Score : <span className={`font-bold ${isSuccess ? 'text-green-700' : 'text-amber-700'}`}>{Math.round(lastResult.similarity * 100)}%</span>
+          </div>
+          {isFail && !exhausted && (
+            <div className="text-xs text-gray-600 mt-1">Réécoute le modèle 🔊 puis réessaye.</div>
+          )}
+        </div>
+      )}
+
+      {/* Bouton continuer (apparaît seulement après une tentative ou si exhausted) */}
+      {(attempt > 0 || exhausted) && !isSuccess && (
+        <button onClick={onContinue}
+          className="w-full p-3 bg-white border-2 border-primary-300 text-primary-700 rounded-xl font-bold hover:bg-primary-50">
+          → Continuer
+        </button>
+      )}
     </div>
   )
 }
@@ -533,8 +577,9 @@ function StepValidationFinal({ step, onContinue, rate }: { step: StepV6; onConti
 
   return (
     <div className="space-y-5 text-center">
-      {/* v7.1 — Mascotte Dodo en cohérence avec la partie vocabulaire */}
-      <div className="text-8xl">🦤</div>
+      {/* v7.5 — Mascotte Dodo officielle (image) au lieu de l'emoji 🦤 */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/dodo-quest.png" alt="Dodo" className="w-40 h-40 mx-auto object-contain" />
       <h2 className="text-2xl font-extrabold text-primary-900">
         {c.title_fr || 'Bravo !'}
       </h2>
