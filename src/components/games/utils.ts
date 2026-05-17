@@ -152,46 +152,73 @@ function getBestFrVoice(): SpeechSynthesisVoice | null {
   return voices.find(x => x.lang === 'fr-FR') || voices.find(x => x.lang.startsWith('fr')) || null
 }
 
-// v7.5 — Blacklist FR étendue : mots FR courants en A1 sans accent.
-// Avant v7.5, "heureux", "parle", "toujours", "information" étaient lus en EN
-// car pas dans la blacklist et pas d'accents pour les détecter.
-const FR_WORDS = new Set([
-  // Pronoms et déterminants
-  'je', 'tu', 'il', 'elle', 'on', 'nous', 'vous', 'ils', 'elles',
-  'ce', 'cela', 'ça', 'cet', 'cette', 'ces',
-  'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses',
-  'notre', 'nos', 'votre', 'vos', 'leur', 'leurs',
-  'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de', 'd',
-  // Conjonctions
-  'et', 'ou', 'mais', 'donc', 'car', 'si', 'que', 'qui', 'quoi', 'dont',
-  'comme', 'quand', 'parce',
-  'oui', 'non',
-  // Métalangage grammatical (sans accent)
-  'pronoms', 'pronom', 'sujets', 'sujet', 'verbe', 'verbes', 'phrase', 'phrases',
-  'mot', 'mots', 'forme', 'formes', 'base', 'exemple', 'exemples',
-  'information', 'informations', 'info', 'infos',
-  'contraction', 'contractions', 'auxiliaire',
-  // Adverbes et quantifieurs sans accent
-  'toujours', 'jamais', 'souvent', 'parfois', 'maintenant',
-  'aussi', 'encore', 'presque', 'vraiment', 'surtout', 'tout', 'tous', 'toute', 'toutes',
-  'bien', 'mal', 'bon', 'bonne', 'mauvais', 'mauvaise',
-  'petit', 'petite', 'grand', 'grande',
-  // Adjectifs FR A1 sans accent
-  'heureux', 'heureuse', 'heureuses',
-  'malade', 'malades', 'fatigant', 'content', 'contente',
-  'fier', 'fiere', 'simple', 'simples',
-  // Prépositions
-  'avec', 'sans', 'pour', 'par', 'dans', 'sur', 'sous', 'entre', 'chez', 'vers',
-  // Verbes très courants
-  'parle', 'parler', 'parles', 'parlons', 'parlez', 'parlent',
-  'dire', 'dit', 'dis', 'disent', 'disons',
-  'voir', 'vois', 'voit', 'voient', 'voyons',
-  'savoir', 'sais', 'sait', 'savent',
-  'faire', 'fais', 'fait', 'font', 'faisons',
-  'aller', 'va', 'vas', 'vont', 'allons',
-  // Mots-outils pédago
-  'astuce', 'truc', 'point',
+// v8.4 — RENVERSEMENT : on passait par une BLACKLIST FR incomplète.
+// Trop de mots FR sans accent étaient lus en EN ("personnages", "suis",
+// "heureux", "parle"...). Au lieu de lister tous les mots FR possibles
+// (infini), on liste la WHITELIST des mots EN A1 connus.
+// Un token entre **xxx** est EN si TOUS ses mots sont dans cette liste.
+// Sinon → FR par défaut.
+const EN_A1_WORDS = new Set([
+  // Pronoms
+  'i', 'you', 'he', 'she', 'it', 'we', 'they',
+  'me', 'him', 'her', 'us', 'them',
+  // Possessifs
+  'my', 'your', 'his', 'its', 'our', 'their',
+  'mine', 'yours', 'hers', 'ours', 'theirs',
+  // Verbe to be (présent + passé + base)
+  'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  // Verbes auxiliaires courants
+  'do', 'does', 'did', 'have', 'has', 'had',
+  'can', 'could', 'will', 'would', 'should', 'may', 'might', 'must',
+  // Articles et déterminants
+  'the', 'a', 'an', 'this', 'that', 'these', 'those',
+  'some', 'any', 'no', 'every', 'all', 'each',
+  // Conjonctions et prépositions
+  'and', 'or', 'but', 'so', 'if', 'because',
+  'to', 'of', 'in', 'on', 'at', 'with', 'for', 'from', 'by',
+  'about', 'into', 'over', 'under', 'between',
+  // Négation
+  'not',
+  // Mots-question
+  'what', 'where', 'when', 'who', 'why', 'how', 'which',
+  // Politesse / interjections
+  'yes', 'hello', 'hi', 'goodbye', 'bye', 'please', 'thank', 'thanks', 'sorry',
+  // Adjectifs A1
+  'happy', 'sad', 'tired', 'sick', 'busy', 'hungry', 'thirsty',
+  'good', 'bad', 'big', 'small', 'hot', 'cold', 'warm', 'cool',
+  'new', 'old', 'young', 'tall', 'short', 'long',
+  'nice', 'kind', 'mean', 'funny', 'beautiful',
+  'easy', 'hard', 'fast', 'slow',
+  'ready', 'free', 'open', 'closed',
+  'french', 'english', 'spanish', 'german', 'italian',
+  // Lieux A1
+  'here', 'there', 'home', 'school', 'work', 'house', 'room',
+  // Noms A1
+  'friend', 'friends', 'family', 'mother', 'father', 'brother', 'sister',
+  'boy', 'girl', 'man', 'woman', 'child', 'people', 'person',
+  'day', 'week', 'month', 'year', 'time', 'name',
+  'cat', 'dog', 'bird',
+  // Verbes A1
+  'go', 'goes', 'come', 'comes', 'see', 'sees', 'know', 'knows',
+  'want', 'wants', 'like', 'likes', 'love', 'loves', 'need', 'needs',
+  'eat', 'eats', 'drink', 'drinks', 'sleep', 'sleeps',
+  'speak', 'speaks', 'say', 'says', 'tell', 'tells',
+  // Contractions courantes (les ' sont remplacées avant test)
+  "i'm", "you're", "he's", "she's", "it's", "we're", "they're",
+  "isn't", "aren't", "wasn't", "weren't",
+  "don't", "doesn't", "didn't", "won't", "can't", "couldn't",
 ])
+
+function isEnglishToken(token: string): boolean {
+  const t = token.toLowerCase().trim().replace(/[.,!?;:]/g, '')
+  if (!t) return false
+  // Si le token contient des accents FR → FR direct
+  if (/[éèêëàâäîïôöùûüçÿœæ]/i.test(t)) return false
+  // Découper en mots et vérifier que TOUS sont dans la whitelist EN
+  const words = t.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return false
+  return words.every(w => EN_A1_WORDS.has(w))
+}
 
 /** Parse un texte mixte FR/EN : tokens entre **xxx** = EN par défaut,
  *  sauf si tous les mots du token sont FR (blacklist ou présence d'accents). */
@@ -203,7 +230,8 @@ function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'):
   const pattern = /\*\*([^*]+)\*\*/g
   let lastIndex = 0
   let match: RegExpExecArray | null
-  const otherLang = primaryLang === 'fr-FR' ? 'en-GB' : 'fr-FR'
+  // v8.4 — primaryLang sert pour les segments de texte hors **xxx**.
+  // La langue des tokens entre ** est désormais détectée via isEnglishToken().
 
   while ((match = pattern.exec(text)) !== null) {
     if (match.index > lastIndex) {
@@ -212,17 +240,13 @@ function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'):
     }
     const enWord = (match[1] || '').trim()
     // v5.7 — Pour une LISTE 'am / is / are' : on garde un SEUL segment EN avec virgules
-    // (les virgules créent des pauses naturelles dans la voix EN, plus clair que 3 utterances séparées)
     const cleaned = enWord.replace(/\s*\/\s*/g, ', ')
 
-    // v5.14 — Détection FR : si tous les mots sont dans la blacklist FR
-    // ou contiennent des accents FR → on garde la voix primaire (FR)
-    const words = cleaned.split(/[\s,]+/).filter(Boolean)
-    const isFrToken = words.length > 0 && words.every(w =>
-      FR_WORDS.has(w.toLowerCase().replace(/[^a-zà-ÿ-]/gi, '')) ||
-      /[éèêëàâäîïôöùûüçÿœæ]/i.test(w)
-    )
-    const segLang = isFrToken ? primaryLang : otherLang
+    // v8.4 — Détection inversée : WHITELIST EN au lieu de blacklist FR.
+    // Un token est EN si TOUS ses mots sont des mots EN A1 connus.
+    // Sinon → FR par défaut (indépendant du primaryLang).
+    const isEN = isEnglishToken(cleaned)
+    const segLang: 'fr-FR' | 'en-GB' = isEN ? 'en-GB' : 'fr-FR'
 
     if (cleaned) segments.push({ text: cleaned, lang: segLang })
     lastIndex = match.index + match[0].length
@@ -408,6 +432,15 @@ export async function speakSequence(
       // v8.0 — Filtre ponctuation isolée (point, virgule seuls = bruit parasite)
       if (/^[.,!?;:\-\s]*$/.test(cleanText)) continue
       if (!cleanText) continue
+      // v8.4 — Remplacement de "=" par "veut dire" dans la lecture vocale.
+      // Avant : TTS lisait "I am = je suis" comme "I am égal je suis" (bizarre).
+      // Après : "I am veut dire je suis" (naturel).
+      // S'applique côté FR uniquement (côté EN il faudrait "means", mais "=" est rare en contenu EN).
+      if (seg.lang === 'fr-FR') {
+        cleanText = cleanText.replace(/\s*=\s*/g, ' veut dire ')
+      } else {
+        cleanText = cleanText.replace(/\s*=\s*/g, ' means ')
+      }
       // v6.1 — Fix "capital I" via homophone "eye"
       if (seg.lang === 'en-GB' && /^I[.,!?;:]?$/.test(cleanText)) {
         cleanText = 'eye'
@@ -539,6 +572,6 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v8.3 — Workaround Chrome "stuck bug" macOS : onstart timeout 1.5s
- *  + max 30s par utterance. Si onstart pas reçu = on cancel et passe au suivant. */
-export const TTS_VERSION = 'v8.3'
+/** v8.4 — Détection langue inversée (whitelist EN au lieu de blacklist FR)
+ *  + "=" → "veut dire" en TTS + UX continuer toujours visible sur repeat/match */
+export const TTS_VERSION = 'v8.4'

@@ -497,11 +497,14 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
         </div>
       )}
 
-      {/* Bouton continuer (apparaît seulement après une tentative ou si exhausted) */}
-      {(attempt > 0 || exhausted) && !isSuccess && (
+      {/* v8.4 — Bouton "Continuer" TOUJOURS visible quand pas en succès.
+          Avant v8.4, il fallait avoir essayé au moins 1 fois pour le voir.
+          Problème : si le micro ne capte rien (silence, bruit ambiant, micro défaillant),
+          l'utilisateur restait bloqué sans pouvoir avancer. */}
+      {!isSuccess && (
         <button onClick={onContinue}
           className="w-full p-3 bg-white border-2 border-primary-300 text-primary-700 rounded-xl font-bold hover:bg-primary-50">
-          → Continuer
+          → Continuer sans répéter
         </button>
       )}
     </div>
@@ -623,9 +626,9 @@ function StepValidationFinal({ step, onContinue, rate }: { step: StepV6; onConti
           </ul>
         </div>
       )}
-      {c.next_step_fr && (
-        <div className="text-sm italic text-gray-600">{c.next_step_fr}</div>
-      )}
+      {/* v8.4 — Retrait de next_step_fr du rendu : la grammaire fait partie d'un parcours
+          (vocabulaire suit la grammaire), donc on ne sait pas quelle sera "la prochaine leçon".
+          Le parcours est géré au niveau supérieur. */}
       <button onClick={onContinue}
         className="w-full p-4 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900 text-lg">
         Terminer la leçon →
@@ -1030,11 +1033,19 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
               </button>
             </div>
           )}
+          {/* v8.4 — Si erreurs : 2 options : Réessayer OU Continuer quand même.
+              Avant v8.4 on était obligé de réessayer (bloquant pour illettrés). */}
           {!feedback && (
-            <button onClick={resetMatches}
-              className="w-full p-3 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900">
-              Réessayer
-            </button>
+            <div className="flex gap-2">
+              <button onClick={resetMatches}
+                className="flex-1 p-3 border-2 border-primary-300 text-primary-700 rounded-xl font-bold hover:bg-primary-50">
+                Réessayer
+              </button>
+              <button onClick={() => onContinue(false)}
+                className="flex-1 p-3 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900">
+                Continuer →
+              </button>
+            </div>
           )}
           {feedback && (
             <button onClick={() => onContinue(true)}
