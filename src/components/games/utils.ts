@@ -416,15 +416,34 @@ export async function speakSequence(
       // Lecture du segment
       await new Promise<void>((resolve) => {
         if (myId !== __sequenceId) { resolve(); return }
+        let started = false
+        let resolved = false
+        const safeResolve = () => {
+          if (resolved) return
+          resolved = true
+          resolve()
+        }
         const u = new SpeechSynthesisUtterance(cleanText)
         const voice = seg.lang === 'en-GB' ? getBestVoice('en') : getBestFrVoice()
         if (voice) { u.voice = voice; u.lang = voice.lang }
         else u.lang = seg.lang
         u.rate = seg.rate ?? globalRate
         u.pitch = 1
-        u.onend = () => resolve()
-        u.onerror = () => resolve()
+        u.onstart = () => { started = true }
+        u.onend = () => safeResolve()
+        u.onerror = () => safeResolve()
         window.speechSynthesis.speak(u)
+        // v8.3 — Workaround Chrome "stuck bug" (macOS) : si onstart n'est pas
+        // déclenché dans 1.5s, l'utterance est probablement zombie. On cancel
+        // et on resolve pour ne pas bloquer la séquence indéfiniment.
+        setTimeout(() => {
+          if (!started && !resolved) {
+            try { window.speechSynthesis.cancel() } catch {}
+            safeResolve()
+          }
+        }, 1500)
+        // v8.3 — Max timeout absolu 30s par utterance (sécurité ultime).
+        setTimeout(() => safeResolve(), 30000)
       })
 
       if (myId !== __sequenceId) return  // v8.0 — abandon après le segment
@@ -520,6 +539,6 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v8.2 — Fix audio bloqué (lock persistant). Plus de blocage if(lock) return.
- *  Reset défensif + cancel + invalidation de l'ancienne séquence avant nouvelle. */
-export const TTS_VERSION = 'v8.2'
+/** v8.3 — Workaround Chrome "stuck bug" macOS : onstart timeout 1.5s
+ *  + max 30s par utterance. Si onstart pas reçu = on cancel et passe au suivant. */
+export const TTS_VERSION = 'v8.3'
