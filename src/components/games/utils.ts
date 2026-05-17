@@ -361,16 +361,26 @@ export async function speakSequence(
   globalRate: number = 0.9
 ): Promise<void> {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
-  if (__sequenceLock) return
+  // v8.2 — Plus de blocage `if (__sequenceLock) return`. Au lieu de refuser
+  // la nouvelle séquence, on force le reset de l'état (cancel + invalide
+  // l'ancienne via __sequenceId) puis on démarre. Évite le cas où le lock
+  // reste bloqué à true à cause d'un Promise.onend qui ne se déclenche
+  // jamais (bug Chrome connu sur speechSynthesis.cancel()).
+  window.speechSynthesis.cancel()
+  __sequenceId++  // invalide toute séquence en cours
   __sequenceLock = true
-  const myId = ++__sequenceId  // v8.0 — mon ID, comparé à chaque itération
+  const myId = __sequenceId
   __notifySpeaking(true)
 
   try {
     await waitForVoices()
     if (myId !== __sequenceId) return  // v8.0 — abandonné entre temps
-    window.speechSynthesis.cancel()
-    await new Promise(r => setTimeout(r, 50))
+    // v8.2 — Workaround Chrome : si l'API reste en speaking:true après cancel,
+    // un resume() puis pause() reset l'état interne. Sans effet si l'API est saine.
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel()
+    }
+    await new Promise(r => setTimeout(r, 80))
     if (myId !== __sequenceId) return
 
     // v7.1 — Déplier chaque segment FR contenant des **xxx** en sous-segments alternés FR/EN
@@ -424,6 +434,9 @@ export async function speakSequence(
       }
     }
   } finally {
+    // v8.2 — Libère le lock systématiquement si c'est ma séquence.
+    // Si invalidée par une autre (myId !== __sequenceId), c'est cette autre
+    // séquence qui contrôle le lock — on ne touche à rien.
     if (myId === __sequenceId) {
       __sequenceLock = false
       __notifySpeaking(false)
@@ -507,5 +520,6 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v8.1 — Mascotte dodo-champion pour fin de leçon (au lieu de dodo-quest) */
-export const TTS_VERSION = 'v8.1'
+/** v8.2 — Fix audio bloqué (lock persistant). Plus de blocage if(lock) return.
+ *  Reset défensif + cancel + invalidation de l'ancienne séquence avant nouvelle. */
+export const TTS_VERSION = 'v8.2'
