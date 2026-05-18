@@ -206,7 +206,7 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     setVisibleCount(0)
     let elapsed = 300 // délai initial avant le 1er speakSequence (voir useAutoIntro)
     // Durée approximative du audio_intro (pause incluse)
-    const introDuration = c.audio_intro ? (c.audio_intro.length * 70) + 1500 : 0
+    const introDuration = c.audio_intro ? (c.audio_intro.length * 100) + 1500 : 0
     elapsed += introDuration
     const timers: ReturnType<typeof setTimeout>[] = []
     rules.forEach((r, idx) => {
@@ -215,7 +215,7 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
         setVisibleCount(prev => Math.max(prev, idx + 1))
       }, showAt))
       // Durée estimée du segment rule = nb caractères * 70ms + pause 1000ms
-      elapsed += (r.text_fr.length * 70) + 1000
+      elapsed += (r.text_fr.length * 100) + 1000
     })
     return () => timers.forEach(t => clearTimeout(t))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,12 +226,12 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     setVisibleCount(0)
     void speakSequence(segments, rate)
     let elapsed = 100
-    const introDuration = c.audio_intro ? (c.audio_intro.length * 70) + 1500 : 0
+    const introDuration = c.audio_intro ? (c.audio_intro.length * 100) + 1500 : 0
     elapsed += introDuration
     rules.forEach((r, idx) => {
       const showAt = elapsed
       setTimeout(() => setVisibleCount(prev => Math.max(prev, idx + 1)), showAt)
-      elapsed += (r.text_fr.length * 70) + 1000
+      elapsed += (r.text_fr.length * 100) + 1000
     })
   }
 
@@ -474,10 +474,11 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
       setAttempt(nextAttempt)
       if (result.unsupported) return
       const success = result.similarity >= SUCCESS_THRESHOLD
-      // v7.5 — Feedback vocal selon score et tentative
+      // v8.12 — Feedback vocal : on AWAIT la fin du speakSequence avant onContinue
+      // pour ne plus couper "Bravo, tu as bien dit !" en cours de phrase.
       if (success) {
-        void speakSequence([{ text: 'Bravo, tu as bien dit !', lang: 'fr-FR' }], rate)
-        setTimeout(() => onContinue(), 1500)
+        await speakSequence([{ text: 'Bravo, tu as bien dit !', lang: 'fr-FR' }], rate)
+        setTimeout(() => onContinue(), 600)
       } else if (nextAttempt < MAX_ATTEMPTS) {
         const msg = nextAttempt === 1
           ? 'Essaye encore une fois.'
@@ -487,9 +488,9 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
           ...(c.audio_full ? [{ text: c.audio_full, lang: 'en-GB' as const }] : []),
         ], rate)
       } else {
-        // 3e échec → message bienveillant + auto-next
-        void speakSequence([{ text: 'On reverra ça plus tard. On continue.', lang: 'fr-FR' }], rate)
-        setTimeout(() => onContinue(), 2200)
+        // v8.12 — 3e échec : on AWAIT aussi pour que "On reverra ça plus tard" soit complet
+        await speakSequence([{ text: 'On reverra ça plus tard. On continue.', lang: 'fr-FR' }], rate)
+        setTimeout(() => onContinue(), 600)
       }
     } finally {
       clearTimeout(safetyTimeout)
@@ -1064,7 +1065,17 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
 
   function pickRight(idx: number, val: string) {
     if (feedback !== null) return
-    if (Object.values(matches).includes(idx)) return
+    // v8.12 — Si le right cliqué est déjà matché à un left, on défait le match
+    // (le right redevient libre, le left aussi). Avant v8.12, le clic était
+    // simplement ignoré, ce qui bloquait l'utilisateur sur une mauvaise réponse.
+    if (Object.values(matches).includes(idx)) {
+      const leftToUndo = Object.keys(matches).find(k => matches[k] === idx)
+      if (leftToUndo) {
+        undoMatch(leftToUndo)
+        speak(val)
+      }
+      return
+    }
     speak(val)
     // v8.6 — Si un left est déjà sélectionné, on fait le match (comportement classique)
     if (selectedLeft) {
@@ -1134,11 +1145,15 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
             return (
               <button key={r.idx}
                 onClick={() => pickRight(r.idx, r.val)}
-                disabled={used || feedback !== null}
+                // v8.12 — disabled UNIQUEMENT en cas de feedback (validation finale).
+                // Avant v8.12, les rights "used" étaient bloqués → bug remonté par
+                // Raïssa : impossible de défaire en cliquant un right grisé.
+                disabled={feedback !== null}
                 className={`w-full p-3 rounded-xl border-2 font-bold text-lg transition-all ${
-                  used ? 'bg-gray-100 text-gray-400 line-through border-rule' :
-                  // v8.8 — selectedRight maintenant en jaune+pulse (clairement "en attente"),
-                  // pas en bleu qui faisait croire à un état "verrouillé".
+                  // v8.12 — Les rights matchés (used) restent cliquables mais visuellement
+                  // grisés barrés. Le clic les défait (cf pickRight).
+                  used ? 'bg-gray-100 text-gray-500 line-through border-rule hover:bg-gray-200 cursor-pointer' :
+                  // v8.8 — selectedRight en jaune+pulse (clairement "en attente").
                   isSelectedRight ? 'border-amber-500 bg-amber-100 text-amber-900 ring-4 ring-amber-300 animate-pulse' :
                   selectedLeft ? `${colorClass('red')} hover:scale-105` :
                   colorClass('red')

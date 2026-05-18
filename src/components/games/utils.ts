@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.11 — Rules progressives au fil de l'audio + nouvelle étape "Tableau verbe to be"
- *  + Match remplacement intelligent (clic gauche écrase l'ancien match si selectedRight actif). */
-export const TTS_VERSION = 'v8.11'
+/** v8.12 — Rules progressives ralenties (100ms/char) + "Bravo, tu as bien dit !" complet
+ *  (await speakSequence) + Match : clic sur right matché = défait. */
+export const TTS_VERSION = 'v8.12'
