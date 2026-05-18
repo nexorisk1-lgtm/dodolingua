@@ -572,6 +572,6 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v8.6 — Audio "comme dans" pour Phase 2 verbe to be + Match bidirectionnel
- *  (clic gauche-droite OU droite-gauche au choix) */
-export const TTS_VERSION = 'v8.6'
+/** v8.7 — +2 étapes BDD : Récap visuel pronoms (étape 9) + Tableau contractions (étape 27).
+ *  Cours BE désormais à 33 étapes (vs 31). */
+export const TTS_VERSION = 'v8.7'
