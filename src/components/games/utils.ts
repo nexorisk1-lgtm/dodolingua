@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.9 — Micro intelligent : lang en-US, multi-alternatives, Levenshtein, contractions
- *  normalisées. Capture audio + replay. "Bravo, [prénom]". Fix apostrophes + ambiguïté "Il". */
-export const TTS_VERSION = 'v8.9'
+/** v8.10 — Stop TTS instantané au clic micro (plus d'attente) +
+ *  contraintes audio noiseSuppression/echoCancellation/AGC pour filtrer bruits ambiants. */
+export const TTS_VERSION = 'v8.10'

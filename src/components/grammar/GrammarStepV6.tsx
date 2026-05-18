@@ -387,6 +387,10 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
 
   async function startRecording() {
     if (!c.audio_full || recording) return
+    // v8.10 — Stop immédiat du TTS quand l'utilisateur clique sur le micro.
+    // Avant, la voix continuait à parler ("À toi de parler...") et il fallait
+    // attendre la fin avant que l'enregistrement démarre vraiment.
+    stopSpeaking()
     setRecording(true)
     setLastResult(null)
     setRecordedBlob(null)
@@ -394,7 +398,15 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     audioChunksRef.current = []
     let stream: MediaStream | null = null
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // v8.10 — Contraintes audio Chrome : réduction de bruit + écho + AGC.
+      // Filtre la TV, les parasites ambiants, réduit l'écho des haut-parleurs Mac.
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: true,
+        }
+      })
       const mr = new MediaRecorder(stream)
       mediaRecorderRef.current = mr
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
