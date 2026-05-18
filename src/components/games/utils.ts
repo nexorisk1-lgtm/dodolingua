@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.10 — Stop TTS instantané au clic micro (plus d'attente) +
- *  contraintes audio noiseSuppression/echoCancellation/AGC pour filtrer bruits ambiants. */
-export const TTS_VERSION = 'v8.10'
+/** v8.11 — Rules progressives au fil de l'audio + nouvelle étape "Tableau verbe to be"
+ *  + Match remplacement intelligent (clic gauche écrase l'ancien match si selectedRight actif). */
+export const TTS_VERSION = 'v8.11'

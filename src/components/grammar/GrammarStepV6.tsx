@@ -186,22 +186,54 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
   }
   const rules = c.rules || []
 
-  // v7.3 — Audio auto au mount : on envoie le texte AVEC les marqueurs **xxx**
-  // pour que speakSequence détecte les mots EN et bascule sur la voix anglaise.
-  // Avant v7.3 on faisait .replace(/\*\*/g, '') ICI ce qui cassait tout le système mixed.
+  // v8.11 — Affichage progressif des rules : chaque ligne apparaît quand sa partie
+  // audio commence à être lue. Estimation : ~80ms par caractère + pause après segment.
+  const [visibleCount, setVisibleCount] = useState(0)
+
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1500 })
     rules.forEach((r) => {
-      // Pas de strip **xxx** ici, speakSequence le gère et bascule voix EN
       segs.push({ text: r.text_fr, lang: 'fr-FR', pauseAfter: 1000 })
     })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // v7.2 — Auto-next : étape passive, l'utilisateur n'a rien à faire activement
   useAutoIntroWithAutoNext(segments, rate, onContinue)
-  const replay = () => void speakSequence(segments, rate)
+
+  // v8.11 — Timers d'affichage : chaque rule apparaît quand sa partie audio démarre
+  useEffect(() => {
+    setVisibleCount(0)
+    let elapsed = 300 // délai initial avant le 1er speakSequence (voir useAutoIntro)
+    // Durée approximative du audio_intro (pause incluse)
+    const introDuration = c.audio_intro ? (c.audio_intro.length * 70) + 1500 : 0
+    elapsed += introDuration
+    const timers: ReturnType<typeof setTimeout>[] = []
+    rules.forEach((r, idx) => {
+      const showAt = elapsed
+      timers.push(setTimeout(() => {
+        setVisibleCount(prev => Math.max(prev, idx + 1))
+      }, showAt))
+      // Durée estimée du segment rule = nb caractères * 70ms + pause 1000ms
+      elapsed += (r.text_fr.length * 70) + 1000
+    })
+    return () => timers.forEach(t => clearTimeout(t))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Bouton replay : reset l'affichage et relance audio + timers
+  const replay = () => {
+    setVisibleCount(0)
+    void speakSequence(segments, rate)
+    let elapsed = 100
+    const introDuration = c.audio_intro ? (c.audio_intro.length * 70) + 1500 : 0
+    elapsed += introDuration
+    rules.forEach((r, idx) => {
+      const showAt = elapsed
+      setTimeout(() => setVisibleCount(prev => Math.max(prev, idx + 1)), showAt)
+      elapsed += (r.text_fr.length * 70) + 1000
+    })
+  }
 
   return (
     <div className="space-y-5">
@@ -210,8 +242,8 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
         <h2 className="text-2xl font-extrabold text-primary-900 text-center">{c.title_fr}</h2>
       )}
       <div className="space-y-3">
-        {rules.map((r, i) => (
-          <div key={i} className="bg-blue-50 border-l-4 border-primary-500 p-4 rounded-r-lg">
+        {rules.slice(0, visibleCount).map((r, i) => (
+          <div key={i} className="bg-blue-50 border-l-4 border-primary-500 p-4 rounded-r-lg animate-in fade-in slide-in-from-bottom-2 duration-500">
             <div className="flex items-start gap-3">
               <span className="text-3xl">{r.icon}</span>
               <div className="flex-1 space-y-2">
@@ -1015,9 +1047,16 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
   function pickLeft(l: string) {
     if (feedback !== null) return
     speak(l)
-    // v8.6 — Si un right est déjà sélectionné, on fait le match direct
+    // v8.11 — Logique enrichie pour permettre le REMPLACEMENT facile d'un match :
+    // - Si un right est en attente (selectedRight) → on matche (même si le left
+    //   est déjà matché à autre chose : on REMPLACE l'ancien match. Cas typique :
+    //   "j'ai matché I am à It's par erreur, je clique I'm puis I am → match changé").
+    // - Sinon, si le left est déjà matché → on défait (comportement classique).
+    // - Sinon → on sélectionne le left.
     if (selectedRight) {
       commitMatch(l, selectedRight.idx)
+    } else if (matches[l] !== undefined) {
+      undoMatch(l)
     } else {
       setSelectedLeft(l)
     }
@@ -1070,7 +1109,9 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
             const isWrong = feedback !== null && matchedVal !== undefined && matchedVal !== p.right
             return (
               <button key={p.left}
-                onClick={() => matchedVal ? undoMatch(p.left) : pickLeft(p.left)}
+                // v8.11 — Toujours appeler pickLeft : la logique de remplacement/undo
+                // est centralisée dans pickLeft (qui regarde selectedRight et matches).
+                onClick={() => pickLeft(p.left)}
                 disabled={feedback === true}
                 className={`w-full p-3 rounded-xl border-2 font-bold text-lg ${
                   isCorrect ? 'border-ok bg-green-50 text-ok' :
@@ -1113,10 +1154,19 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
           toujours cliquer sur une case déjà matchée pour la défaire avant la
           validation (~600ms de marge).
           Indication visuelle d'attente pendant le délai. */}
+      {/* v8.11 — Message guide quand un mot de droite est sélectionné en attente
+          d'un mot de gauche. Aide les apprenants à comprendre quoi faire ensuite. */}
+      {feedback === null && selectedRight && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3 text-center animate-pulse">
+          <div className="text-base font-bold text-amber-900">
+            👆 Touche un sujet à gauche pour le relier à <span className="text-amber-700">{selectedRight.val}</span>
+          </div>
+        </div>
+      )}
       {feedback === null && Object.keys(matches).length > 0 && Object.keys(matches).length < pairs.length && (
         <div className="space-y-2">
           <div className="text-center text-sm text-gray-500">
-            {pairs.length - Object.keys(matches).length} paire{pairs.length - Object.keys(matches).length > 1 ? 's' : ''} restante{pairs.length - Object.keys(matches).length > 1 ? 's' : ''} · touche une case pour la défaire
+            {pairs.length - Object.keys(matches).length} paire{pairs.length - Object.keys(matches).length > 1 ? 's' : ''} restante{pairs.length - Object.keys(matches).length > 1 ? 's' : ''}
           </div>
           {/* v8.8 — Bouton "Tout effacer" discret : permet de repartir à zéro
               quand l'utilisateur sent qu'il a fait trop d'erreurs. */}
