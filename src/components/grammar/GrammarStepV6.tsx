@@ -362,11 +362,15 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
   const MAX_ATTEMPTS = 3
   const SUCCESS_THRESHOLD = 0.75
 
-  // v7.5 — Intro vocale : phrase + modèle + traduction + guide "À toi de parler"
+  // v8.5 — Intro vocale enrichie : intro + modèle EN + "veut dire" + traduction FR.
+  // Avant v8.5, on entendait "I am" immédiatement suivi de "Je suis" sans transition,
+  // ce qui était bizarre. Ajout d'un segment "veut dire" entre les deux pour
+  // clarifier le lien sémantique (et la voix FR Thomas prend le relais naturellement).
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
-    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB', pauseAfter: 800 })
+    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB', pauseAfter: 400 })
+    if (c.audio_full && c.audio_fr) segs.push({ text: 'veut dire', lang: 'fr-FR', pauseAfter: 250 })
     if (c.audio_fr) segs.push({ text: c.audio_fr, lang: 'fr-FR', pauseAfter: 1000 })
     segs.push({ text: 'À toi de parler. Appuie sur le bouton pour parler.', lang: 'fr-FR', pauseAfter: 0 })
     return segs
@@ -523,16 +527,28 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     answer_tokens?: ColorToken[];
     answer_fr?: string;
     answer_en_full?: string;
+    // v8.5 — Réponse négative optionnelle
+    answer_neg_en_full?: string;
+    answer_neg_fr?: string;
+    answer_neg_tokens?: ColorToken[];
   }
   const answerTokens = c.answer_tokens || []
   const answerFull = c.answer_en_full || answerTokens.map(t => t.text).join(' ')
+  const answerNegTokens = c.answer_neg_tokens || []
+  const answerNegFull = c.answer_neg_en_full || answerNegTokens.map(t => t.text).join(' ')
 
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1000 })
-    if (c.question_en) segs.push({ text: c.question_en, lang: 'en-GB', pauseAfter: 1200 })
-    if (answerFull) segs.push({ text: answerFull, lang: 'en-GB', pauseAfter: 800 })
-    if (c.answer_fr) segs.push({ text: c.answer_fr, lang: 'fr-FR' })
+    if (c.question_en) segs.push({ text: c.question_en, lang: 'en-GB', pauseAfter: 1000 })
+    if (answerFull) segs.push({ text: answerFull, lang: 'en-GB', pauseAfter: 400 })
+    if (c.answer_fr) segs.push({ text: c.answer_fr, lang: 'fr-FR', pauseAfter: 800 })
+    // v8.5 — Si réponse négative présente, on la joue aussi
+    if (answerNegFull) {
+      segs.push({ text: 'ou bien :', lang: 'fr-FR', pauseAfter: 300 })
+      segs.push({ text: answerNegFull, lang: 'en-GB', pauseAfter: 400 })
+      if (c.answer_neg_fr) segs.push({ text: c.answer_neg_fr, lang: 'fr-FR' })
+    }
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -558,18 +574,39 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
         </button>
       )}
 
-      {/* Réponse avec tokens colorés */}
+      {/* Réponse positive avec tokens colorés */}
       {answerTokens.length > 0 && (
         <button onClick={() => speak(answerFull)}
           className="w-full bg-green-50 hover:bg-green-100 rounded-xl p-4 text-left transition-colors border-2 border-green-200">
           <div className="flex items-center gap-3">
             <span className="text-2xl">🔊</span>
             <div className="flex-1">
-              <div className="text-xs uppercase font-bold text-green-700 tracking-wide">Réponse</div>
+              <div className="text-xs uppercase font-bold text-green-700 tracking-wide">Réponse positive</div>
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 {answerTokens.map((t, i) => <TokenChip key={i} token={t} />)}
               </div>
               {c.answer_fr && <div className="text-sm italic text-gray-700 mt-2">→ {c.answer_fr}</div>}
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* v8.5 — Réponse négative (optionnelle, affichée si présente en BDD) */}
+      {(answerNegTokens.length > 0 || answerNegFull) && (
+        <button onClick={() => speak(answerNegFull)}
+          className="w-full bg-red-50 hover:bg-red-100 rounded-xl p-4 text-left transition-colors border-2 border-red-200">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🔊</span>
+            <div className="flex-1">
+              <div className="text-xs uppercase font-bold text-red-700 tracking-wide">Ou bien (réponse négative)</div>
+              {answerNegTokens.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {answerNegTokens.map((t, i) => <TokenChip key={i} token={t} />)}
+                </div>
+              ) : (
+                <div className="text-xl font-bold text-red-900 mt-2">{answerNegFull}</div>
+              )}
+              {c.answer_neg_fr && <div className="text-sm italic text-gray-700 mt-2">→ {c.answer_neg_fr}</div>}
             </div>
           </div>
         </button>
@@ -906,8 +943,21 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     const newMatches = { ...matches, [selectedLeft]: idx }
     setMatches(newMatches)
     setSelectedLeft(null)
-    // v7.1 — NE PLUS auto-valider. L'utilisateur doit cliquer "Valider" lui-même
-    // pour pouvoir changer ses choix avant validation.
+    // v8.5 — Auto-validation quand tous les matches sont faits.
+    // Avant v8.5, l'utilisateur devait cliquer "Valider" manuellement (compliqué
+    // pour illettrés). Maintenant : on attend 600ms (le temps de voir le dernier
+    // match), puis on valide automatiquement. L'utilisateur peut toujours défaire
+    // un match individuel avant ce délai en cliquant à nouveau sur la case gauche.
+    if (Object.keys(newMatches).length === pairs.length) {
+      setTimeout(() => {
+        const allOk = pairs.every(p => {
+          const chosenIdx = newMatches[p.left]
+          const chosenVal = rightShuffled.find(r => r.idx === chosenIdx)?.val
+          return chosenVal === p.right
+        })
+        setFeedback(allOk)
+      }, 600)
+    }
   }
 
   /** v6.0 — Permettre de défaire un match avant validation finale */
@@ -920,16 +970,8 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     setSelectedLeft(l)
   }
 
-  /** v7.1 — Validation manuelle (bouton "Valider") */
-  function validateMatch() {
-    if (Object.keys(matches).length !== pairs.length || feedback !== null) return
-    const allOk = pairs.every(p => {
-      const chosenIdx = matches[p.left]
-      const chosenVal = rightShuffled.find(r => r.idx === chosenIdx)?.val
-      return chosenVal === p.right
-    })
-    setFeedback(allOk)
-  }
+  // v8.5 — validateMatch supprimée : validation manuelle remplacée par auto-validation
+  // dans pickRight quand tous les matches sont faits.
 
   /** v7.1 — Tout effacer pour recommencer */
   function resetMatches() {
@@ -986,19 +1028,14 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
           })}
         </div>
       </div>
-      {/* v7.1 — Boutons Valider / Effacer (validation manuelle) */}
-      {feedback === null && Object.keys(matches).length > 0 && (
-        <div className="flex gap-2">
-          <button onClick={resetMatches}
-            className="flex-1 p-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50">
-            Tout effacer
-          </button>
-          {Object.keys(matches).length === pairs.length && (
-            <button onClick={validateMatch}
-              className="flex-1 p-3 bg-primary-700 text-white rounded-xl font-bold hover:bg-primary-900">
-              Valider →
-            </button>
-          )}
+      {/* v8.5 — Plus de bouton manuel Valider. L'auto-validation se déclenche
+          quand tous les matches sont faits (cf pickRight). L'utilisateur peut
+          toujours cliquer sur une case déjà matchée pour la défaire avant la
+          validation (~600ms de marge).
+          Indication visuelle d'attente pendant le délai. */}
+      {feedback === null && Object.keys(matches).length > 0 && Object.keys(matches).length < pairs.length && (
+        <div className="text-center text-sm text-gray-500">
+          {pairs.length - Object.keys(matches).length} paire{pairs.length - Object.keys(matches).length > 1 ? 's' : ''} restante{pairs.length - Object.keys(matches).length > 1 ? 's' : ''} · touche une case pour la défaire
         </div>
       )}
 

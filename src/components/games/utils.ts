@@ -572,6 +572,6 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v8.4 — Détection langue inversée (whitelist EN au lieu de blacklist FR)
- *  + "=" → "veut dire" en TTS + UX continuer toujours visible sur repeat/match */
-export const TTS_VERSION = 'v8.4'
+/** v8.5 — "veut dire" entre EN/FR dans StepRepeat + match auto-validation
+ *  + dialogues avec réponse négative optionnelle (No, I'm not / No, she isn't) */
+export const TTS_VERSION = 'v8.5'
