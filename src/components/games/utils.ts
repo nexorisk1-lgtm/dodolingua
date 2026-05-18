@@ -572,6 +572,6 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v8.5 — "veut dire" entre EN/FR dans StepRepeat + match auto-validation
- *  + dialogues avec réponse négative optionnelle (No, I'm not / No, she isn't) */
-export const TTS_VERSION = 'v8.5'
+/** v8.6 — Audio "comme dans" pour Phase 2 verbe to be + Match bidirectionnel
+ *  (clic gauche-droite OU droite-gauche au choix) */
+export const TTS_VERSION = 'v8.6'

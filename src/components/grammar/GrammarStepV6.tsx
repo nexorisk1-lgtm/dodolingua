@@ -917,6 +917,8 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
   const pairs = c.pairs || []
   const [matches, setMatches] = useState<Record<string, number>>({})
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null)
+  // v8.6 — Permet de cliquer un right d'abord puis un left ensuite (UX tolérante).
+  const [selectedRight, setSelectedRight] = useState<{ idx: number; val: string } | null>(null)
   const [feedback, setFeedback] = useState<boolean | null>(null)
 
   const rightShuffled = useMemo(
@@ -930,24 +932,12 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
   , [])
   useAutoIntro(segments, rate)
 
-  function pickLeft(l: string) {
-    if (feedback !== null) return
-    speak(l)
-    setSelectedLeft(l)
-  }
-
-  function pickRight(idx: number, val: string) {
-    if (!selectedLeft || feedback !== null) return
-    if (Object.values(matches).includes(idx)) return
-    speak(val)
-    const newMatches = { ...matches, [selectedLeft]: idx }
+  // v8.6 — Helper : exécute le match + déclenche auto-validation si toutes paires faites.
+  function commitMatch(left: string, rightIdx: number) {
+    const newMatches = { ...matches, [left]: rightIdx }
     setMatches(newMatches)
     setSelectedLeft(null)
-    // v8.5 — Auto-validation quand tous les matches sont faits.
-    // Avant v8.5, l'utilisateur devait cliquer "Valider" manuellement (compliqué
-    // pour illettrés). Maintenant : on attend 600ms (le temps de voir le dernier
-    // match), puis on valide automatiquement. L'utilisateur peut toujours défaire
-    // un match individuel avant ce délai en cliquant à nouveau sur la case gauche.
+    setSelectedRight(null)
     if (Object.keys(newMatches).length === pairs.length) {
       setTimeout(() => {
         const allOk = pairs.every(p => {
@@ -960,6 +950,30 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     }
   }
 
+  function pickLeft(l: string) {
+    if (feedback !== null) return
+    speak(l)
+    // v8.6 — Si un right est déjà sélectionné, on fait le match direct
+    if (selectedRight) {
+      commitMatch(l, selectedRight.idx)
+    } else {
+      setSelectedLeft(l)
+    }
+  }
+
+  function pickRight(idx: number, val: string) {
+    if (feedback !== null) return
+    if (Object.values(matches).includes(idx)) return
+    speak(val)
+    // v8.6 — Si un left est déjà sélectionné, on fait le match (comportement classique)
+    if (selectedLeft) {
+      commitMatch(selectedLeft, idx)
+    } else {
+      // v8.6 — Sinon, on mémorise le right en attendant qu'un left soit cliqué
+      setSelectedRight({ idx, val })
+    }
+  }
+
   /** v6.0 — Permettre de défaire un match avant validation finale */
   function undoMatch(l: string) {
     if (feedback !== null) return
@@ -968,16 +982,15 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     setMatches(next)
     // v7.1 — Auto-resélectionner le left démantelé pour faciliter la correction
     setSelectedLeft(l)
+    setSelectedRight(null)
   }
-
-  // v8.5 — validateMatch supprimée : validation manuelle remplacée par auto-validation
-  // dans pickRight quand tous les matches sont faits.
 
   /** v7.1 — Tout effacer pour recommencer */
   function resetMatches() {
     if (feedback === true) return
     setMatches({})
     setSelectedLeft(null)
+    setSelectedRight(null)
     setFeedback(null)
   }
 
@@ -1013,12 +1026,15 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
         <div className="space-y-2">
           {rightShuffled.map(r => {
             const used = Object.values(matches).includes(r.idx)
+            // v8.6 — Highlight si ce right est sélectionné (en attente d'un left)
+            const isSelectedRight = selectedRight?.idx === r.idx
             return (
               <button key={r.idx}
                 onClick={() => pickRight(r.idx, r.val)}
                 disabled={used || feedback !== null}
                 className={`w-full p-3 rounded-xl border-2 font-bold text-lg ${
                   used ? 'bg-gray-100 text-gray-400 line-through border-rule' :
+                  isSelectedRight ? 'border-primary-500 bg-primary-100 text-primary-700 ring-2 ring-primary-300' :
                   selectedLeft ? `${colorClass('red')} hover:scale-105` :
                   colorClass('red')
                 }`}>
