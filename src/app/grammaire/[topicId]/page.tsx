@@ -36,6 +36,8 @@ export default function GrammarTopicPage() {
   const [steps, setSteps] = useState<Step[]>([])
   const [exercises, setExercises] = useState<GrammarExerciseData[]>([])
   const [voiceName, setVoiceName] = useState<string | null>(null)
+  // v8.9 — Prénom utilisateur pour personnaliser le "Bravo, [prénom]" final
+  const [userName, setUserName] = useState<string | null>(null)
   const [phase, setPhase] = useState<'loading' | 'lesson' | 'steps' | 'exercises' | 'done'>('loading')
   const [stepIdx, setStepIdx] = useState(0)
   const [exoIdx, setExoIdx] = useState(0)
@@ -49,7 +51,7 @@ export default function GrammarTopicPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
-      const [topicRes, stepsRes, exoRes, voiceRes] = await Promise.all([
+      const [topicRes, stepsRes, exoRes, voiceRes, profileRes] = await Promise.all([
         supabase.from('grammar_topics')
           .select('id, level, title_fr, rule_md, emoji, examples_json, lesson_format_version')
           .eq('id', topicId).maybeSingle(),
@@ -61,12 +63,16 @@ export default function GrammarTopicPage() {
           .eq('topic_id', topicId).order('position'),
         supabase.from('user_voice_pref')
           .select('voice_name').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle(),
+        // v8.9 — Récupère le display_name pour le "Bravo, [prénom]" final
+        supabase.from('profiles')
+          .select('display_name').eq('id', user.id).maybeSingle(),
       ])
 
       if (topicRes.data) setTopic(topicRes.data as Topic)
       setSteps((stepsRes.data || []) as Step[])
       setExercises((exoRes.data || []) as GrammarExerciseData[])
       if (voiceRes.data) setVoiceName(voiceRes.data.voice_name)
+      if (profileRes.data?.display_name) setUserName(profileRes.data.display_name)
 
       // v5 — Routing : si des steps existent, mode micro-séquence direct
       if ((stepsRes.data || []).length > 0) {
@@ -203,6 +209,7 @@ export default function GrammarTopicPage() {
             canGoBack={stepIdx > 0}
             isLast={stepIdx + 1 >= steps.length}
             mode="complete"
+            userName={userName ?? undefined}
           />
         </Card>
       )}

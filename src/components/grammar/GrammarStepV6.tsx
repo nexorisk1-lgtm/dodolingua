@@ -52,6 +52,8 @@ interface Props {
   canGoBack: boolean
   /** Mode speaking = vitesse 0.8, complet = 0.9 */
   mode?: 'speaking' | 'complete'
+  /** v8.9 — Prénom utilisateur pour personnaliser le "Bravo, [prénom]" final */
+  userName?: string
 }
 
 // ============================================================================
@@ -359,8 +361,12 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
   const [recording, setRecording] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [lastResult, setLastResult] = useState<{ transcript: string; similarity: number; unsupported?: boolean } | null>(null)
+  // v8.9 — Capture audio de la voix utilisateur pour permettre la réécoute
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
   const MAX_ATTEMPTS = 3
-  const SUCCESS_THRESHOLD = 0.75
+  const SUCCESS_THRESHOLD = 0.7  // v8.9 — abaissé de 0.75 à 0.7 (plus tolérant)
 
   // v8.5 — Intro vocale enrichie : intro + modèle EN + "veut dire" + traduction FR.
   // Avant v8.5, on entendait "I am" immédiatement suivi de "Je suis" sans transition,
@@ -383,16 +389,40 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     if (!c.audio_full || recording) return
     setRecording(true)
     setLastResult(null)
+    setRecordedBlob(null)
+    // v8.9 — Capture audio en parallèle pour permettre la réécoute de sa voix
+    audioChunksRef.current = []
+    let stream: MediaStream | null = null
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mr = new MediaRecorder(stream)
+      mediaRecorderRef.current = mr
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+      mr.onstop = () => {
+        if (audioChunksRef.current.length > 0) {
+          const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' })
+          setRecordedBlob(blob)
+        }
+        stream?.getTracks().forEach(t => t.stop())
+      }
+      mr.start()
+    } catch {
+      // Si on ne peut pas capturer (permission, navigateur), on continue sans replay
+      stream?.getTracks().forEach(t => t.stop())
+    }
     // v8.0 — Timeout de sécurité 8s : si le micro ne reçoit rien (silencieux,
     // pas de permission, etc.), on ne reste pas bloqué indéfiniment.
     let timedOut = false
     const safetyTimeout = setTimeout(() => {
       timedOut = true
       setRecording(false)
+      try { mediaRecorderRef.current?.stop() } catch {}
       void speakSequence([{ text: 'Je n\'ai rien entendu. Appuie à nouveau ou continue.', lang: 'fr-FR' }], rate)
     }, 8000)
     try {
-      const result = await recognizeSpeech(c.audio_full, 'en-GB')
+      const result = await recognizeSpeech(c.audio_full, 'en-US')
+      // v8.9 — Stop le MediaRecorder à la fin de la reconnaissance pour finaliser le blob
+      try { mediaRecorderRef.current?.stop() } catch {}
       clearTimeout(safetyTimeout)
       if (timedOut) return
       setLastResult(result)
@@ -495,8 +525,20 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
           <div className="text-sm mt-1">
             Score : <span className={`font-bold ${isSuccess ? 'text-green-700' : 'text-amber-700'}`}>{Math.round(lastResult.similarity * 100)}%</span>
           </div>
+          {/* v8.9 — Bouton pour réécouter sa propre voix (si capture audio dispo) */}
+          {recordedBlob && (
+            <button onClick={() => {
+              const url = URL.createObjectURL(recordedBlob)
+              const audio = new Audio(url)
+              audio.play().catch(() => {})
+              audio.onended = () => URL.revokeObjectURL(url)
+            }}
+              className="mt-2 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white border-2 border-primary-300 text-primary-700 font-bold hover:bg-primary-50 text-sm">
+              🎧 Écouter ma voix
+            </button>
+          )}
           {isFail && !exhausted && (
-            <div className="text-xs text-gray-600 mt-1">Réécoute le modèle 🔊 puis réessaye.</div>
+            <div className="text-xs text-gray-600 mt-2">Réécoute le modèle, puis réessaye.</div>
           )}
         </div>
       )}
@@ -624,7 +666,7 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
 // 0quinquies. VALIDATION_FINAL — écran 🎉 Bravo + résumé (v7.0)
 // ============================================================================
 
-function StepValidationFinal({ step, onContinue, rate }: { step: StepV6; onContinue: () => void; rate: number }) {
+function StepValidationFinal({ step, onContinue, rate, userName }: { step: StepV6; onContinue: () => void; rate: number; userName?: string }) {
   const c = step.content_json as {
     audio_intro?: string;
     title_fr?: string;
@@ -632,13 +674,21 @@ function StepValidationFinal({ step, onContinue, rate }: { step: StepV6; onConti
     next_step_fr?: string;
   }
   const items = c.achievements || []
+  // v8.9 — Personnalisation : "Bravo, [prénom] !" si userName fourni
+  const firstName = userName?.trim().split(/\s+/)[0] || ''
+  const bravoText = firstName ? `Bravo, ${firstName} !` : (c.title_fr || 'Bravo !')
 
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
-    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR' })
+    // v8.9 — Si on a un prénom, on l'intègre à l'audio final
+    if (firstName) {
+      segs.push({ text: `Bravo ${firstName}, tu as terminé ta première leçon. Tu sais maintenant dire qui tu es en anglais.`, lang: 'fr-FR' })
+    } else if (c.audio_intro) {
+      segs.push({ text: c.audio_intro, lang: 'fr-FR' })
+    }
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [firstName])
   useAutoIntro(segments, rate)
 
   return (
@@ -647,9 +697,9 @@ function StepValidationFinal({ step, onContinue, rate }: { step: StepV6; onConti
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/dodo-champion.png" alt="Dodo champion" className="w-48 h-48 mx-auto object-contain" />
       <h2 className="text-2xl font-extrabold text-primary-900">
-        {c.title_fr || 'Bravo !'}
+        {bravoText}
       </h2>
-      <div className="text-base text-gray-600">— Dodo</div>
+      {!firstName && <div className="text-base text-gray-600">— Dodo</div>}
       {items.length > 0 && (
         <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg text-left">
           <div className="text-sm uppercase font-bold text-green-700 tracking-wide mb-2">Tu sais maintenant :</div>
@@ -1638,7 +1688,7 @@ function StepRecapChallenge({ step, onContinue, rate }: { step: StepV6; onContin
 // COMPOSANT PRINCIPAL — router selon le type
 // ============================================================================
 
-export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mode = 'complete' }: Props) {
+export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mode = 'complete', userName }: Props) {
   const rate = mode === 'speaking' ? 0.8 : 0.9
 
   function handleContinue(correct?: boolean) {
@@ -1651,7 +1701,7 @@ export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mod
       {step.type === 'role_explanation' && <StepRoleExplanation step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'repeat' && <StepRepeat step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'dialog' && <StepDialog step={step} onContinue={() => handleContinue()} rate={rate} />}
-      {step.type === 'validation_final' && <StepValidationFinal step={step} onContinue={() => handleContinue()} rate={rate} />}
+      {step.type === 'validation_final' && <StepValidationFinal step={step} onContinue={() => handleContinue()} rate={rate} userName={userName} />}
       {step.type === 'immersion' && <StepImmersion step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'discover_text' && <StepDiscoverText step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'recognition' && <StepRecognition step={step} onContinue={handleContinue} rate={rate} />}

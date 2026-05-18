@@ -519,22 +519,53 @@ export interface SpeechRecognitionResult {
   unsupported?: boolean
 }
 
-// v7.4 — Typage minimal de SpeechRecognition (pas dans lib.dom.d.ts pour webkit*)
+// v8.9 — Typage SpeechRecognition élargi pour exploiter toutes les alternatives
+interface SRAlternative { transcript: string; confidence: number }
+interface SRResult { length: number; isFinal?: boolean; [n: number]: SRAlternative }
+interface SRResultList { length: number; [n: number]: SRResult }
+interface SRResultEvent { results: SRResultList }
+
 interface SpeechRecognitionInstance {
   lang: string
   interimResults: boolean
   maxAlternatives: number
-  onresult: (event: { results: { 0: { transcript: string } }[] }) => void
+  continuous: boolean
+  onresult: (event: SRResultEvent) => void
   onerror: () => void
   onend: () => void
   start(): void
+  stop(): void
 }
 type SRConstructor = new () => SpeechRecognitionInstance
 
-/** Démarre la reconnaissance vocale et retourne ce qui a été entendu. */
-export function recognizeSpeech(expected: string, lang = 'en-GB'): Promise<SpeechRecognitionResult> {
+/** v8.9 — Normalisation pour comparaison tolérante : minuscules + expansion des
+ *  contractions courantes + suppression de la ponctuation. */
+function normalizeForCompare(s: string): string {
+  return s.toLowerCase()
+    .replace(/i'm/g, 'i am')
+    .replace(/you're/g, 'you are')
+    .replace(/he's/g, 'he is')
+    .replace(/she's/g, 'she is')
+    .replace(/it's/g, 'it is')
+    .replace(/we're/g, 'we are')
+    .replace(/they're/g, 'they are')
+    .replace(/isn't/g, 'is not')
+    .replace(/aren't/g, 'are not')
+    .replace(/[^a-z\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * v8.9 — Démarre la reconnaissance vocale avec params optimisés pour francophones :
+ * - lang 'en-US' (plus tolérant que 'en-GB' sur accent FR)
+ * - maxAlternatives 3 (Chrome renvoie max 3 vraies alternatives)
+ * - On compare l'attendu (normalisé) contre TOUTES les alternatives reçues
+ *   et on retient le meilleur score. Si une alternative match exactement après
+ *   normalisation (ex: "I'm" vs "I am"), on retourne 1.0.
+ */
+export function recognizeSpeech(expected: string, lang = 'en-US'): Promise<SpeechRecognitionResult> {
   return new Promise((resolve) => {
-    // v7.4 — Cast TypeScript propre (la directive précédente était devenue unused en TS strict moderne)
     const w = window as unknown as { SpeechRecognition?: SRConstructor; webkitSpeechRecognition?: SRConstructor }
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition
     if (!SR) return resolve({ transcript: '', similarity: 0, unsupported: true })
@@ -542,36 +573,91 @@ export function recognizeSpeech(expected: string, lang = 'en-GB'): Promise<Speec
     recognition.lang = lang
     recognition.interimResults = false
     recognition.maxAlternatives = 3
+    recognition.continuous = false
+
+    let resolved = false
+    const safeResolve = (r: SpeechRecognitionResult) => {
+      if (resolved) return
+      resolved = true
+      try { recognition.stop() } catch {}
+      resolve(r)
+    }
+
+    const expectedNorm = normalizeForCompare(expected)
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript.trim()
-      resolve({
-        transcript,
-        similarity: computeSimilarity(transcript.toLowerCase(), expected.toLowerCase()),
-      })
+      const result = event.results[0]
+      let bestTranscript = result[0]?.transcript?.trim() || ''
+      let bestSim = 0
+      // v8.9 — On compare TOUTES les alternatives à l'attendu et on garde la meilleure
+      for (let i = 0; i < result.length; i++) {
+        const alt = result[i]
+        if (!alt?.transcript) continue
+        const altNorm = normalizeForCompare(alt.transcript)
+        const sim = altNorm === expectedNorm ? 1.0 : computeSimilarity(altNorm, expectedNorm)
+        if (sim > bestSim) {
+          bestSim = sim
+          bestTranscript = alt.transcript.trim()
+        }
+      }
+      safeResolve({ transcript: bestTranscript, similarity: bestSim })
     }
-    recognition.onerror = () => resolve({ transcript: '', similarity: 0 })
-    recognition.onend = () => { /* géré par onresult/onerror */ }
+    recognition.onerror = () => safeResolve({ transcript: '', similarity: 0 })
+    recognition.onend = () => safeResolve({ transcript: '', similarity: 0 })
 
     try {
       recognition.start()
     } catch {
-      resolve({ transcript: '', similarity: 0 })
+      safeResolve({ transcript: '', similarity: 0 })
     }
   })
 }
 
-/** Calcule une similarité simple basée sur les mots communs (0 à 1). */
+/**
+ * v8.9 — Similarité robuste pour reconnaissance vocale francophones.
+ * Combine intersection de mots + similarité Levenshtein normalisée pour gérer
+ * les variantes phonétiques courantes ("ay-em" pour "am", "wee" pour "we", etc.)
+ */
 function computeSimilarity(a: string, b: string): number {
-  const normalize = (s: string) => s.replace(/[^a-zÀ-ſ'\s]/gi, '').toLowerCase().trim()
-  const wordsA = normalize(a).split(/\s+/).filter(Boolean)
-  const wordsB = normalize(b).split(/\s+/).filter(Boolean)
-  if (wordsB.length === 0) return 0
+  const normalize = (s: string) => s.replace(/[^a-zà-ÿ'\s]/gi, '').toLowerCase().trim()
+  const sa = normalize(a)
+  const sb = normalize(b)
+  if (!sb) return 0
+  if (sa === sb) return 1
+  const wordsA = sa.split(/\s+/).filter(Boolean)
+  const wordsB = sb.split(/\s+/).filter(Boolean)
+  // Score 1 : intersection de mots
   const setB = new Set(wordsB)
-  const matches = wordsA.filter(w => setB.has(w)).length
-  return Math.min(1, matches / wordsB.length)
+  const wordMatches = wordsA.filter(w => setB.has(w)).length
+  const wordScore = wordsB.length ? wordMatches / wordsB.length : 0
+  // Score 2 : Levenshtein normalisé sur la chaîne complète (sans espaces)
+  const charDist = levenshtein(sa.replace(/\s/g, ''), sb.replace(/\s/g, ''))
+  const maxLen = Math.max(sa.length, sb.length) || 1
+  const charScore = 1 - charDist / maxLen
+  // On retourne le MAX des deux scores → tolérant à l'accent ET aux variantes phonétiques
+  return Math.min(1, Math.max(wordScore, charScore))
 }
 
-/** v8.8 — Match : selectedRight en jaune+pulse au lieu de bleu (plus clair "en attente")
- *  + bouton "Tout effacer" remis discret. BDD : précisions "au pluriel" + match contractions. */
-export const TTS_VERSION = 'v8.8'
+/** Distance d'édition de Levenshtein (matrice classique) */
+function levenshtein(a: string, b: string): number {
+  if (!a.length) return b.length
+  if (!b.length) return a.length
+  const matrix: number[][] = []
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i]
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      const cost = b[i - 1] === a[j - 1] ? 0 : 1
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      )
+    }
+  }
+  return matrix[b.length][a.length]
+}
+
+/** v8.9 — Micro intelligent : lang en-US, multi-alternatives, Levenshtein, contractions
+ *  normalisées. Capture audio + replay. "Bravo, [prénom]". Fix apostrophes + ambiguïté "Il". */
+export const TTS_VERSION = 'v8.9'
