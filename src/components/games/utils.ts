@@ -572,6 +572,6 @@ function computeSimilarity(a: string, b: string): number {
   return Math.min(1, matches / wordsB.length)
 }
 
-/** v8.7 — +2 étapes BDD : Récap visuel pronoms (étape 9) + Tableau contractions (étape 27).
- *  Cours BE désormais à 33 étapes (vs 31). */
-export const TTS_VERSION = 'v8.7'
+/** v8.8 — Match : selectedRight en jaune+pulse au lieu de bleu (plus clair "en attente")
+ *  + bouton "Tout effacer" remis discret. BDD : précisions "au pluriel" + match contractions. */
+export const TTS_VERSION = 'v8.8'
