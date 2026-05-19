@@ -87,6 +87,25 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+/** v8.16 — Détecte si le texte d'une option MCQ est en FR ou EN pour utiliser la
+ *  bonne voix TTS. Heuristique : accents FR OU mots FR courants → FR, sinon EN. */
+function detectOptionLang(text: string): 'fr-FR' | 'en-GB' {
+  if (/[éèêëàâäîïôöùûüçÿœæ]/i.test(text)) return 'fr-FR'
+  const words = text.toLowerCase().replace(/[.,!?;:]/g, '').split(/\s+/)
+  const frHints = new Set([
+    'je', 'tu', 'il', 'elle', 'on', 'nous', 'vous', 'ils', 'elles',
+    'ca', 'ça', 'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de',
+    'et', 'ou', 'mais', 'donc', 'au', 'aux',
+    'pour', 'avec', 'sans', 'dans', 'sur', 'sous', 'par',
+    'pluriel', 'singulier', 'masculin', 'feminin', 'féminin',
+    'garçon', 'garcon', 'fille', 'homme', 'femme', 'objet',
+    'qui', 'que', 'quoi', 'quand',
+    'est', 'sont', 'suis', 'es', 'sommes', 'etes', 'êtes',
+  ])
+  if (words.some(w => frHints.has(w))) return 'fr-FR'
+  return 'en-GB'
+}
+
 /** v8.0 — Rend un texte avec markdown **xxx** en gras (au lieu de l'afficher brut).
  *  Avant v8.0, "Tu viens d'entendre **She's happy**" s'affichait avec les astérisques. */
 function MixedText({ text, className }: { text: string; className?: string }) {
@@ -902,7 +921,10 @@ function StepRecognition({
   function pick(idx: number) {
     if (picked !== null && options[picked].correct) return // déjà gagné, ignore
     setPicked(idx)
-    speak(options[idx].text)
+    // v8.16 — Détection auto de la langue de l'option pour utiliser la bonne voix.
+    // Avant v8.16, speak() utilisait toujours la voix anglaise (défaut) → "Je",
+    // "Tu", "Ils ou elles" étaient lus par Daniel avec un accent affreux.
+    speak(options[idx].text, null, { lang: detectOptionLang(options[idx].text) })
     if (options[idx].correct) {
       setTimeout(() => onContinue(true), 900)
     } else {
@@ -1312,7 +1334,8 @@ function StepListenTarget({ step, onContinue, rate }: { step: StepV6; onContinue
   function pick(idx: number) {
     if (picked !== null && options[picked].correct) return
     setPicked(idx)
-    speak(options[idx].text)
+    // v8.16 — Détection auto FR/EN pour utiliser la bonne voix sur l'option cliquée
+    speak(options[idx].text, null, { lang: detectOptionLang(options[idx].text) })
     if (options[idx].correct) {
       setTimeout(() => onContinue(true), 900)
     } else {

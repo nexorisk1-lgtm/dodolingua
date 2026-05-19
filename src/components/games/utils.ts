@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.15 — +6 exercices de reconnaissance MCQ pour les 7 pronoms (I, You, He, It,
- *  We, They en plus de She). Cours désormais à 41 étapes. */
-export const TTS_VERSION = 'v8.15'
+/** v8.16 — Voix FR auto sur options MCQ (au lieu de Daniel anglais qui lisait "Je")
+ *  + étape transition entre MCQ pronoms et apprentissage du verbe être. 42 étapes. */
+export const TTS_VERSION = 'v8.16'
