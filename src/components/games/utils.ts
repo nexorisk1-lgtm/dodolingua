@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.14 — Match correction en 1 clic : si un match récent existe, cliquer un autre
- *  verbe à droite remplace AUTOMATIQUEMENT le match. Plus besoin de re-cliquer le sujet. */
-export const TTS_VERSION = 'v8.14'
+/** v8.15 — +6 exercices de reconnaissance MCQ pour les 7 pronoms (I, You, He, It,
+ *  We, They en plus de She). Cours désormais à 41 étapes. */
+export const TTS_VERSION = 'v8.15'
