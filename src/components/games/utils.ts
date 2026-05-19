@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.18 — "Bravo [prénom], tu as terminé ton cours sur [titre]." dynamique pour les
- *  48 cours + shuffle des options MCQ (la bonne réponse n'est plus toujours en 1ère). */
-export const TTS_VERSION = 'v8.18'
+/** v8.19 — FIX CRITIQUE Match doublons (keys numériques au lieu de left.text)
+ *  + await speakSequence dans MCQ pour ne plus couper "Je ne suis pas français". */
+export const TTS_VERSION = 'v8.19'

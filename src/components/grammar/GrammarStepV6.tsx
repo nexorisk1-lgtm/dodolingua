@@ -915,16 +915,20 @@ function StepRecognition({
   useAutoIntro(segments, rate)
   const replay = () => void speakSequence(segments, rate)
 
-  function pick(idx: number) {
+  async function pick(idx: number) {
     if (picked !== null && options[picked].correct) return // déjà gagné, ignore
     setPicked(idx)
-    // v8.16 — Détection auto de la langue de l'option pour utiliser la bonne voix.
-    // Avant v8.16, speak() utilisait toujours la voix anglaise (défaut) → "Je",
-    // "Tu", "Ils ou elles" étaient lus par Daniel avec un accent affreux.
-    speak(options[idx].text, null, { lang: detectOptionLang(options[idx].text) })
+    // v8.16 — Détection auto FR/EN pour la voix
+    const lang = detectOptionLang(options[idx].text)
     if (options[idx].correct) {
-      setTimeout(() => onContinue(true), 900)
+      // v8.19 — On AWAIT speakSequence pour que la voix finisse de prononcer la
+      // réponse complète avant le passage à la page suivante. Avant v8.19, on
+      // utilisait speak() puis setTimeout 900ms, ce qui coupait les phrases longues
+      // (ex: "Je ne suis pas français" prend ~2s à dire).
+      await speakSequence([{ text: options[idx].text, lang }], rate)
+      setTimeout(() => onContinue(true), 500)
     } else {
+      speak(options[idx].text, null, { lang })
       setShown('wrong')
       setTimeout(() => { setPicked(null); setShown('idle') }, 1200)
     }
@@ -1029,16 +1033,14 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     explanation_fr?: string;
   }
   const pairs = c.pairs || []
-  const [matches, setMatches] = useState<Record<string, number>>({})
-  const [selectedLeft, setSelectedLeft] = useState<string | null>(null)
-  // v8.6 — Permet de cliquer un right d'abord puis un left ensuite (UX tolérante).
+  // v8.19 — Refonte : keys numériques (index dans pairs[]) au lieu de left.text.
+  // Avant v8.19, matches[left] écrasait les doublons (3 "Are" dans cours 3 étape 10
+  // partageaient la même clé "Are" → bug bloquant). Maintenant chaque left a son
+  // propre index unique.
+  const [matches, setMatches] = useState<Record<number, number>>({})
+  const [selectedLeft, setSelectedLeft] = useState<number | null>(null)
   const [selectedRight, setSelectedRight] = useState<{ idx: number; val: string } | null>(null)
-  // v8.14 — Mémorise le dernier left matché pour permettre la correction en 1 clic.
-  // Quand un right libre est cliqué et qu'un dernier match existe encore, on
-  // REMPLACE automatiquement le match du dernier left au lieu de simplement
-  // sélectionner le right en jaune. Reset quand l'utilisateur prend la main
-  // explicitement (clic sur un autre left, ou undoMatch, ou resetMatches).
-  const [lastMatchedLeft, setLastMatchedLeft] = useState<string | null>(null)
+  const [lastMatchedLeft, setLastMatchedLeft] = useState<number | null>(null)
   const [feedback, setFeedback] = useState<boolean | null>(null)
 
   const rightShuffled = useMemo(
@@ -1052,19 +1054,16 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
   , [])
   useAutoIntro(segments, rate)
 
-  // v8.6 — Helper : exécute le match + déclenche auto-validation si toutes paires faites.
-  function commitMatch(left: string, rightIdx: number) {
-    const newMatches = { ...matches, [left]: rightIdx }
+  function commitMatch(leftIdx: number, rightIdx: number) {
+    const newMatches = { ...matches, [leftIdx]: rightIdx }
     setMatches(newMatches)
     setSelectedLeft(null)
     setSelectedRight(null)
-    // v8.14 — Mémorise le left qu'on vient de matcher pour permettre une correction
-    // en 1 clic au prochain clic right libre.
-    setLastMatchedLeft(left)
+    setLastMatchedLeft(leftIdx)
     if (Object.keys(newMatches).length === pairs.length) {
       setTimeout(() => {
-        const allOk = pairs.every(p => {
-          const chosenIdx = newMatches[p.left]
+        const allOk = pairs.every((p, i) => {
+          const chosenIdx = newMatches[i]
           const chosenVal = rightShuffled.find(r => r.idx === chosenIdx)?.val
           return chosenVal === p.right
         })
@@ -1073,64 +1072,51 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     }
   }
 
-  function pickLeft(l: string) {
+  function pickLeft(leftIdx: number, leftVal: string) {
     if (feedback !== null) return
-    speak(l)
-    // v8.14 — Click sur left = prise de contrôle explicite → reset lastMatchedLeft.
+    speak(leftVal)
     setLastMatchedLeft(null)
-    // v8.11 — Logique enrichie pour permettre le REMPLACEMENT facile d'un match :
     if (selectedRight) {
-      commitMatch(l, selectedRight.idx)
-    } else if (matches[l] !== undefined) {
-      undoMatch(l)
+      commitMatch(leftIdx, selectedRight.idx)
+    } else if (matches[leftIdx] !== undefined) {
+      undoMatch(leftIdx)
     } else {
-      setSelectedLeft(l)
+      setSelectedLeft(leftIdx)
     }
   }
 
   function pickRight(idx: number, val: string) {
     if (feedback !== null) return
-    // v8.12 — Si le right cliqué est déjà matché à un left, on défait le match.
     if (Object.values(matches).includes(idx)) {
-      const leftToUndo = Object.keys(matches).find(k => matches[k] === idx)
-      if (leftToUndo) {
-        undoMatch(leftToUndo)
+      const leftIdxToUndo = Object.keys(matches).find(k => matches[Number(k)] === idx)
+      if (leftIdxToUndo !== undefined) {
+        undoMatch(Number(leftIdxToUndo))
         speak(val)
       }
       return
     }
     speak(val)
-    // v8.6 — Si un left est déjà sélectionné, on fait le match
-    if (selectedLeft) {
+    if (selectedLeft !== null) {
       commitMatch(selectedLeft, idx)
       return
     }
-    // v8.14 — Remplacement automatique en 1 clic : si un match récent existe
-    // (lastMatchedLeft) et que ce left est encore matché, on REMPLACE
-    // automatiquement son match par ce nouveau right. Plus besoin de re-cliquer
-    // le sujet — l'apprenant peut juste tester un autre verbe directement.
-    if (lastMatchedLeft && matches[lastMatchedLeft] !== undefined) {
+    if (lastMatchedLeft !== null && matches[lastMatchedLeft] !== undefined) {
       commitMatch(lastMatchedLeft, idx)
       return
     }
-    // Sinon, on mémorise le right en attendant qu'un left soit cliqué
     setSelectedRight({ idx, val })
   }
 
-  /** v6.0 — Permettre de défaire un match avant validation finale */
-  function undoMatch(l: string) {
+  function undoMatch(leftIdx: number) {
     if (feedback !== null) return
     const next = { ...matches }
-    delete next[l]
+    delete next[leftIdx]
     setMatches(next)
-    // v7.1 — Auto-resélectionner le left démantelé pour faciliter la correction
-    setSelectedLeft(l)
+    setSelectedLeft(leftIdx)
     setSelectedRight(null)
-    // v8.14 — reset le tracker de dernier match (la prise de contrôle est explicite)
     setLastMatchedLeft(null)
   }
 
-  /** v7.1 — Tout effacer pour recommencer */
   function resetMatches() {
     if (feedback === true) return
     setMatches({})
@@ -1145,25 +1131,20 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
       <StepHeader icon="🔗" label="Relie les paires" />
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          {pairs.map(p => {
-            const matchedIdx = matches[p.left]
+          {pairs.map((p, leftIdx) => {
+            const matchedIdx = matches[leftIdx]
             const matchedVal = matchedIdx !== undefined
               ? rightShuffled.find(r => r.idx === matchedIdx)?.val : undefined
-            const isSelected = selectedLeft === p.left
+            const isSelected = selectedLeft === leftIdx
             const isCorrect = feedback !== null && matchedVal === p.right
             const isWrong = feedback !== null && matchedVal !== undefined && matchedVal !== p.right
             return (
-              <button key={p.left}
-                // v8.11 — Toujours appeler pickLeft : la logique de remplacement/undo
-                // est centralisée dans pickLeft (qui regarde selectedRight et matches).
-                onClick={() => pickLeft(p.left)}
+              <button key={leftIdx}
+                onClick={() => pickLeft(leftIdx, p.left)}
                 disabled={feedback === true}
                 className={`w-full p-3 rounded-xl border-2 font-bold text-lg transition-all ${
                   isCorrect ? 'border-ok bg-green-50 text-ok' :
                   isWrong ? 'border-warn bg-red-50 text-warn' :
-                  // v8.13 — Si selectedRight est actif et que ce left est matché,
-                  // on le rend visuellement plus prominent (ring jaune) pour montrer
-                  // qu'il est actionnable pour REMPLACER son match.
                   matchedVal && selectedRight ? `${colorClass('blue')} ring-2 ring-amber-300` :
                   matchedVal ? `${colorClass('blue')} opacity-70` :
                   isSelected ? 'border-primary-500 bg-primary-100 text-primary-700' :
@@ -1172,8 +1153,6 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
                 {p.left}
                 {matchedVal && (
                   <span className="text-xs font-normal block mt-1">
-                    {/* v8.13 — Texte contextuel : si un right est en attente, on indique
-                        que cliquer ce left va le RELIER au nouveau verbe (remplacement). */}
                     → {matchedVal} {selectedRight
                       ? <span className="text-amber-700 font-bold">(toucher pour relier à {selectedRight.val})</span>
                       : '(toucher pour défaire)'}
@@ -1226,10 +1205,10 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
       )}
       {/* v8.14 — Indicateur discret : montre qu'on peut corriger le dernier match
           en 1 clic sur un autre verbe. */}
-      {feedback === null && !selectedRight && lastMatchedLeft && matches[lastMatchedLeft] !== undefined && (
+      {feedback === null && !selectedRight && lastMatchedLeft !== null && matches[lastMatchedLeft] !== undefined && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
           <div className="text-xs text-blue-700">
-            💡 Pour corriger <strong>{lastMatchedLeft}</strong>, touche directement un autre verbe à droite.
+            💡 Pour corriger <strong>{pairs[lastMatchedLeft]?.left}</strong>, touche directement un autre verbe à droite.
           </div>
         </div>
       )}
