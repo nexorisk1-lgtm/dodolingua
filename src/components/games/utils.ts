@@ -158,6 +158,9 @@ function getBestFrVoice(): SpeechSynthesisVoice | null {
 // (infini), on liste la WHITELIST des mots EN A1 connus.
 // Un token entre **xxx** est EN si TOUS ses mots sont dans cette liste.
 // Sinon → FR par défaut.
+// v8.20 — Whitelist EN A1 MASSIVEMENT étendue pour couvrir tous les mots des 48 cours
+// (noms, verbes, adjectifs, adverbes courants). Avant v8.20, des mots simples comme
+// "book", "car", "house", "apple" n'étaient pas reconnus → "a book" lu en voix FR.
 const EN_A1_WORDS = new Set([
   // Pronoms
   'i', 'you', 'he', 'she', 'it', 'we', 'they',
@@ -170,43 +173,147 @@ const EN_A1_WORDS = new Set([
   // Verbes auxiliaires courants
   'do', 'does', 'did', 'have', 'has', 'had',
   'can', 'could', 'will', 'would', 'should', 'may', 'might', 'must',
+  'going',
   // Articles et déterminants
   'the', 'a', 'an', 'this', 'that', 'these', 'those',
   'some', 'any', 'no', 'every', 'all', 'each',
   // Conjonctions et prépositions
   'and', 'or', 'but', 'so', 'if', 'because',
   'to', 'of', 'in', 'on', 'at', 'with', 'for', 'from', 'by',
-  'about', 'into', 'over', 'under', 'between',
+  'about', 'into', 'over', 'under', 'between', 'next', 'down', 'up',
   // Négation
   'not',
   // Mots-question
-  'what', 'where', 'when', 'who', 'why', 'how', 'which',
+  'what', 'where', 'when', 'who', 'whose', 'why', 'how', 'which',
   // Politesse / interjections
   'yes', 'hello', 'hi', 'goodbye', 'bye', 'please', 'thank', 'thanks', 'sorry',
   // Adjectifs A1
-  'happy', 'sad', 'tired', 'sick', 'busy', 'hungry', 'thirsty',
-  'good', 'bad', 'big', 'small', 'hot', 'cold', 'warm', 'cool',
+  'happy', 'sad', 'tired', 'sick', 'busy', 'hungry', 'thirsty', 'cold',
+  'good', 'bad', 'big', 'small', 'hot', 'warm', 'cool',
   'new', 'old', 'young', 'tall', 'short', 'long',
-  'nice', 'kind', 'mean', 'funny', 'beautiful',
-  'easy', 'hard', 'fast', 'slow',
-  'ready', 'free', 'open', 'closed',
-  'french', 'english', 'spanish', 'german', 'italian',
+  'nice', 'kind', 'mean', 'funny', 'beautiful', 'strong', 'weak',
+  'easy', 'hard', 'fast', 'slow', 'late', 'early',
+  'ready', 'free', 'open', 'closed', 'full', 'empty',
+  'french', 'english', 'spanish', 'german', 'italian', 'american',
+  'red', 'blue', 'green', 'yellow', 'white', 'black', 'orange', 'pink', 'brown', 'gray', 'grey',
+  // Adverbes A1
+  'always', 'usually', 'often', 'sometimes', 'never',
+  'now', 'today', 'yesterday', 'tomorrow', 'tonight', 'soon',
+  'really', 'very', 'too', 'also',
+  'here', 'there', 'everywhere', 'nowhere', 'somewhere',
+  'fast', 'slowly', 'quickly', 'carefully', 'happily', 'easily', 'badly',
+  'once', 'twice',
+  'much', 'many', 'little', 'few', 'lot', 'lots',
   // Lieux A1
-  'here', 'there', 'home', 'school', 'work', 'house', 'room',
-  // Noms A1
-  'friend', 'friends', 'family', 'mother', 'father', 'brother', 'sister',
-  'boy', 'girl', 'man', 'woman', 'child', 'people', 'person',
-  'day', 'week', 'month', 'year', 'time', 'name',
-  'cat', 'dog', 'bird',
-  // Verbes A1
-  'go', 'goes', 'come', 'comes', 'see', 'sees', 'know', 'knows',
-  'want', 'wants', 'like', 'likes', 'love', 'loves', 'need', 'needs',
-  'eat', 'eats', 'drink', 'drinks', 'sleep', 'sleeps',
-  'speak', 'speaks', 'say', 'says', 'tell', 'tells',
-  // Contractions courantes (les ' sont remplacées avant test)
+  'home', 'school', 'work', 'house', 'room', 'kitchen', 'bathroom', 'bedroom', 'garden',
+  'park', 'store', 'shop', 'cafe', 'restaurant', 'office', 'street', 'city',
+  'bank', 'library', 'hospital', 'hotel', 'beach', 'sea',
+  'paris', 'london', 'rome',
+  // Noms A1 - personnes
+  'friend', 'friends', 'family', 'mother', 'father', 'mom', 'dad', 'parent', 'parents',
+  'brother', 'sister', 'son', 'daughter', 'baby', 'babies',
+  'boy', 'boys', 'girl', 'girls', 'man', 'men', 'woman', 'women', 'child', 'children',
+  'people', 'person', 'student', 'students', 'teacher', 'teachers',
+  // Noms A1 - objets
+  'book', 'books', 'pen', 'pens', 'pencil', 'paper',
+  'car', 'cars', 'bus', 'buses', 'bike', 'plane', 'train',
+  'table', 'tables', 'chair', 'chairs', 'bed', 'door', 'doors', 'window', 'windows',
+  'phone', 'computer', 'tv',
+  'present', 'gift', 'ball', 'toy', 'game',
+  'box', 'boxes', 'bag', 'bags',
+  // Noms A1 - nourriture
+  'food', 'apple', 'apples', 'egg', 'eggs', 'water', 'milk', 'coffee', 'tea',
+  'bread', 'sandwich', 'pizza', 'cake', 'chocolate', 'candies', 'candy',
+  'fruit', 'fruits', 'vegetable', 'vegetables', 'meat',
+  // Noms A1 - corps
+  'hand', 'hands', 'foot', 'feet', 'head', 'eye', 'eyes', 'mouth', 'hair',
+  'nose', 'ear', 'ears', 'tooth', 'teeth',
+  // Noms A1 - animaux
+  'cat', 'cats', 'dog', 'dogs', 'bird', 'birds', 'fish', 'mouse', 'mice',
+  'horse', 'cow', 'pig', 'animal', 'animals', 'elephant',
+  // Noms A1 - temps
+  'day', 'days', 'week', 'weeks', 'month', 'months', 'year', 'years', 'time',
+  'morning', 'afternoon', 'evening', 'night', 'hour', 'minute',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
+  'september', 'october', 'november', 'december',
+  'saturday', 'spring', 'summer', 'autumn', 'fall', 'winter',
+  // Noms A1 - autres
+  'name', 'names', 'thing', 'things', 'place', 'places',
+  'music', 'film', 'films', 'movie', 'movies', 'photo', 'photos', 'picture',
+  'money', 'job', 'jobs', 'problem', 'idea', 'question', 'answer', 'story',
+  'life', 'world', 'language', 'languages', 'word', 'words',
+  'color', 'colour',
+  'football', 'tennis', 'basketball', 'sport', 'sports',
+  // Verbes A1 (base + 3e pers + -ing + passé réguliers)
+  'go', 'goes', 'going', 'went',
+  'come', 'comes', 'coming', 'came',
+  'see', 'sees', 'seeing', 'saw',
+  'know', 'knows', 'knowing', 'knew',
+  'want', 'wants', 'wanting', 'wanted',
+  'like', 'likes', 'liking', 'liked',
+  'love', 'loves', 'loving', 'loved',
+  'need', 'needs', 'needing', 'needed',
+  'eat', 'eats', 'eating', 'ate',
+  'drink', 'drinks', 'drinking', 'drank',
+  'sleep', 'sleeps', 'sleeping', 'slept',
+  'speak', 'speaks', 'speaking', 'spoke',
+  'say', 'says', 'saying', 'said',
+  'tell', 'tells', 'telling', 'told',
+  'work', 'works', 'working', 'worked',
+  'play', 'plays', 'playing', 'played',
+  'read', 'reads', 'reading',
+  'write', 'writes', 'writing', 'wrote',
+  'study', 'studies', 'studying', 'studied',
+  'watch', 'watches', 'watching', 'watched',
+  'listen', 'listens', 'listening', 'listened',
+  'talk', 'talks', 'talking', 'talked',
+  'help', 'helps', 'helping', 'helped',
+  'give', 'gives', 'giving', 'gave',
+  'take', 'takes', 'taking', 'took',
+  'make', 'makes', 'making', 'made',
+  'run', 'runs', 'running', 'ran',
+  'walk', 'walks', 'walking', 'walked',
+  'swim', 'swims', 'swimming', 'swam',
+  'sing', 'sings', 'singing', 'sang',
+  'dance', 'dances', 'dancing', 'danced',
+  'travel', 'travels', 'traveling', 'travelled', 'traveled',
+  'think', 'thinks', 'thinking', 'thought',
+  'feel', 'feels', 'feeling', 'felt',
+  'look', 'looks', 'looking', 'looked',
+  'find', 'finds', 'finding', 'found',
+  'cook', 'cooks', 'cooking', 'cooked',
+  'live', 'lives', 'living', 'lived',
+  'open', 'opens', 'opening', 'opened',
+  'close', 'closes', 'closing', 'closed',
+  'shout', 'shouts', 'shouting', 'shouted',
+  'worry', 'worries', 'worrying', 'worried',
+  'smoke', 'smokes', 'smoking', 'smoked',
+  'cry', 'cries', 'crying', 'cried',
+  'spell', 'spells', 'spelling', 'spelled', 'spelt',
+  'meet', 'meets', 'meeting', 'met',
+  'put', 'puts', 'putting',
+  'get', 'gets', 'getting', 'got',
+  'sit', 'sits', 'sitting', 'sat',
+  'stand', 'stands', 'standing', 'stood',
+  'win', 'wins', 'winning', 'won',
+  // Nombres
+  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen',
+  'eighteen', 'nineteen', 'twenty', 'thirty', 'forty', 'fifty',
+  'hundred', 'thousand', 'million',
+  'first', 'second', 'third',
+  // Contractions courantes
   "i'm", "you're", "he's", "she's", "it's", "we're", "they're",
   "isn't", "aren't", "wasn't", "weren't",
   "don't", "doesn't", "didn't", "won't", "can't", "couldn't",
+  "i've", "you've", "he's", "she's", "we've", "they've",
+  "i'd", "you'd", "he'd", "she'd", "we'd", "they'd",
+  "i'll", "you'll", "he'll", "she'll", "we'll", "they'll",
+  // Prénoms anglais courants en exemples
+  'tom', "tom's", 'john', "john's", 'anna', "anna's", 'mary', 'paul', 'lucy',
+  // Mots techniques cours (apostrophe s)
+  "mother's", "father's", "sister's", "brother's", "dog's", "cat's", "friend's", "anna's", "john's", "tom's", "ben's",
 ])
 
 export function isEnglishToken(token: string): boolean {
@@ -658,6 +765,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.19 — FIX CRITIQUE Match doublons (keys numériques au lieu de left.text)
- *  + await speakSequence dans MCQ pour ne plus couper "Je ne suis pas français". */
-export const TTS_VERSION = 'v8.19'
+/** v8.20 — Whitelist EN A1 MASSIVE (+250 mots) : noms, verbes, adjectifs, nombres,
+ *  jours, prénoms... Plus de "a book" / "a car" lu en voix française. */
+export const TTS_VERSION = 'v8.20'
