@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { speak, speakSequence, stopSpeaking, TTS_VERSION, recognizeSpeech, isEnglishToken, type SequenceSegment } from '@/components/games/utils'
+import { speak, speakSequence, stopSpeaking, TTS_VERSION, recognizeSpeech, isEnglishToken, shuffle, type SequenceSegment } from '@/components/games/utils'
 
 /**
  * V6 — Composant unifié pour les 13 types d'étapes du nouveau format grammaire.
@@ -54,6 +54,8 @@ interface Props {
   mode?: 'speaking' | 'complete'
   /** v8.9 — Prénom utilisateur pour personnaliser le "Bravo, [prénom]" final */
   userName?: string
+  /** v8.18 — Titre du cours actuel pour personnaliser le bravo final dynamiquement */
+  topicTitle?: string
 }
 
 // ============================================================================
@@ -722,7 +724,7 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
 // 0quinquies. VALIDATION_FINAL — écran 🎉 Bravo + résumé (v7.0)
 // ============================================================================
 
-function StepValidationFinal({ step, onContinue, rate, userName }: { step: StepV6; onContinue: () => void; rate: number; userName?: string }) {
+function StepValidationFinal({ step, onContinue, rate, userName, topicTitle }: { step: StepV6; onContinue: () => void; rate: number; userName?: string; topicTitle?: string }) {
   const c = step.content_json as {
     audio_intro?: string;
     title_fr?: string;
@@ -734,17 +736,21 @@ function StepValidationFinal({ step, onContinue, rate, userName }: { step: StepV
   const firstName = userName?.trim().split(/\s+/)[0] || ''
   const bravoText = firstName ? `Bravo, ${firstName} !` : (c.title_fr || 'Bravo !')
 
+  // v8.18 — Audio final dynamique : "Bravo [prénom], tu as terminé ton cours sur [titre]."
+  // Avant v8.18, le texte hardcodé disait "ta première leçon. Tu sais maintenant dire qui
+  // tu es en anglais." — incorrect sur les 47 autres cours.
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
-    // v8.9 — Si on a un prénom, on l'intègre à l'audio final
-    if (firstName) {
-      segs.push({ text: `Bravo ${firstName}, tu as terminé ta première leçon. Tu sais maintenant dire qui tu es en anglais.`, lang: 'fr-FR' })
+    if (firstName && topicTitle) {
+      segs.push({ text: `Bravo ${firstName}, tu as terminé ton cours sur ${topicTitle}.`, lang: 'fr-FR' })
+    } else if (firstName) {
+      segs.push({ text: `Bravo ${firstName}, tu as terminé ce cours.`, lang: 'fr-FR' })
     } else if (c.audio_intro) {
       segs.push({ text: c.audio_intro, lang: 'fr-FR' })
     }
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firstName])
+  }, [firstName, topicTitle])
   useAutoIntro(segments, rate)
 
   return (
@@ -893,12 +899,13 @@ function StepRecognition({
     options?: { text: string; correct: boolean }[];
     media?: { emoji?: string };
   }
-  const options = c.options || []
+  // v8.18 — Shuffle des options pour ne pas que la bonne réponse soit toujours en 1ère
+  // position. Évite le réflexe machinal du "je clique toujours la première".
+  const options = useMemo(() => shuffle(c.options || []), [c.options])
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
   // v6.1 — Audio auto au mount : intro + question FR + audio EN cible (la bonne phrase)
-  // L'utilisateur entend la phrase EN avant de choisir → entraîne le lien audio↔structure↔sens
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
@@ -1308,7 +1315,8 @@ function StepListenTarget({ step, onContinue, rate }: { step: StepV6; onContinue
     audio_intro?: string; audio_full?: string; question_fr?: string;
     options?: { text: string; correct: boolean }[];
   }
-  const options = c.options || []
+  // v8.18 — Shuffle pour ne pas mettre la bonne réponse toujours en première position
+  const options = useMemo(() => shuffle(c.options || []), [c.options])
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
@@ -1816,7 +1824,7 @@ function StepRecapChallenge({ step, onContinue, rate }: { step: StepV6; onContin
 // COMPOSANT PRINCIPAL — router selon le type
 // ============================================================================
 
-export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mode = 'complete', userName }: Props) {
+export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mode = 'complete', userName, topicTitle }: Props) {
   const rate = mode === 'speaking' ? 0.8 : 0.9
 
   function handleContinue(correct?: boolean) {
@@ -1829,7 +1837,7 @@ export function GrammarStepV6({ step, onContinue, onBack, isLast, canGoBack, mod
       {step.type === 'role_explanation' && <StepRoleExplanation step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'repeat' && <StepRepeat step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'dialog' && <StepDialog step={step} onContinue={() => handleContinue()} rate={rate} />}
-      {step.type === 'validation_final' && <StepValidationFinal step={step} onContinue={() => handleContinue()} rate={rate} userName={userName} />}
+      {step.type === 'validation_final' && <StepValidationFinal step={step} onContinue={() => handleContinue()} rate={rate} userName={userName} topicTitle={topicTitle} />}
       {step.type === 'immersion' && <StepImmersion step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'discover_text' && <StepDiscoverText step={step} onContinue={() => handleContinue()} rate={rate} />}
       {step.type === 'recognition' && <StepRecognition step={step} onContinue={handleContinue} rate={rate} />}

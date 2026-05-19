@@ -210,6 +210,7 @@ export default function GrammarTopicPage() {
             isLast={stepIdx + 1 >= steps.length}
             mode="complete"
             userName={userName ?? undefined}
+            topicTitle={topic?.title_fr}
           />
         </Card>
       )}
