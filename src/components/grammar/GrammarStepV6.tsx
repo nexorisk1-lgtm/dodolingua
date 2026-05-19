@@ -901,7 +901,7 @@ function StepRecognition({
   }
   // v8.18 — Shuffle des options pour ne pas que la bonne réponse soit toujours en 1ère
   // position. Évite le réflexe machinal du "je clique toujours la première".
-  const options = useMemo(() => shuffle(c.options || []), [c.options])
+  const options = useMemo<{ text: string; correct: boolean }[]>(() => shuffle(c.options || []), [c.options])
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
@@ -1316,7 +1316,7 @@ function StepListenTarget({ step, onContinue, rate }: { step: StepV6; onContinue
     options?: { text: string; correct: boolean }[];
   }
   // v8.18 — Shuffle pour ne pas mettre la bonne réponse toujours en première position
-  const options = useMemo(() => shuffle(c.options || []), [c.options])
+  const options = useMemo<{ text: string; correct: boolean }[]>(() => shuffle(c.options || []), [c.options])
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
