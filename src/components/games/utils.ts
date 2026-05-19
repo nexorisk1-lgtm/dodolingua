@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.12 — Rules progressives ralenties (100ms/char) + "Bravo, tu as bien dit !" complet
- *  (await speakSequence) + Match : clic sur right matché = défait. */
-export const TTS_VERSION = 'v8.12'
+/** v8.13 — UX Match : texte contextuel sur les sujets matchés. Quand un verbe est
+ *  en jaune en attente, les sujets matchés disent "(toucher pour relier à X)" + ring jaune. */
+export const TTS_VERSION = 'v8.13'

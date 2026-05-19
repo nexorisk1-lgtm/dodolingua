@@ -1124,15 +1124,27 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
                 // est centralisée dans pickLeft (qui regarde selectedRight et matches).
                 onClick={() => pickLeft(p.left)}
                 disabled={feedback === true}
-                className={`w-full p-3 rounded-xl border-2 font-bold text-lg ${
+                className={`w-full p-3 rounded-xl border-2 font-bold text-lg transition-all ${
                   isCorrect ? 'border-ok bg-green-50 text-ok' :
                   isWrong ? 'border-warn bg-red-50 text-warn' :
+                  // v8.13 — Si selectedRight est actif et que ce left est matché,
+                  // on le rend visuellement plus prominent (ring jaune) pour montrer
+                  // qu'il est actionnable pour REMPLACER son match.
+                  matchedVal && selectedRight ? `${colorClass('blue')} ring-2 ring-amber-300` :
                   matchedVal ? `${colorClass('blue')} opacity-70` :
                   isSelected ? 'border-primary-500 bg-primary-100 text-primary-700' :
                   colorClass('blue')
                 }`}>
                 {p.left}
-                {matchedVal && <span className="text-xs font-normal block mt-1">→ {matchedVal} (toucher pour défaire)</span>}
+                {matchedVal && (
+                  <span className="text-xs font-normal block mt-1">
+                    {/* v8.13 — Texte contextuel : si un right est en attente, on indique
+                        que cliquer ce left va le RELIER au nouveau verbe (remplacement). */}
+                    → {matchedVal} {selectedRight
+                      ? <span className="text-amber-700 font-bold">(toucher pour relier à {selectedRight.val})</span>
+                      : '(toucher pour défaire)'}
+                  </span>
+                )}
               </button>
             )
           })}
