@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { speak, speakSequence, stopSpeaking, TTS_VERSION, recognizeSpeech, isEnglishToken, shuffle, type SequenceSegment } from '@/components/games/utils'
+import { speak, speakSequence, stopSpeaking, TTS_VERSION, recognizeSpeech, isEnglishToken, type SequenceSegment } from '@/components/games/utils'
 
 /**
  * V6 — Composant unifié pour les 13 types d'étapes du nouveau format grammaire.
@@ -899,9 +899,7 @@ function StepRecognition({
     options?: { text: string; correct: boolean }[];
     media?: { emoji?: string };
   }
-  // v8.18 — Shuffle des options pour ne pas que la bonne réponse soit toujours en 1ère
-  // position. Évite le réflexe machinal du "je clique toujours la première".
-  const options = useMemo<{ text: string; correct: boolean }[]>(() => shuffle(c.options || []), [c.options])
+  const options = c.options || []
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
@@ -1315,8 +1313,7 @@ function StepListenTarget({ step, onContinue, rate }: { step: StepV6; onContinue
     audio_intro?: string; audio_full?: string; question_fr?: string;
     options?: { text: string; correct: boolean }[];
   }
-  // v8.18 — Shuffle pour ne pas mettre la bonne réponse toujours en première position
-  const options = useMemo<{ text: string; correct: boolean }[]>(() => shuffle(c.options || []), [c.options])
+  const options = c.options || []
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
