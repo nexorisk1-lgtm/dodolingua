@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { speak, speakSequence, stopSpeaking, TTS_VERSION, recognizeSpeech, type SequenceSegment } from '@/components/games/utils'
+import { speak, speakSequence, stopSpeaking, TTS_VERSION, recognizeSpeech, isEnglishToken, type SequenceSegment } from '@/components/games/utils'
 
 /**
  * V6 — Composant unifié pour les 13 types d'étapes du nouveau format grammaire.
@@ -87,23 +87,15 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-/** v8.16 — Détecte si le texte d'une option MCQ est en FR ou EN pour utiliser la
- *  bonne voix TTS. Heuristique : accents FR OU mots FR courants → FR, sinon EN. */
+/** v8.17 — Détecte la langue d'une option MCQ pour utiliser la bonne voix TTS.
+ *  Approche : on réutilise isEnglishToken (whitelist EN A1 de utils.ts) qui est la
+ *  même heuristique utilisée pour le parsing des mots entre **xxx**. Si TOUS les
+ *  mots de l'option sont dans la whitelist EN, alors EN. Sinon FR par défaut.
+ *  Avant v8.17 : utilisait une liste limitée de mots FR (manquait "pas", "oui",
+ *  "non", etc.) — ces mots étaient lus en voix anglaise. */
 function detectOptionLang(text: string): 'fr-FR' | 'en-GB' {
   if (/[éèêëàâäîïôöùûüçÿœæ]/i.test(text)) return 'fr-FR'
-  const words = text.toLowerCase().replace(/[.,!?;:]/g, '').split(/\s+/)
-  const frHints = new Set([
-    'je', 'tu', 'il', 'elle', 'on', 'nous', 'vous', 'ils', 'elles',
-    'ca', 'ça', 'le', 'la', 'les', 'un', 'une', 'des', 'du', 'de',
-    'et', 'ou', 'mais', 'donc', 'au', 'aux',
-    'pour', 'avec', 'sans', 'dans', 'sur', 'sous', 'par',
-    'pluriel', 'singulier', 'masculin', 'feminin', 'féminin',
-    'garçon', 'garcon', 'fille', 'homme', 'femme', 'objet',
-    'qui', 'que', 'quoi', 'quand',
-    'est', 'sont', 'suis', 'es', 'sommes', 'etes', 'êtes',
-  ])
-  if (words.some(w => frHints.has(w))) return 'fr-FR'
-  return 'en-GB'
+  return isEnglishToken(text) ? 'en-GB' : 'fr-FR'
 }
 
 /** v8.0 — Rend un texte avec markdown **xxx** en gras (au lieu de l'afficher brut).

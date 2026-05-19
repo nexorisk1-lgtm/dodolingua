@@ -209,7 +209,7 @@ const EN_A1_WORDS = new Set([
   "don't", "doesn't", "didn't", "won't", "can't", "couldn't",
 ])
 
-function isEnglishToken(token: string): boolean {
+export function isEnglishToken(token: string): boolean {
   const t = token.toLowerCase().trim().replace(/[.,!?;:]/g, '')
   if (!t) return false
   // Si le token contient des accents FR → FR direct
@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.16 — Voix FR auto sur options MCQ (au lieu de Daniel anglais qui lisait "Je")
- *  + étape transition entre MCQ pronoms et apprentissage du verbe être. 42 étapes. */
-export const TTS_VERSION = 'v8.16'
+/** v8.17 — detectOptionLang utilise isEnglishToken (whitelist EN A1 partagée) au lieu
+ *  d'une liste limitée de mots FR. Plus de mots "Pas", "Oui", "Non" lus en EN. */
+export const TTS_VERSION = 'v8.17'
