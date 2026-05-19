@@ -658,6 +658,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.13 — UX Match : texte contextuel sur les sujets matchés. Quand un verbe est
- *  en jaune en attente, les sujets matchés disent "(toucher pour relier à X)" + ring jaune. */
-export const TTS_VERSION = 'v8.13'
+/** v8.14 — Match correction en 1 clic : si un match récent existe, cliquer un autre
+ *  verbe à droite remplace AUTOMATIQUEMENT le match. Plus besoin de re-cliquer le sujet. */
+export const TTS_VERSION = 'v8.14'

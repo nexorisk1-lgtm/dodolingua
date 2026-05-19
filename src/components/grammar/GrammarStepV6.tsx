@@ -1014,6 +1014,12 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null)
   // v8.6 — Permet de cliquer un right d'abord puis un left ensuite (UX tolérante).
   const [selectedRight, setSelectedRight] = useState<{ idx: number; val: string } | null>(null)
+  // v8.14 — Mémorise le dernier left matché pour permettre la correction en 1 clic.
+  // Quand un right libre est cliqué et qu'un dernier match existe encore, on
+  // REMPLACE automatiquement le match du dernier left au lieu de simplement
+  // sélectionner le right en jaune. Reset quand l'utilisateur prend la main
+  // explicitement (clic sur un autre left, ou undoMatch, ou resetMatches).
+  const [lastMatchedLeft, setLastMatchedLeft] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<boolean | null>(null)
 
   const rightShuffled = useMemo(
@@ -1033,6 +1039,9 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     setMatches(newMatches)
     setSelectedLeft(null)
     setSelectedRight(null)
+    // v8.14 — Mémorise le left qu'on vient de matcher pour permettre une correction
+    // en 1 clic au prochain clic right libre.
+    setLastMatchedLeft(left)
     if (Object.keys(newMatches).length === pairs.length) {
       setTimeout(() => {
         const allOk = pairs.every(p => {
@@ -1048,12 +1057,9 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
   function pickLeft(l: string) {
     if (feedback !== null) return
     speak(l)
+    // v8.14 — Click sur left = prise de contrôle explicite → reset lastMatchedLeft.
+    setLastMatchedLeft(null)
     // v8.11 — Logique enrichie pour permettre le REMPLACEMENT facile d'un match :
-    // - Si un right est en attente (selectedRight) → on matche (même si le left
-    //   est déjà matché à autre chose : on REMPLACE l'ancien match. Cas typique :
-    //   "j'ai matché I am à It's par erreur, je clique I'm puis I am → match changé").
-    // - Sinon, si le left est déjà matché → on défait (comportement classique).
-    // - Sinon → on sélectionne le left.
     if (selectedRight) {
       commitMatch(l, selectedRight.idx)
     } else if (matches[l] !== undefined) {
@@ -1065,9 +1071,7 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
 
   function pickRight(idx: number, val: string) {
     if (feedback !== null) return
-    // v8.12 — Si le right cliqué est déjà matché à un left, on défait le match
-    // (le right redevient libre, le left aussi). Avant v8.12, le clic était
-    // simplement ignoré, ce qui bloquait l'utilisateur sur une mauvaise réponse.
+    // v8.12 — Si le right cliqué est déjà matché à un left, on défait le match.
     if (Object.values(matches).includes(idx)) {
       const leftToUndo = Object.keys(matches).find(k => matches[k] === idx)
       if (leftToUndo) {
@@ -1077,13 +1081,21 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
       return
     }
     speak(val)
-    // v8.6 — Si un left est déjà sélectionné, on fait le match (comportement classique)
+    // v8.6 — Si un left est déjà sélectionné, on fait le match
     if (selectedLeft) {
       commitMatch(selectedLeft, idx)
-    } else {
-      // v8.6 — Sinon, on mémorise le right en attendant qu'un left soit cliqué
-      setSelectedRight({ idx, val })
+      return
     }
+    // v8.14 — Remplacement automatique en 1 clic : si un match récent existe
+    // (lastMatchedLeft) et que ce left est encore matché, on REMPLACE
+    // automatiquement son match par ce nouveau right. Plus besoin de re-cliquer
+    // le sujet — l'apprenant peut juste tester un autre verbe directement.
+    if (lastMatchedLeft && matches[lastMatchedLeft] !== undefined) {
+      commitMatch(lastMatchedLeft, idx)
+      return
+    }
+    // Sinon, on mémorise le right en attendant qu'un left soit cliqué
+    setSelectedRight({ idx, val })
   }
 
   /** v6.0 — Permettre de défaire un match avant validation finale */
@@ -1095,6 +1107,8 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     // v7.1 — Auto-resélectionner le left démantelé pour faciliter la correction
     setSelectedLeft(l)
     setSelectedRight(null)
+    // v8.14 — reset le tracker de dernier match (la prise de contrôle est explicite)
+    setLastMatchedLeft(null)
   }
 
   /** v7.1 — Tout effacer pour recommencer */
@@ -1103,6 +1117,7 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
     setMatches({})
     setSelectedLeft(null)
     setSelectedRight(null)
+    setLastMatchedLeft(null)
     setFeedback(null)
   }
 
@@ -1187,6 +1202,15 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
         <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3 text-center animate-pulse">
           <div className="text-base font-bold text-amber-900">
             👆 Touche un sujet à gauche pour le relier à <span className="text-amber-700">{selectedRight.val}</span>
+          </div>
+        </div>
+      )}
+      {/* v8.14 — Indicateur discret : montre qu'on peut corriger le dernier match
+          en 1 clic sur un autre verbe. */}
+      {feedback === null && !selectedRight && lastMatchedLeft && matches[lastMatchedLeft] !== undefined && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
+          <div className="text-xs text-blue-700">
+            💡 Pour corriger <strong>{lastMatchedLeft}</strong>, touche directement un autre verbe à droite.
           </div>
         </div>
       )}
