@@ -765,6 +765,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.20 — Whitelist EN A1 MASSIVE (+250 mots) : noms, verbes, adjectifs, nombres,
- *  jours, prénoms... Plus de "a book" / "a car" lu en voix française. */
-export const TTS_VERSION = 'v8.20'
+/** v8.21 — Rules apparaissent plus vite (55ms/char au lieu de 100ms) + auto-next après
+ *  bonne réponse sur tap_build. Plus de "raconte sa vie" trop long. */
+export const TTS_VERSION = 'v8.21'

@@ -219,7 +219,7 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     setVisibleCount(0)
     let elapsed = 300 // délai initial avant le 1er speakSequence (voir useAutoIntro)
     // Durée approximative du audio_intro (pause incluse)
-    const introDuration = c.audio_intro ? (c.audio_intro.length * 100) + 1500 : 0
+    const introDuration = c.audio_intro ? (c.audio_intro.length * 55) + 700 : 0
     elapsed += introDuration
     const timers: ReturnType<typeof setTimeout>[] = []
     rules.forEach((r, idx) => {
@@ -228,7 +228,7 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
         setVisibleCount(prev => Math.max(prev, idx + 1))
       }, showAt))
       // Durée estimée du segment rule = nb caractères * 70ms + pause 1000ms
-      elapsed += (r.text_fr.length * 100) + 1000
+      elapsed += (r.text_fr.length * 55) + 500
     })
     return () => timers.forEach(t => clearTimeout(t))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -239,12 +239,12 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     setVisibleCount(0)
     void speakSequence(segments, rate)
     let elapsed = 100
-    const introDuration = c.audio_intro ? (c.audio_intro.length * 100) + 1500 : 0
+    const introDuration = c.audio_intro ? (c.audio_intro.length * 55) + 700 : 0
     elapsed += introDuration
     rules.forEach((r, idx) => {
       const showAt = elapsed
       setTimeout(() => setVisibleCount(prev => Math.max(prev, idx + 1)), showAt)
-      elapsed += (r.text_fr.length * 100) + 1000
+      elapsed += (r.text_fr.length * 55) + 500
     })
   }
 
@@ -1399,6 +1399,8 @@ function StepTapBuild({ step, onContinue, rate }: { step: StepV6; onContinue: (c
     const ok = userText === expectedText
     setFeedback(ok)
     if (ok && c.audio_target) speak(c.audio_target)
+    // v8.21 — Auto-next après bonne réponse (Raïssa : "je veux pas cliquer Continuer à chaque fois")
+    if (ok) setTimeout(() => onContinue(true), 1800)
   }
   function reset() {
     setPicked([])
