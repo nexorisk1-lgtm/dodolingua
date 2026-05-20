@@ -55,17 +55,24 @@ export function getBestVoice(langPrefix = 'en'): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices()
   if (voices.length === 0) return null
 
+  // v8.22 — Filtrer par langue AVANT de matcher par nom. Avant v8.22, une voix
+  // française nommée "Daniel" (rare mais possible) ou un mauvais matching pouvait
+  // faire choisir une voix non-EN. Maintenant, on impose lang.startsWith('en') sur
+  // chaque voix candidate.
   for (const name of PREFERRED_VOICES) {
-    const v = voices.find(v => v.name === name || v.name.includes(name))
+    const v = voices.find(v =>
+      (v.name === name || v.name.includes(name)) &&
+      v.lang.startsWith(langPrefix)
+    )
     if (v) return v
   }
-  // Fallback : voix anglaise marquée "premium" ou "natural"
+  // Fallback : voix de la bonne langue marquée "premium" ou "natural"
   const premium = voices.find(v =>
     v.lang.startsWith(langPrefix) &&
     /natural|premium|neural|enhanced/i.test(v.name)
   )
   if (premium) return premium
-  // Dernier fallback : n'importe quelle voix UK puis US
+  // Dernier fallback : N'IMPORTE QUELLE voix de cette langue
   return voices.find(v => v.lang === 'en-GB') ||
          voices.find(v => v.lang === 'en-US') ||
          voices.find(v => v.lang.startsWith(langPrefix)) ||
@@ -564,7 +571,16 @@ export async function speakSequence(
           resolve()
         }
         const u = new SpeechSynthesisUtterance(cleanText)
-        const voice = seg.lang === 'en-GB' ? getBestVoice('en') : getBestFrVoice()
+        let voice = seg.lang === 'en-GB' ? getBestVoice('en') : getBestFrVoice()
+        // v8.22 — Filet de sécurité ABSOLU : si la voix sélectionnée n'a pas la
+        // bonne langue, on force une recherche directe sur lang. Avant v8.22,
+        // un bug de matching pouvait retourner une voix FR pour seg.lang='en-GB',
+        // ce qui faisait que Thomas prononçait les mots EN avec accent FR.
+        const expectedPrefix = seg.lang === 'en-GB' ? 'en' : 'fr'
+        if (voice && !voice.lang.startsWith(expectedPrefix)) {
+          const allVoices = window.speechSynthesis.getVoices()
+          voice = allVoices.find(v => v.lang.startsWith(expectedPrefix)) || null
+        }
         if (voice) { u.voice = voice; u.lang = voice.lang }
         else u.lang = seg.lang
         u.rate = seg.rate ?? globalRate
@@ -765,6 +781,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.21 — Rules apparaissent plus vite (55ms/char au lieu de 100ms) + auto-next après
- *  bonne réponse sur tap_build. Plus de "raconte sa vie" trop long. */
-export const TTS_VERSION = 'v8.21'
+/** v8.22 — FIX CRITIQUE voix EN : getBestVoice filtre par lang AVANT le nom +
+ *  filet de sécurité absolu dans speakSequence. Plus de Thomas qui dit "an apple". */
+export const TTS_VERSION = 'v8.22'
