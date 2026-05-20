@@ -253,10 +253,18 @@ export default function SessionRunner() {
     )
   }
 
-  const phaseName = phaseLabel(current.phase)
+  // v9.0.3 — Variables typées explicitement pour bypasser un bug de narrowing
+  // TypeScript qui faisait échouer le build Vercel ("Property 'modality' does
+  // not exist on type 'PlanItem'" alors que PlanItem.modality existe bien).
+  // Le cast force TS à voir current comme PlanItem complet.
+  const cur: PlanItem = current
+  const curPhase: string = cur.phase
+  const curModality: string = cur.modality
+  const curType: string = cur.type
+  const phaseName = phaseLabel(cur.phase)
   const showImage = !!concept?.image_url
-  const showIpa = ['ipa', 'discovery', 'listening_cloze', 'phonetic'].includes(current.modality) || current.phase === 'mix'
-  const isAnchor = current.phase === 'anchor' || current.type === 'mix_quiz'
+  const showIpa = (['ipa', 'discovery', 'listening_cloze', 'phonetic'] as string[]).includes(curModality) || curPhase === 'mix'
+  const isAnchor = curPhase === 'anchor' || curType === 'mix_quiz'
 
   return (
     <main className="min-h-screen flex items-center justify-center py-8 px-4">
@@ -278,8 +286,8 @@ export default function SessionRunner() {
           <div className="flex gap-1.5">
             {(['discovery', 'interleaved', 'mix', 'anchor'] as const).map(p => (
               <div key={p} className={`flex-1 h-2 rounded-full ${
-                current.phase === p ? 'bg-primary-500' :
-                ['discovery', 'interleaved', 'mix', 'anchor'].indexOf(p) < ['discovery', 'interleaved', 'mix', 'anchor'].indexOf(current.phase) ? 'bg-ok' : 'bg-rule'
+                curPhase === p ? 'bg-primary-500' :
+                (['discovery', 'interleaved', 'mix', 'anchor'] as string[]).indexOf(p) < (['discovery', 'interleaved', 'mix', 'anchor'] as string[]).indexOf(curPhase) ? 'bg-ok' : 'bg-rule'
               }`} />
             ))}
           </div>
@@ -332,7 +340,7 @@ export default function SessionRunner() {
 
           {/* Modality info */}
           <div className="text-xs text-center text-gray-500 capitalize">
-            Modalité : {current.modality.replace('_', ' ')}
+            Modalité : {curModality.replace('_', ' ')}
           </div>
 
           {/* Action */}
@@ -340,7 +348,7 @@ export default function SessionRunner() {
           <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 select-none">
             <span data-tts-version={TTS_VERSION}>TTS {TTS_VERSION}</span>
             <span>·</span>
-            <span>Vocabulaire — phase {current.phase}</span>
+            <span>Vocabulaire — phase {curPhase}</span>
           </div>
 
           {isAnchor ? (

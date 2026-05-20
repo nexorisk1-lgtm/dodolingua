@@ -792,7 +792,8 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.0.2 — Fix build : cast string sur current.phase ligne 112 de session/page.tsx
- *  pour passer le narrowing TS strict (les comparaisons à 'discovery'/'anchor'
- *  faisaient échouer le build Vercel sur v9.0 et v9.0.1). */
-export const TTS_VERSION = 'v9.0.2'
+/** v9.0.3 — Fix build #2 : v9.0.2 échouait aussi sur "Property 'modality' does
+ *  not exist on type 'PlanItem'" alors que PlanItem.modality existe.
+ *  Refactor : variables locales typées (curPhase, curModality, curType) +
+ *  array casts `as string[]` pour bypasser le narrowing TypeScript strict. */
+export const TTS_VERSION = 'v9.0.3'
