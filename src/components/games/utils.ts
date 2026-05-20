@@ -792,7 +792,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.0 — Refonte vocabulaire (session/page.tsx) avec UX cohérente grammaire :
- *  auto-voice EN→FR via speakSequence, mascotte Dodo, pavé vert final lu à voix
- *  haute. La grammaire conserve les acquis v8.24 (lecture des achievements). */
-export const TTS_VERSION = 'v9.0'
+/** v9.0.1 — Ajout du footer TTS_VERSION en bas de session/page.tsx vocabulaire
+ *  (pour que Raïssa puisse vérifier en un coup d'œil que le bon build est actif). */
+export const TTS_VERSION = 'v9.0.1'

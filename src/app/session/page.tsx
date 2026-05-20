@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/Button'
 import { ConceptImage } from '@/components/ConceptImage'
 import { createClient } from '@/lib/supabase/client'
 import { phaseLabel, type PlanItem } from '@/lib/session-engine'
-import { speakSequence, stopSpeaking, type SequenceSegment } from '@/components/games/utils'
+import { speakSequence, stopSpeaking, TTS_VERSION, type SequenceSegment } from '@/components/games/utils'
 
 interface Concept {
   id: string
@@ -229,6 +229,11 @@ export default function SessionRunner() {
             )}
 
             <Button block onClick={() => router.push('/dashboard')}>Retour au dashboard</Button>
+            <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 select-none pt-1">
+              <span data-tts-version={TTS_VERSION}>TTS {TTS_VERSION}</span>
+              <span>·</span>
+              <span>Vocabulaire</span>
+            </div>
           </Card>
         </Container>
       </main>
@@ -328,6 +333,13 @@ export default function SessionRunner() {
           </div>
 
           {/* Action */}
+          {/* v9.0 — Footer version (cohérence grammaire pour debug) */}
+          <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 select-none">
+            <span data-tts-version={TTS_VERSION}>TTS {TTS_VERSION}</span>
+            <span>·</span>
+            <span>Vocabulaire — phase {current.phase}</span>
+          </div>
+
           {isAnchor ? (
             <div className="space-y-2">
               {!revealed ? (
