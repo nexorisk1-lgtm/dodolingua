@@ -736,17 +736,24 @@ function StepValidationFinal({ step, onContinue, rate, userName, topicTitle }: {
   const firstName = userName?.trim().split(/\s+/)[0] || ''
   const bravoText = firstName ? `Bravo, ${firstName} !` : (c.title_fr || 'Bravo !')
 
-  // v8.18 — Audio final dynamique : "Bravo [prénom], tu as terminé ton cours sur [titre]."
-  // Avant v8.18, le texte hardcodé disait "ta première leçon. Tu sais maintenant dire qui
-  // tu es en anglais." — incorrect sur les 47 autres cours.
+  // v8.24 — Audio final enrichi : Bravo + titre du cours + lecture des achievements
+  // (le pavé vert "Tu sais maintenant..."). Avant v8.24, seul le "Bravo" était parlé,
+  // les achievements restaient visuels uniquement → invisible pour les illettrés.
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (firstName && topicTitle) {
-      segs.push({ text: `Bravo ${firstName}, tu as terminé ton cours sur ${topicTitle}.`, lang: 'fr-FR' })
+      segs.push({ text: `Bravo ${firstName}, tu as terminé ton cours sur ${topicTitle}.`, lang: 'fr-FR', pauseAfter: 1200 })
     } else if (firstName) {
-      segs.push({ text: `Bravo ${firstName}, tu as terminé ce cours.`, lang: 'fr-FR' })
+      segs.push({ text: `Bravo ${firstName}, tu as terminé ce cours.`, lang: 'fr-FR', pauseAfter: 1200 })
     } else if (c.audio_intro) {
-      segs.push({ text: c.audio_intro, lang: 'fr-FR' })
+      segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
+    }
+    // v8.24 — Lecture vocale des achievements (= "Tu sais maintenant..." du pavé vert)
+    if (items.length > 0) {
+      segs.push({ text: 'Tu sais maintenant :', lang: 'fr-FR', pauseAfter: 800 })
+      items.forEach((achievement) => {
+        segs.push({ text: achievement, lang: 'fr-FR', pauseAfter: 600 })
+      })
     }
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -792,6 +792,7 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.23 — Triple filet de sécurité sélection voix (filtre lang, fallback by lang,
- *  fallback Daniel/Karen explicite) + logs console.warn pour debug runtime. */
-export const TTS_VERSION = 'v8.23'
+/** v9.0 — Refonte vocabulaire (session/page.tsx) avec UX cohérente grammaire :
+ *  auto-voice EN→FR via speakSequence, mascotte Dodo, pavé vert final lu à voix
+ *  haute. La grammaire conserve les acquis v8.24 (lecture des achievements). */
+export const TTS_VERSION = 'v9.0'
