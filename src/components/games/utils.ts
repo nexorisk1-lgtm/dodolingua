@@ -792,8 +792,8 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.0.3 — Fix build #2 : v9.0.2 échouait aussi sur "Property 'modality' does
- *  not exist on type 'PlanItem'" alors que PlanItem.modality existe.
- *  Refactor : variables locales typées (curPhase, curModality, curType) +
- *  array casts `as string[]` pour bypasser le narrowing TypeScript strict. */
-export const TTS_VERSION = 'v9.0.3'
+/** v9.0.4 — Refonte vocab basée sur la VRAIE structure GitHub (phases discovery
+ *  /pronunciation/flashcard/qcm/cloze/correction_review, sans modality/type).
+ *  Auto-voice EN→FR en DiscoveryPhase, mascotte Mascot conservée, pavé final lu,
+ *  footer TTS_VERSION partout. */
+export const TTS_VERSION = 'v9.0.4'
