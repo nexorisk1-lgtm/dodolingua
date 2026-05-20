@@ -572,14 +572,25 @@ export async function speakSequence(
         }
         const u = new SpeechSynthesisUtterance(cleanText)
         let voice = seg.lang === 'en-GB' ? getBestVoice('en') : getBestFrVoice()
-        // v8.22 — Filet de sécurité ABSOLU : si la voix sélectionnée n'a pas la
-        // bonne langue, on force une recherche directe sur lang. Avant v8.22,
-        // un bug de matching pouvait retourner une voix FR pour seg.lang='en-GB',
-        // ce qui faisait que Thomas prononçait les mots EN avec accent FR.
         const expectedPrefix = seg.lang === 'en-GB' ? 'en' : 'fr'
-        if (voice && !voice.lang.startsWith(expectedPrefix)) {
+        // v8.23 — TRIPLE filet de sécurité pour garantir voix EN/FR :
+        // 1. Si voice manquante ou mauvaise lang → chercher par lang dans toutes les voix
+        if (!voice || !voice.lang.startsWith(expectedPrefix)) {
           const allVoices = window.speechSynthesis.getVoices()
           voice = allVoices.find(v => v.lang.startsWith(expectedPrefix)) || null
+        }
+        // 2. Si TOUJOURS pas de voix EN, forcer Daniel par nom explicite
+        if (seg.lang === 'en-GB' && (!voice || !voice.lang.startsWith('en'))) {
+          const allVoices = window.speechSynthesis.getVoices()
+          voice = allVoices.find(v => /Daniel|Karen|Samantha|Aaron|Google.*English/i.test(v.name)) || null
+        }
+        // 3. Log debug pour identifier les cas pathologiques
+        if (typeof console !== 'undefined') {
+          const expected = seg.lang === 'en-GB' ? 'EN' : 'FR'
+          const got = voice?.lang.startsWith('en') ? 'EN' : voice?.lang.startsWith('fr') ? 'FR' : '?'
+          if (expected !== got) {
+            console.warn(`[TTS] Voix MISMATCH pour "${cleanText}" — attendu ${expected}, obtenu ${got} (voice=${voice?.name || 'null'})`)
+          }
         }
         if (voice) { u.voice = voice; u.lang = voice.lang }
         else u.lang = seg.lang
@@ -781,6 +792,6 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v8.22 — FIX CRITIQUE voix EN : getBestVoice filtre par lang AVANT le nom +
- *  filet de sécurité absolu dans speakSequence. Plus de Thomas qui dit "an apple". */
-export const TTS_VERSION = 'v8.22'
+/** v8.23 — Triple filet de sécurité sélection voix (filtre lang, fallback by lang,
+ *  fallback Daniel/Karen explicite) + logs console.warn pour debug runtime. */
+export const TTS_VERSION = 'v8.23'
