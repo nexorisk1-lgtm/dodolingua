@@ -792,6 +792,7 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.0.1 — Ajout du footer TTS_VERSION en bas de session/page.tsx vocabulaire
- *  (pour que Raïssa puisse vérifier en un coup d'œil que le bon build est actif). */
-export const TTS_VERSION = 'v9.0.1'
+/** v9.0.2 — Fix build : cast string sur current.phase ligne 112 de session/page.tsx
+ *  pour passer le narrowing TS strict (les comparaisons à 'discovery'/'anchor'
+ *  faisaient échouer le build Vercel sur v9.0 et v9.0.1). */
+export const TTS_VERSION = 'v9.0.2'

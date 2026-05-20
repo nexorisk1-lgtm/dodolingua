@@ -109,7 +109,10 @@ export default function SessionRunner() {
       segs.push({ text: `veut dire ${concept.gloss_fr}`, lang: 'fr-FR', pauseAfter: 800 })
     }
     // 3. Exemple EN puis FR (seulement en phase discovery / anchor — pas en mode rapide)
-    if (current.phase === 'discovery' || current.phase === 'anchor') {
+    // v9.0.2 — Cast string pour éviter une erreur TS strict sur la comparaison
+    // (Vercel build fail v9.0/v9.0.1 sur cette ligne — narrowing TypeScript trop strict).
+    const phaseStr: string = current.phase
+    if (phaseStr === 'discovery' || phaseStr === 'anchor') {
       if (tr.example) {
         segs.push({ text: 'Par exemple…', lang: 'fr-FR', pauseAfter: 400 })
         segs.push({ text: tr.example, lang: 'en-GB', pauseAfter: 600 })
