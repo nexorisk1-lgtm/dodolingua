@@ -792,8 +792,10 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.0.4 — Refonte vocab basée sur la VRAIE structure GitHub (phases discovery
- *  /pronunciation/flashcard/qcm/cloze/correction_review, sans modality/type).
- *  Auto-voice EN→FR en DiscoveryPhase, mascotte Mascot conservée, pavé final lu,
- *  footer TTS_VERSION partout. */
-export const TTS_VERSION = 'v9.0.4'
+/** v9.1 — NOUVEAU MODULE VOCABULAIRE A1 STRUCTURÉ. Architecture 22 blocs / 121
+ *  leçons / 7 phases par leçon (Découverte → Immersion → Reconnaissance →
+ *  Prononciation → Utilisation → Automatisation → Maîtrise), cohérent avec la
+ *  grammaire. PoC initial : Bloc 1 "Premiers contacts" + Leçon 1 "Dire bonjour".
+ *  Nouvelles routes /vocab et /vocab/[lessonId]. Module /session (FSRS) conservé
+ *  pour révision. */
+export const TTS_VERSION = 'v9.1'
