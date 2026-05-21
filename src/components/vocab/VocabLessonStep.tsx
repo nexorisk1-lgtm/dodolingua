@@ -71,7 +71,7 @@ export function VocabLessonStep({ step, onContinue, onBack, canGoBack, isLast, u
 
   switch (step.type) {
     case 'phase_intro':
-      return <StepPhaseIntro c={c} onContinue={() => onContinue()} />
+      return <StepPhaseIntro c={c} onContinue={() => onContinue()} userName={userName} lessonTitle={lessonTitle} />
     case 'discovery_word':
       return <StepDiscoveryWord c={c} onContinue={() => onContinue()} onBack={onBack} canGoBack={canGoBack} />
     case 'immersion_scene':
@@ -99,17 +99,32 @@ export function VocabLessonStep({ step, onContinue, onBack, canGoBack, isLast, u
 
 /* ============================================================================
    STEP 0 — PHASE INTRO (transition vocale entre phases)
+   v9.3 — Minimaliste à l'écran (emoji + titre court). Le contenu détaillé est
+   uniquement en voix off. Personnalisation prénom sur Phase 0 (intro lesson).
    ============================================================================ */
-function StepPhaseIntro({ c, onContinue }: {
-  c: { phase_emoji: string; phase_title_fr: string; audio_intro_fr: string }
+function StepPhaseIntro({ c, onContinue, userName, lessonTitle }: {
+  c: { phase_emoji: string; phase_title_fr: string; audio_intro_fr: string; is_lesson_intro?: boolean }
   onContinue: () => void
+  userName?: string
+  lessonTitle?: string
 }) {
-  useAutoNextAfterSpeech([{ text: c.audio_intro_fr, lang: 'fr-FR' }], onContinue, 1000)
+  const firstName = userName?.split(' ')[0]
+  // v9.3 — Personnalise la 1re intro de leçon (phase=0) avec le prénom
+  const personalizedAudio = useMemo(() => {
+    if (c.is_lesson_intro && firstName) {
+      return `Bienvenue ${firstName} ! ${c.audio_intro_fr}`
+    }
+    return c.audio_intro_fr
+  }, [c.audio_intro_fr, c.is_lesson_intro, firstName])
+
+  useAutoNextAfterSpeech([{ text: personalizedAudio, lang: 'fr-FR' }], onContinue, 1200)
+
   return (
-    <div className="space-y-4 text-center py-8">
-      <div className="text-7xl">{c.phase_emoji}</div>
-      <div className="text-xs uppercase font-bold text-primary-500 tracking-wider">{c.phase_title_fr}</div>
-      <div className="text-base text-gray-700 max-w-xs mx-auto">{c.audio_intro_fr}</div>
+    <div className="space-y-3 text-center py-12">
+      <div className="text-8xl">{c.phase_emoji}</div>
+      <div className="text-lg font-bold text-primary-900">
+        {c.is_lesson_intro && firstName ? `Bienvenue ${firstName} !` : c.phase_title_fr}
+      </div>
     </div>
   )
 }
@@ -469,7 +484,10 @@ function StepSituationQcm({ c, onContinue, onBack, canGoBack }: {
 }
 
 /* ============================================================================
-   PHASE 5 — MINI DIALOG (2 voix EN différentes + dernière réplique micro user)
+   PHASE 5 — MINI DIALOG (style coach interactif)
+   v9.3 — Le coach pose une question contextuelle ("Tu rencontres un ami qui te
+   dit Hello. Que lui réponds-tu ?"). L'utilisateur répond au micro. Pas de
+   liste de répliques affichée comme un script.
    ============================================================================ */
 function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
   c: { context_emoji: string; context_fr: string; turns: { speaker: string; text_en: string; text_fr: string; is_user?: boolean }[] }
@@ -478,57 +496,55 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
   const [recording, setRecording] = useState(false)
   const [userSaid, setUserSaid] = useState<string | null>(null)
   const [userScore, setUserScore] = useState<number | null>(null)
-  const lastUserTurnIdx = useMemo(() => {
-    for (let i = c.turns.length - 1; i >= 0; i--) if (c.turns[i].is_user) return i
-    return -1
-  }, [c.turns])
+  const [showExpected, setShowExpected] = useState(false)
+
+  // v9.3 — Trouve la 1ère réplique non-user (= ce que l'ami dit) et la 1ère réplique user
+  const friendTurn = useMemo(() => c.turns.find(t => !t.is_user), [c.turns])
+  const userTurn = useMemo(() => c.turns.find(t => t.is_user), [c.turns])
+  const friendQuestion = useMemo(() => {
+    if (!friendTurn) return ''
+    // Construit la question coach style : "Tu rencontres un ami à l'école. Il te dit Hello. Que lui réponds-tu ?"
+    return `${c.context_fr} Il te dit ${friendTurn.text_en}. Que lui réponds-tu ?`
+  }, [c.context_fr, friendTurn])
 
   useEffect(() => {
-    setUserSaid(null); setUserScore(null)
-    const segs: SequenceSegment[] = [
-      { text: c.context_fr, lang: 'fr-FR', pauseAfter: 800 },
-      { text: 'Écoute le dialogue.', lang: 'fr-FR', pauseAfter: 500 },
-    ]
-    // v9.2 — 2 voix EN différentes pour rendre le dialogue audible.
-    // On utilise rate différent (0.95 vs 0.85) pour distinguer les locuteurs.
-    c.turns.forEach((t, i) => {
-      if (t.is_user) {
-        segs.push({ text: 'À toi de répondre.', lang: 'fr-FR', pauseAfter: 500 })
-        // Pour la réplique user, on lit la réponse attendue pour donner l'exemple
-        if (t.text_en && t.text_en !== '___') {
-          segs.push({ text: t.text_en, lang: 'en-GB', pauseAfter: 500, rate: 0.85 })
-        }
-      } else {
-        const rate = i % 2 === 0 ? 0.95 : 0.85
-        segs.push({ text: t.text_en, lang: 'en-GB', pauseAfter: 600, rate })
-      }
-    })
+    setUserSaid(null); setUserScore(null); setShowExpected(false)
+    const segs: SequenceSegment[] = []
+    // Coach pose la question (voix FR avec mot EN intercalé via **xxx**)
+    segs.push({ text: c.context_fr, lang: 'fr-FR', pauseAfter: 600 })
+    if (friendTurn) {
+      segs.push({ text: 'Ton ami te dit :', lang: 'fr-FR', pauseAfter: 300 })
+      segs.push({ text: friendTurn.text_en, lang: 'en-GB', pauseAfter: 700 })
+      segs.push({ text: 'Que lui réponds-tu ?', lang: 'fr-FR', pauseAfter: 500 })
+    }
     const t = setTimeout(() => speakSequence(segs, 0.9), 400)
     return () => { clearTimeout(t); stopSpeaking() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(c.turns)])
+  }, [c.context_fr, friendTurn?.text_en])
 
   async function recordUser() {
-    if (recording || lastUserTurnIdx < 0) return
+    if (recording || !userTurn) return
     setRecording(true)
-    const expectedTurn = c.turns[lastUserTurnIdx]
     try {
-      const res = await recognizeSpeech(expectedTurn.text_en || '', 'en-US')
+      const res = await recognizeSpeech(userTurn.text_en || '', 'en-US')
       const t = (res?.transcript || '').trim()
       const sc = Math.round((res?.similarity || 0) * 100)
       setUserSaid(t || '(rien entendu)')
       setUserScore(sc)
       if (sc >= 60) {
         speakSequence([
-          { text: 'Très bien !', lang: 'fr-FR', pauseAfter: 400 },
+          { text: 'Bravo !', lang: 'fr-FR', pauseAfter: 400 },
+          { text: userTurn.text_en, lang: 'en-GB' },
         ], 0.95)
-        setTimeout(() => onContinue(), 1500)
+        setTimeout(() => onContinue(), 2000)
       } else {
+        // v9.3 — Feedback explicite : montre + dit la réponse attendue
+        setShowExpected(true)
         speakSequence([
           { text: 'On dit :', lang: 'fr-FR', pauseAfter: 300 },
-          { text: expectedTurn.text_en, lang: 'en-GB' },
+          { text: userTurn.text_en, lang: 'en-GB' },
         ], 0.9)
-        setTimeout(() => onContinue(), 2200)
+        setTimeout(() => onContinue(), 2500)
       }
     } catch {
       setUserSaid('(micro indisponible)')
@@ -539,34 +555,39 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
 
   return (
     <div className="space-y-4">
-      <div className="text-center text-[10px] uppercase font-bold text-gray-500">Mini dialogue</div>
-      <div className="text-center text-5xl py-2">{c.context_emoji}</div>
-      <div className="text-center text-sm text-gray-700 italic">{c.context_fr}</div>
+      <div className="text-center text-[10px] uppercase font-bold text-gray-500">Mise en situation</div>
+      <div className="text-center text-7xl py-2">{c.context_emoji}</div>
+      <div className="text-center text-base text-gray-800 font-semibold">{c.context_fr}</div>
 
-      <div className="space-y-3 pt-2">
-        {c.turns.map((t, i) => (
-          <div key={i} className={`p-3 rounded-xl ${t.is_user ? 'bg-emerald-50 ml-8 border-2 border-emerald-300' : 'bg-blue-50 mr-8'}`}>
-            <div className="text-xs font-bold text-gray-600 mb-1">{t.speaker} {t.is_user && '(toi 🎤)'}</div>
-            <div className="text-base font-semibold text-primary-900">{titleCase(t.text_en)}</div>
-            {t.text_fr && <div className="text-xs italic text-gray-600">{titleCase(t.text_fr)}</div>}
-          </div>
-        ))}
-      </div>
+      {friendTurn && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-3">
+          <div className="text-xs font-bold text-blue-700 mb-1">{friendTurn.speaker} :</div>
+          <div className="text-lg font-extrabold text-blue-900">{titleCase(friendTurn.text_en)}</div>
+        </div>
+      )}
 
-      {lastUserTurnIdx >= 0 && !userSaid && (
+      <div className="text-center text-sm text-gray-700 font-semibold">Que lui réponds-tu ?</div>
+
+      {!userSaid && userTurn && (
         <div className="text-center space-y-2 pt-2">
           <div className="text-xs text-gray-600 italic">Clique sur 🎤 et réponds à voix haute</div>
-          <button onClick={recordUser} disabled={recording} className={`w-16 h-16 rounded-full text-2xl mx-auto flex items-center justify-center font-bold ${recording ? 'bg-warn text-white animate-pulse' : 'bg-primary-700 text-white'}`}>🎤</button>
+          <button onClick={recordUser} disabled={recording} className={`w-20 h-20 rounded-full text-3xl mx-auto flex items-center justify-center font-bold shadow-lg ${recording ? 'bg-warn text-white animate-pulse' : 'bg-primary-700 text-white hover:scale-105'}`}>🎤</button>
         </div>
       )}
 
       {userSaid && (
-        <div className="bg-gray-50 rounded-xl p-3 text-center">
-          <div className="text-[10px] uppercase font-bold text-gray-500 mb-1">Tu as dit</div>
-          <div className="text-base">{userSaid}</div>
+        <div className={`rounded-xl p-3 text-center ${userScore && userScore >= 60 ? 'bg-emerald-50 border-2 border-emerald-300' : 'bg-amber-50 border-2 border-amber-300'}`}>
+          <div className="text-[10px] uppercase font-bold text-gray-600 mb-1">Tu as dit</div>
+          <div className="text-base font-bold">{userSaid}</div>
           {userScore !== null && (
             <div className="text-xs mt-1">
               Score : <b className={userScore >= 60 ? 'text-emerald-700' : 'text-amber-700'}>{userScore}%</b>
+              {userScore >= 60 ? ' — Bravo !' : ' — pas tout à fait'}
+            </div>
+          )}
+          {showExpected && userTurn && (
+            <div className="mt-2 pt-2 border-t border-amber-200 text-sm">
+              On dit : <b className="text-emerald-700">{titleCase(userTurn.text_en)}</b>
             </div>
           )}
         </div>
@@ -574,10 +595,7 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
 
       <div className="flex gap-2 pt-2">
         {canGoBack && <Button variant="ghost" onClick={onBack}>← Précédent</Button>}
-        {lastUserTurnIdx < 0 && <Button block onClick={onContinue}>Continuer →</Button>}
-        {lastUserTurnIdx >= 0 && userSaid && userScore !== null && userScore < 60 && (
-          <Button block onClick={onContinue}>Passer →</Button>
-        )}
+        {!userTurn && <Button block onClick={onContinue}>Continuer →</Button>}
       </div>
     </div>
   )
@@ -621,11 +639,13 @@ function StepQcmAudio({ c, onContinue, onBack, canGoBack }: {
       speakSequence([{ text: 'Très bien !', lang: 'fr-FR' }], 0.95)
       setTimeout(() => onContinue(true), 1200)
     } else {
+      // v9.3 — Feedback explicite : redire le mot EN + sa traduction
       speakSequence([
-        { text: 'Non, la bonne réponse était :', lang: 'fr-FR', pauseAfter: 400 },
-        { text: c.correct, lang: 'fr-FR' },
+        { text: 'Non, ', lang: 'fr-FR', pauseAfter: 200 },
+        { text: c.audio_en, lang: 'en-GB', pauseAfter: 300 },
+        { text: `veut dire ${c.correct}`, lang: 'fr-FR' },
       ], 0.9)
-      setTimeout(() => onContinue(false), 2200)
+      setTimeout(() => onContinue(false), 2800)
     }
   }
 
@@ -692,6 +712,9 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
   function clickLeft(i: number) {
     if (done || matches[i] !== undefined) return
     setLeftPicked(i); setLastErrorMsg(null)
+    // v9.3 — Au clic sur l'emoji left, lit son expression EN correspondante
+    // (aide l'utilisateur à comprendre ce que l'emoji représente)
+    speakSequence([{ text: c.pairs[i].right, lang: 'en-GB' }], 0.9)
   }
 
   function clickRight(displayIdx: number) {
@@ -699,14 +722,20 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
     const rightOriginalIdx = rights[displayIdx].originalIdx
     const isCorrect = rightOriginalIdx === leftPicked
     setMatches(prev => ({ ...prev, [leftPicked]: rightOriginalIdx }))
-    // v9.2 — Feedback vocal selon résultat
     if (isCorrect) {
-      speakSequence([{ text: c.pairs[rightOriginalIdx].right, lang: 'en-GB' }], 0.9)
+      speakSequence([
+        { text: 'Bien !', lang: 'fr-FR', pauseAfter: 300 },
+        { text: c.pairs[rightOriginalIdx].right, lang: 'en-GB' },
+      ], 0.95)
     } else {
       const expectedRight = c.pairs[leftPicked].right
+      const wrongRight = c.pairs[rightOriginalIdx].right
       setLastErrorMsg(`La bonne paire était : ${expectedRight}`)
+      // v9.3 — Feedback explicite : dire ce qui aurait été bon
       speakSequence([
-        { text: 'Non, ça ne va pas ensemble.', lang: 'fr-FR', pauseAfter: 400 },
+        { text: 'Non. ', lang: 'fr-FR', pauseAfter: 200 },
+        { text: wrongRight, lang: 'en-GB', pauseAfter: 300 },
+        { text: 'ne va pas ici. Ça aurait été :', lang: 'fr-FR', pauseAfter: 300 },
         { text: expectedRight, lang: 'en-GB' },
       ], 0.9)
     }
@@ -785,11 +814,11 @@ function StepGapFill({ c, onContinue, onBack, canGoBack }: {
     return a
   }, [c.options])
 
-  // v9.2 — Nettoyage TTS pour ne pas dire "comma" sur la virgule.
-  // On retire toute la ponctuation isolée + on remplace les blanks par une pause.
+  // v9.3 — Nettoyage TTS : retire les traits bas COMPLÈTEMENT (TTS lisait
+  // "horizontal line" / "underscore"). Aussi retire la virgule (lue "comma").
   function cleanForTTS(text: string): string {
     return text
-      .replace(/_+/g, '… ')       // ___ → pause
+      .replace(/_+/g, ' ')          // ___ → espace (silence)
       .replace(/,/g, ' ')           // virgule → pause silencieuse
       .replace(/\s+/g, ' ')         // collapse spaces
       .trim()

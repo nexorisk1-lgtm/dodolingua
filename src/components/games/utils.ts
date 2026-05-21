@@ -792,10 +792,12 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.2 — Refonte UX vocab après retours user v9.1 : auto-next partout, suppression
- *  définition affichée (audio only), capitalisation Title Case, intros vocales
- *  entre phases (phase_intro), encouragement après prononciation, feedback
- *  vocal sur erreurs (gap_fill / association), mini dialog interactif avec
- *  micro user, Phase 7 finale lit les mots EN en voix anglaise (via **xxx**
- *  détectés par parseMixedText), nettoyage virgule TTS sur gap_fill. */
-export const TTS_VERSION = 'v9.2'
+/** v9.3 — Affinages UX après retours v9.2 :
+ *  - StepPhaseIntro minimaliste à l'écran (emoji + titre court, audio en off)
+ *  - Personnalisation prénom Phase 0 ("Bienvenue Raïssa !")
+ *  - StepMiniDialog refondu style coach (question + micro user + feedback)
+ *  - StepQcmAudio faux : dit "Non, [mot EN] veut dire [traduction]"
+ *  - StepAssociation : audio au clic gauche + feedback erreur détaillé
+ *  - StepGapFill : retire complètement `_+` du TTS (plus de "underscore")
+ *  - audio_intro_fr reformulés pour être engageants (style coach) */
+export const TTS_VERSION = 'v9.3'
