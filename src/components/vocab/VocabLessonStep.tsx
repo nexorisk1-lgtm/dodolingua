@@ -207,7 +207,8 @@ function StepImmersionScene({ c, onContinue, onBack, canGoBack }: {
       <div className="text-[10px] uppercase font-bold text-gray-500">Mini scène</div>
       <div className="text-7xl py-4">{c.context_emoji}</div>
       <div className="text-base text-gray-800 font-semibold">{c.context_fr}</div>
-      <div className="text-sm text-primary-700 font-bold">{questionFr}</div>
+      {/* v9.8 — Question retirée de l'affichage : la voix off la dit, c'est suffisant
+          (allège l'écran, surtout pour mobile) */}
 
       {revealed && (
         <div className="bg-emerald-50 rounded-xl p-3 animate-pulse-once">
@@ -884,7 +885,9 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
     if (Object.keys(matches).length === c.pairs.length && !done) {
       setDone(true)
       const allCorrect = Object.entries(matches).every(([leftIdx, rightOrig]) => parseInt(leftIdx) === rightOrig)
-      setTimeout(() => onContinue(allCorrect), 1800)
+      // v9.8 — Timeout augmenté (3500ms) pour laisser le temps à la voix de finir
+      // de dire "Bien ! Entre amis se dit Hi" sans être coupée
+      setTimeout(() => onContinue(allCorrect), 3500)
     }
   }, [matches, c.pairs.length, done, onContinue])
 
@@ -986,15 +989,16 @@ function StepGapFill({ c, onContinue, onBack, canGoBack }: {
         { text: 'Très bien !', lang: 'fr-FR', pauseAfter: 400 },
         { text: completed, lang: 'en-GB' },
       ], 0.95)
-      setTimeout(() => onContinue(true), 1800)
+      // v9.8 — Timeout augmenté (3500ms) pour laisser finir la phrase complète
+      setTimeout(() => onContinue(true), 3500)
     } else {
-      // v9.2 — Feedback vocal pour mauvaise réponse
       speakSequence([
         { text: 'Non, la bonne réponse était :', lang: 'fr-FR', pauseAfter: 400 },
         { text: c.correct, lang: 'en-GB' },
         { text: completed, lang: 'en-GB' },
       ], 0.9)
-      setTimeout(() => onContinue(false), 2800)
+      // v9.8 — Timeout augmenté (4500ms) pour laisser finir la phrase complète
+      setTimeout(() => onContinue(false), 4500)
     }
   }
 

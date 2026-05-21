@@ -792,14 +792,11 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.7 — 5 fixes critiques après retours v9.6 :
- *  - BDD immersion : questions reformulées ("Que dit l'enfant ?", "Que se
- *    disent ces voisins ?") pour clarté phonétique TTS
- *  - Association : keep leftPicked actif sur erreur (user clique direct un
- *    autre right pour corriger, plus de bug bloquant)
- *  - Mini dialog : matching tolérant Levenshtein ("helo" ≈ "hello", "good
- *    morning" ≈ "good mornin", etc.)
- *  - Prononciation : plus d'auto-skip → bouton Continuer visible pour
- *    permettre la réécoute de la voix user
- *  - Page parent : bouton "⏸️ Pause" plus visible (style bouton, pas underline) */
-export const TTS_VERSION = 'v9.7'
+/** v9.8 — 3 ajustements légers timing+UI :
+ *  - Immersion : question ("Que dit cette personne ?") retirée de l'affichage,
+ *    la voix off la dit (allège l'écran mobile)
+ *  - Association : timeout final 1800→3500ms pour ne plus tronquer
+ *    "Bien ! Entre amis se dit Hi"
+ *  - Gap fill : timeout 1800→3500ms (correct) et 2800→4500ms (faux) pour
+ *    laisser la phrase complète se terminer */
+export const TTS_VERSION = 'v9.8'
