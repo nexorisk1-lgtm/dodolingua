@@ -184,13 +184,13 @@ function StepImmersionScene({ c, onContinue, onBack, canGoBack }: {
 }) {
   const [revealed, setRevealed] = useState(false)
   // v9.4 — question_fr ("Que dit-il ?") + v9.5 — speaker_intro ("Il dit :") avant audio EN
-  // pour bien marquer le passage à la parole anglaise.
+  // v9.6 — Fusion context_fr + questionFr + speakerIntro en UN SEUL segment FR pour
+  // que la voix française enchaîne avec les liaisons naturelles
+  // ("Un enfant arrive à l'école. Que dit-il ? Il dit :")
   const questionFr = c.question_fr || 'Que dit-il ?'
   const speakerIntro = c.speaker_intro || 'Il dit :'
   const segs: SequenceSegment[] = useMemo(() => ([
-    { text: c.context_fr, lang: 'fr-FR' as const, pauseAfter: 400 },
-    { text: questionFr, lang: 'fr-FR' as const, pauseAfter: 700 },
-    { text: speakerIntro, lang: 'fr-FR' as const, pauseAfter: 400 },
+    { text: `${c.context_fr} ${questionFr} ${speakerIntro}`, lang: 'fr-FR' as const, pauseAfter: 500 },
     { text: c.audio_en, lang: 'en-GB' as const, pauseAfter: 500 },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ]), [c.audio_en, questionFr, speakerIntro])
@@ -611,16 +611,17 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
         ], 0.95)
         setTimeout(() => onContinue(), 2200)
       } else if (matchedAlt && c.feedback_alternatives) {
-        // Cas 2 — Alternative valide style coach chaleureux
+        // Cas 2 — Alternative valide → coach pédagogique chaleureux. Passe en succès.
         setShowExpected(true)
         setFeedbackMsg(c.feedback_alternatives)
         speakSequence([
           { text: c.feedback_alternatives, lang: 'fr-FR', pauseAfter: 500 },
         ], 0.95)
-        // v9.5 — Délai plus long pour bien entendre + skip auto
-        setTimeout(() => onContinue(), 5000)
+        // v9.6 — Délai plus long (6s) pour bien entendre l'explication pédagogique
+        setTimeout(() => onContinue(), 6000)
       } else if (matchedWrong) {
-        // Cas 3 — Réponse hors-sujet identifiée → feedback contextuel + retry
+        // v9.6 — Cas 3 — Réponse hors-sujet identifiée. Le coach explique
+        // pédagogiquement la nuance, NE punit PAS, et permet de réessayer.
         setFeedbackMsg(matchedWrong.feedback)
         setCanRetry(true)
         speakSequence([
@@ -824,9 +825,9 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
     if (done || leftPicked === null) return
     const rightOriginalIdx = rights[displayIdx].originalIdx
     const isCorrect = rightOriginalIdx === leftPicked
-    setMatches(prev => ({ ...prev, [leftPicked]: rightOriginalIdx }))
     if (isCorrect) {
-      // v9.4 — Confirmer en disant le sens FR + l'expression EN
+      // v9.6 — Bonne paire : verrouille et confirme
+      setMatches(prev => ({ ...prev, [leftPicked]: rightOriginalIdx }))
       const meaningFr = c.pairs[leftPicked].left_meaning_fr
       const segs: SequenceSegment[] = [{ text: 'Bien !', lang: 'fr-FR', pauseAfter: 300 }]
       if (meaningFr) {
@@ -834,21 +835,25 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
       }
       segs.push({ text: c.pairs[rightOriginalIdx].right, lang: 'en-GB' })
       speakSequence(segs, 0.95)
+      setLeftPicked(null)
     } else {
-      const expectedRight = c.pairs[leftPicked].right
+      // v9.6 — Mauvaise paire : NE PAS verrouiller, laisser l'utilisateur réessayer.
+      // (cohérence grammaire : l'user peut corriger jusqu'à trouver la bonne réponse)
       const meaningFr = c.pairs[leftPicked].left_meaning_fr
-      setLastErrorMsg(`La bonne paire était : ${expectedRight}`)
-      // v9.4 — Feedback explicite avec sens FR
-      const segs: SequenceSegment[] = [{ text: 'Non. ', lang: 'fr-FR', pauseAfter: 200 }]
+      const wrongRight = c.pairs[rightOriginalIdx].right
+      setLastErrorMsg(`Essaye encore — ${meaningFr || 'cette case'} ne va pas avec ${wrongRight}`)
+      const segs: SequenceSegment[] = [{ text: 'Non, ', lang: 'fr-FR', pauseAfter: 200 }]
       if (meaningFr) {
-        segs.push({ text: `${meaningFr} se dit`, lang: 'fr-FR', pauseAfter: 200 })
+        segs.push({ text: `${meaningFr} ne va pas avec`, lang: 'fr-FR', pauseAfter: 200 })
       } else {
-        segs.push({ text: 'La bonne réponse était', lang: 'fr-FR', pauseAfter: 200 })
+        segs.push({ text: 'ce n\'est pas ça avec', lang: 'fr-FR', pauseAfter: 200 })
       }
-      segs.push({ text: expectedRight, lang: 'en-GB' })
+      segs.push({ text: wrongRight, lang: 'en-GB', pauseAfter: 300 })
+      segs.push({ text: 'Essaye encore.', lang: 'fr-FR' })
       speakSequence(segs, 0.9)
+      setLeftPicked(null)
+      // L'user peut re-cliquer sur le même left + un autre right
     }
-    setLeftPicked(null)
   }
 
   useEffect(() => {
@@ -1036,6 +1041,9 @@ function StepFinalValidation({ c, onContinue, userName, lessonTitle }: {
       // speakSequence + parseMixedText les détectent et bascule la voix EN automatiquement.
       c.achievements.forEach(a => segs.push({ text: a, lang: 'fr-FR', pauseAfter: 600 }))
     }
+    // v9.6 — Invitation vocale à pratiquer avec le tuteur dans l'espace coach
+    // (accessibilité illettrés : la personne entend où aller maintenant)
+    segs.push({ text: 'Tu peux maintenant pratiquer ces mots avec ton tuteur dans l\'espace Coach.', lang: 'fr-FR', pauseAfter: 600 })
     const t = setTimeout(() => speakSequence(segs, 0.9), 500)
     return () => { clearTimeout(t); stopSpeaking() }
   }, [firstName, lessonTitle, c.achievements])
@@ -1071,8 +1079,8 @@ function StepFinalValidation({ c, onContinue, userName, lessonTitle }: {
           <div className="p-3 rounded-xl border-2 border-primary-300 bg-primary-50 hover:bg-primary-100 flex items-center gap-3 cursor-pointer">
             <div className="text-2xl">💬</div>
             <div className="flex-1 text-left">
-              <div className="font-bold text-sm text-primary-900">Pratiquer avec ton coach</div>
-              <div className="text-xs text-gray-600">Utilise ces salutations dans une vraie conversation</div>
+              <div className="font-bold text-sm text-primary-900">Pratique avec ton tuteur</div>
+              <div className="text-xs text-gray-600">Va dans l&apos;espace Coach pour utiliser ces mots en conversation</div>
             </div>
             <div className="text-primary-500 text-lg">→</div>
           </div>

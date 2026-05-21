@@ -792,13 +792,13 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.5 — Aggrégation v9.4 + nouveaux fixes après retours v9.3 :
- *  - BDD : "fonctionne partout" → "Tu peux l'utiliser dans toutes les situations"
- *  - Immersion scene : ajout speaker_intro ("Il dit / Elle dit / Ils disent")
- *    entre la question FR et l'audio EN
- *  - Mini dialog : wrong_answers détaillés + bouton Réessayer (coach permissif)
- *  - SituationQcm : augmentation timing erreur (3500ms) pour ne pas tronquer
- *  - StepFinalValidation : bouton "Pratiquer avec ton coach" → /coach
- *  - Page parent : sauvegarde stepIdx en localStorage pour reprise + navigation
- *    arrière qui skip les phase_intro auto-skip pour éviter boucle infinie */
-export const TTS_VERSION = 'v9.5'
+/** v9.6 — Affinages pédagogiques après retours v9.5 :
+ *  - Immersion scene : liaison phonétique (context + question + speaker en 1
+ *    seul segment FR pour enchainement fluide sans pause)
+ *  - Mini dialog : feedback pédagogique enrichi qui rappelle la nuance du cours
+ *    (hi=amis proches, hello=général, good morning/afternoon/evening=temporel)
+ *  - Association : autoriser la correction (mauvaise paire ne verrouille plus,
+ *    l'user peut réessayer comme en grammaire)
+ *  - Phase 7 finale : voix off "Pratique avec ton tuteur dans l'espace Coach"
+ *    (accessibilité illettrés) + bouton renommé "Pratique avec ton tuteur" */
+export const TTS_VERSION = 'v9.6'
