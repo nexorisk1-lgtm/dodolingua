@@ -792,10 +792,10 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.1 — NOUVEAU MODULE VOCABULAIRE A1 STRUCTURÉ. Architecture 22 blocs / 121
- *  leçons / 7 phases par leçon (Découverte → Immersion → Reconnaissance →
- *  Prononciation → Utilisation → Automatisation → Maîtrise), cohérent avec la
- *  grammaire. PoC initial : Bloc 1 "Premiers contacts" + Leçon 1 "Dire bonjour".
- *  Nouvelles routes /vocab et /vocab/[lessonId]. Module /session (FSRS) conservé
- *  pour révision. */
-export const TTS_VERSION = 'v9.1'
+/** v9.2 — Refonte UX vocab après retours user v9.1 : auto-next partout, suppression
+ *  définition affichée (audio only), capitalisation Title Case, intros vocales
+ *  entre phases (phase_intro), encouragement après prononciation, feedback
+ *  vocal sur erreurs (gap_fill / association), mini dialog interactif avec
+ *  micro user, Phase 7 finale lit les mots EN en voix anglaise (via **xxx**
+ *  détectés par parseMixedText), nettoyage virgule TTS sur gap_fill. */
+export const TTS_VERSION = 'v9.2'
