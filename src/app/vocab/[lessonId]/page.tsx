@@ -55,9 +55,23 @@ export default function VocabLessonPage() {
           .select('display_name').eq('id', user.id).maybeSingle(),
       ])
       if (lessonRes.data) setLesson(lessonRes.data as Lesson)
-      setSteps((stepsRes.data || []) as VocabStepData[])
+      const loadedSteps = (stepsRes.data || []) as VocabStepData[]
+      setSteps(loadedSteps)
       if (profRes.data?.display_name) setUserName(profRes.data.display_name)
-      setPhase((stepsRes.data?.length || 0) > 0 ? 'running' : 'done')
+      // v9.5 — Reprise : restaure le stepIdx sauvegardé en localStorage si < 24h
+      try {
+        const saved = localStorage.getItem(`vocab-progress-${lessonId}`)
+        if (saved) {
+          const s = JSON.parse(saved)
+          const ageH = (Date.now() - (s.savedAt || 0)) / 3600000
+          if (ageH < 24 && typeof s.stepIdx === 'number' && s.stepIdx < loadedSteps.length) {
+            setStepIdx(s.stepIdx)
+            setScore(s.score || { correct: 0, total: 0 })
+            setBestStreak(s.bestStreak || 0)
+          }
+        }
+      } catch {}
+      setPhase(loadedSteps.length > 0 ? 'running' : 'done')
     })()
     return () => { stopSpeaking() }
   }, [lessonId, router])
@@ -77,14 +91,31 @@ export default function VocabLessonPage() {
     }
     if (stepIdx + 1 >= steps.length) {
       saveProgress()
+      // v9.5 — Nettoyer localStorage en fin de leçon
+      try { localStorage.removeItem(`vocab-progress-${lessonId}`) } catch {}
       setPhase('done')
     } else {
-      setStepIdx(stepIdx + 1)
+      const nextIdx = stepIdx + 1
+      setStepIdx(nextIdx)
+      // v9.5 — Sauvegarde progressive pour reprise
+      try {
+        localStorage.setItem(`vocab-progress-${lessonId}`, JSON.stringify({
+          stepIdx: nextIdx, score, bestStreak, savedAt: Date.now(),
+        }))
+      } catch {}
     }
   }
 
+  // v9.5 — handleBack permet maintenant de revenir au step précédent, en
+  // skippant les phase_intro qui auto-skip (sinon on tombe en boucle infinie).
   function handleBack() {
-    if (stepIdx > 0) setStepIdx(stepIdx - 1)
+    if (stepIdx <= 0) return
+    let target = stepIdx - 1
+    // Skip les phase_intro auto-skip pour ne pas être renvoyé en avant
+    while (target > 0 && steps[target]?.type === 'phase_intro') {
+      target--
+    }
+    setStepIdx(target)
   }
 
   async function saveProgress() {

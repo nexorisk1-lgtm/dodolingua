@@ -792,12 +792,13 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.3 — Affinages UX après retours v9.2 :
- *  - StepPhaseIntro minimaliste à l'écran (emoji + titre court, audio en off)
- *  - Personnalisation prénom Phase 0 ("Bienvenue Raïssa !")
- *  - StepMiniDialog refondu style coach (question + micro user + feedback)
- *  - StepQcmAudio faux : dit "Non, [mot EN] veut dire [traduction]"
- *  - StepAssociation : audio au clic gauche + feedback erreur détaillé
- *  - StepGapFill : retire complètement `_+` du TTS (plus de "underscore")
- *  - audio_intro_fr reformulés pour être engageants (style coach) */
-export const TTS_VERSION = 'v9.3'
+/** v9.5 — Aggrégation v9.4 + nouveaux fixes après retours v9.3 :
+ *  - BDD : "fonctionne partout" → "Tu peux l'utiliser dans toutes les situations"
+ *  - Immersion scene : ajout speaker_intro ("Il dit / Elle dit / Ils disent")
+ *    entre la question FR et l'audio EN
+ *  - Mini dialog : wrong_answers détaillés + bouton Réessayer (coach permissif)
+ *  - SituationQcm : augmentation timing erreur (3500ms) pour ne pas tronquer
+ *  - StepFinalValidation : bouton "Pratiquer avec ton coach" → /coach
+ *  - Page parent : sauvegarde stepIdx en localStorage pour reprise + navigation
+ *    arrière qui skip les phase_intro auto-skip pour éviter boucle infinie */
+export const TTS_VERSION = 'v9.5'

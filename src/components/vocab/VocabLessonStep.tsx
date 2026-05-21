@@ -179,15 +179,21 @@ function StepDiscoveryWord({ c, onContinue, onBack, canGoBack }: {
    PHASE 2 — IMMERSION SCENE
    ============================================================================ */
 function StepImmersionScene({ c, onContinue, onBack, canGoBack }: {
-  c: { context_emoji: string; context_fr: string; audio_en: string }
+  c: { context_emoji: string; context_fr: string; audio_en: string; question_fr?: string; speaker_intro?: string }
   onContinue: () => void; onBack: () => void; canGoBack: boolean
 }) {
   const [revealed, setRevealed] = useState(false)
+  // v9.4 — question_fr ("Que dit-il ?") + v9.5 — speaker_intro ("Il dit :") avant audio EN
+  // pour bien marquer le passage à la parole anglaise.
+  const questionFr = c.question_fr || 'Que dit-il ?'
+  const speakerIntro = c.speaker_intro || 'Il dit :'
   const segs: SequenceSegment[] = useMemo(() => ([
-    { text: c.context_fr, lang: 'fr-FR' as const, pauseAfter: 700 },
+    { text: c.context_fr, lang: 'fr-FR' as const, pauseAfter: 400 },
+    { text: questionFr, lang: 'fr-FR' as const, pauseAfter: 700 },
+    { text: speakerIntro, lang: 'fr-FR' as const, pauseAfter: 400 },
     { text: c.audio_en, lang: 'en-GB' as const, pauseAfter: 500 },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ]), [c.audio_en])
+  ]), [c.audio_en, questionFr, speakerIntro])
 
   useEffect(() => {
     const tReveal = setTimeout(() => setRevealed(true), 2500)
@@ -201,10 +207,11 @@ function StepImmersionScene({ c, onContinue, onBack, canGoBack }: {
       <div className="text-[10px] uppercase font-bold text-gray-500">Mini scène</div>
       <div className="text-7xl py-4">{c.context_emoji}</div>
       <div className="text-base text-gray-800 font-semibold">{c.context_fr}</div>
+      <div className="text-sm text-primary-700 font-bold">{questionFr}</div>
 
       {revealed && (
         <div className="bg-emerald-50 rounded-xl p-3 animate-pulse-once">
-          <div className="text-[10px] uppercase font-bold text-emerald-700 mb-1">Elle a dit :</div>
+          <div className="text-[10px] uppercase font-bold text-emerald-700 mb-1">Réponse :</div>
           <div className="text-2xl font-extrabold text-emerald-900">{titleCase(c.audio_en)}</div>
         </div>
       )}
@@ -300,9 +307,14 @@ function StepPronunciationBreakdown({ c, onContinue, onBack, canGoBack }: {
   const [transcript, setTranscript] = useState<string | null>(null)
   const [score, setScore] = useState<number | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
+  // v9.4 — Capture de l'audio user pour replay (cohérence grammaire)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
 
   useEffect(() => {
-    setTranscript(null); setScore(null); setFeedback(null)
+    setTranscript(null); setScore(null); setFeedback(null); setAudioUrl(null)
     const segs: SequenceSegment[] = [
       { text: c.lemma, lang: 'en-GB', pauseAfter: 700, rate: 0.7 },
     ]
@@ -317,15 +329,43 @@ function StepPronunciationBreakdown({ c, onContinue, onBack, canGoBack }: {
   function speakSlow() { speakSequence([{ text: c.lemma, lang: 'en-GB', rate: 0.6 }], 0.6) }
   function speakNormal() { speakSequence([{ text: c.lemma, lang: 'en-GB', rate: 0.95 }], 0.95) }
 
+  // v9.4 — Démarre l'enregistrement MediaRecorder en parallèle de
+  // recognizeSpeech pour pouvoir réécouter sa propre voix après.
+  async function startAudioCapture() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      audioChunksRef.current = []
+      const mr = new MediaRecorder(stream)
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+      mr.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' })
+        setAudioUrl(URL.createObjectURL(blob))
+        try { streamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
+      }
+      mr.start()
+      mediaRecorderRef.current = mr
+    } catch {}
+  }
+  function stopAudioCapture() {
+    try { mediaRecorderRef.current?.stop() } catch {}
+    mediaRecorderRef.current = null
+  }
+  function playMyVoice() {
+    if (audioUrl) { try { new Audio(audioUrl).play() } catch {} }
+  }
+
   async function recordMic() {
     if (recording) return
-    setRecording(true); setTranscript(null); setScore(null); setFeedback(null)
+    setRecording(true); setTranscript(null); setScore(null); setFeedback(null); setAudioUrl(null)
+    await startAudioCapture()
     try {
       const res = await recognizeSpeech(c.lemma, 'en-US')
       const t = (res?.transcript || '').trim()
       setTranscript(t || '(rien entendu)')
       const sc = Math.round((res?.similarity || 0) * 100)
       setScore(sc)
+      stopAudioCapture()
       // v9.2 — Feedback vocal selon le score
       if (sc >= 80) {
         setFeedback('Bravo, tu as bien prononcé !')
@@ -390,6 +430,12 @@ function StepPronunciationBreakdown({ c, onContinue, onBack, canGoBack }: {
               {score && score >= 80 ? '🎯 ' : ''}{feedback}
             </div>
           )}
+          {/* v9.4 — Bouton replay voix utilisateur (cohérence grammaire) */}
+          {audioUrl && (
+            <button onClick={playMyVoice} className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100">
+              ▶️ Réécouter ma voix
+            </button>
+          )}
         </div>
       )}
 
@@ -440,14 +486,15 @@ function StepSituationQcm({ c, onContinue, onBack, canGoBack }: {
         { text: 'Très bien ! ', lang: 'fr-FR', pauseAfter: 300 },
         { text: c.correct, lang: 'en-GB' },
       ], 0.95)
-      setTimeout(() => onContinue(true), 1800)
+      setTimeout(() => onContinue(true), 2000)
     } else {
-      // v9.2 — Feedback erreur vocal : la bonne réponse était...
+      // v9.5 — Augmenter le timing pour laisser parler la voix EN entière
+      // ("la bonne réponse était : Good afternoon" prend ~3s)
       speakSequence([
         { text: 'Non, la bonne réponse était :', lang: 'fr-FR', pauseAfter: 400 },
         { text: c.correct, lang: 'en-GB' },
       ], 0.9)
-      setTimeout(() => onContinue(false), 2200)
+      setTimeout(() => onContinue(false), 3500)
     }
   }
 
@@ -490,7 +537,16 @@ function StepSituationQcm({ c, onContinue, onBack, canGoBack }: {
    liste de répliques affichée comme un script.
    ============================================================================ */
 function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
-  c: { context_emoji: string; context_fr: string; turns: { speaker: string; text_en: string; text_fr: string; is_user?: boolean }[] }
+  c: {
+    context_emoji: string
+    context_fr: string
+    turns: { speaker: string; text_en: string; text_fr: string; is_user?: boolean }[]
+    alternatives_ok?: string[]
+    feedback_alternatives?: string
+    // v9.5 — Réponses incorrectes spécifiques avec feedback contextuel
+    // (ex: "good afternoon" → "Non, good afternoon c'est pour l'après-midi. Réessaye.")
+    wrong_answers?: { text: string; feedback: string }[]
+  }
   onContinue: () => void; onBack: () => void; canGoBack: boolean
 }) {
   const [recording, setRecording] = useState(false)
@@ -522,35 +578,72 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [c.context_fr, friendTurn?.text_en])
 
+  // v9.5 — Distinction 4 cas + bouton "Réessayer" au lieu d'auto-skip
+  // pour les erreurs (coach plus permissif)
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null)
+  const [canRetry, setCanRetry] = useState(false)
+
+  function normalize(s: string) { return s.toLowerCase().replace(/[^a-z']/g, '') }
+
   async function recordUser() {
     if (recording || !userTurn) return
     setRecording(true)
+    setFeedbackMsg(null); setCanRetry(false)
     try {
       const res = await recognizeSpeech(userTurn.text_en || '', 'en-US')
       const t = (res?.transcript || '').trim()
       const sc = Math.round((res?.similarity || 0) * 100)
       setUserSaid(t || '(rien entendu)')
       setUserScore(sc)
-      if (sc >= 60) {
+
+      const tNorm = normalize(t)
+      const expectedNorm = normalize(userTurn.text_en || '')
+      const altList = (c.alternatives_ok || []).map(normalize)
+      const matchedAlt = altList.find(a => tNorm.includes(a))
+      // v9.5 — Cherche une wrong_answer prédéfinie qui matche ce que l'user a dit
+      const matchedWrong = (c.wrong_answers || []).find(w => tNorm.includes(normalize(w.text)))
+
+      if (sc >= 60 && tNorm.includes(expectedNorm)) {
+        // Cas 1 — Réponse exacte attendue
         speakSequence([
           { text: 'Bravo !', lang: 'fr-FR', pauseAfter: 400 },
           { text: userTurn.text_en, lang: 'en-GB' },
         ], 0.95)
-        setTimeout(() => onContinue(), 2000)
-      } else {
-        // v9.3 — Feedback explicite : montre + dit la réponse attendue
+        setTimeout(() => onContinue(), 2200)
+      } else if (matchedAlt && c.feedback_alternatives) {
+        // Cas 2 — Alternative valide style coach chaleureux
         setShowExpected(true)
+        setFeedbackMsg(c.feedback_alternatives)
+        speakSequence([
+          { text: c.feedback_alternatives, lang: 'fr-FR', pauseAfter: 500 },
+        ], 0.95)
+        // v9.5 — Délai plus long pour bien entendre + skip auto
+        setTimeout(() => onContinue(), 5000)
+      } else if (matchedWrong) {
+        // Cas 3 — Réponse hors-sujet identifiée → feedback contextuel + retry
+        setFeedbackMsg(matchedWrong.feedback)
+        setCanRetry(true)
+        speakSequence([
+          { text: matchedWrong.feedback, lang: 'fr-FR', pauseAfter: 500 },
+        ], 0.95)
+      } else {
+        // Cas 4 — Hors-sujet non identifié → fallback "On dit : [attendu]" + retry
+        setShowExpected(true)
+        setCanRetry(true)
         speakSequence([
           { text: 'On dit :', lang: 'fr-FR', pauseAfter: 300 },
           { text: userTurn.text_en, lang: 'en-GB' },
         ], 0.9)
-        setTimeout(() => onContinue(), 2500)
       }
     } catch {
       setUserSaid('(micro indisponible)')
     } finally {
       setRecording(false)
     }
+  }
+
+  function retry() {
+    setUserSaid(null); setUserScore(null); setShowExpected(false); setFeedbackMsg(null); setCanRetry(false)
   }
 
   return (
@@ -579,13 +672,10 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
         <div className={`rounded-xl p-3 text-center ${userScore && userScore >= 60 ? 'bg-emerald-50 border-2 border-emerald-300' : 'bg-amber-50 border-2 border-amber-300'}`}>
           <div className="text-[10px] uppercase font-bold text-gray-600 mb-1">Tu as dit</div>
           <div className="text-base font-bold">{userSaid}</div>
-          {userScore !== null && (
-            <div className="text-xs mt-1">
-              Score : <b className={userScore >= 60 ? 'text-emerald-700' : 'text-amber-700'}>{userScore}%</b>
-              {userScore >= 60 ? ' — Bravo !' : ' — pas tout à fait'}
-            </div>
+          {feedbackMsg && (
+            <div className="text-sm font-semibold mt-2 text-gray-800">{feedbackMsg}</div>
           )}
-          {showExpected && userTurn && (
+          {showExpected && userTurn && !feedbackMsg && (
             <div className="mt-2 pt-2 border-t border-amber-200 text-sm">
               On dit : <b className="text-emerald-700">{titleCase(userTurn.text_en)}</b>
             </div>
@@ -595,6 +685,8 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
 
       <div className="flex gap-2 pt-2">
         {canGoBack && <Button variant="ghost" onClick={onBack}>← Précédent</Button>}
+        {canRetry && <Button block onClick={retry}>🔁 Réessayer</Button>}
+        {canRetry && <Button block variant="ghost" onClick={onContinue}>Passer →</Button>}
         {!userTurn && <Button block onClick={onContinue}>Continuer →</Button>}
       </div>
     </div>
@@ -685,7 +777,12 @@ function StepQcmAudio({ c, onContinue, onBack, canGoBack }: {
    PHASE 6 — ASSOCIATION
    ============================================================================ */
 function StepAssociation({ c, onContinue, onBack, canGoBack }: {
-  c: { question_fr: string; pairs: { left: string; right: string }[] }
+  c: {
+    question_fr: string
+    // v9.4 — `left_meaning_fr` ajouté pour dire le sens français au clic
+    // (ex: 🌞 → "matin"). Si absent, fallback sur `right` (mot EN).
+    pairs: { left: string; left_meaning_fr?: string; right: string }[]
+  }
   onContinue: (correct: boolean) => void; onBack: () => void; canGoBack: boolean
 }) {
   const [matches, setMatches] = useState<Record<number, number>>({})
@@ -712,9 +809,15 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
   function clickLeft(i: number) {
     if (done || matches[i] !== undefined) return
     setLeftPicked(i); setLastErrorMsg(null)
-    // v9.3 — Au clic sur l'emoji left, lit son expression EN correspondante
-    // (aide l'utilisateur à comprendre ce que l'emoji représente)
-    speakSequence([{ text: c.pairs[i].right, lang: 'en-GB' }], 0.9)
+    // v9.4 — Au clic emoji left : dire le SENS FR (matin/après-midi/soir) pour
+    // que l'utilisateur sache ce que l'emoji représente AVANT de chercher la paire.
+    // Si left_meaning_fr absent, fallback sur l'expression EN.
+    const meaningFr = c.pairs[i].left_meaning_fr
+    if (meaningFr) {
+      speakSequence([{ text: meaningFr, lang: 'fr-FR' }], 0.95)
+    } else {
+      speakSequence([{ text: c.pairs[i].right, lang: 'en-GB' }], 0.9)
+    }
   }
 
   function clickRight(displayIdx: number) {
@@ -723,21 +826,27 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
     const isCorrect = rightOriginalIdx === leftPicked
     setMatches(prev => ({ ...prev, [leftPicked]: rightOriginalIdx }))
     if (isCorrect) {
-      speakSequence([
-        { text: 'Bien !', lang: 'fr-FR', pauseAfter: 300 },
-        { text: c.pairs[rightOriginalIdx].right, lang: 'en-GB' },
-      ], 0.95)
+      // v9.4 — Confirmer en disant le sens FR + l'expression EN
+      const meaningFr = c.pairs[leftPicked].left_meaning_fr
+      const segs: SequenceSegment[] = [{ text: 'Bien !', lang: 'fr-FR', pauseAfter: 300 }]
+      if (meaningFr) {
+        segs.push({ text: `${meaningFr} se dit`, lang: 'fr-FR', pauseAfter: 200 })
+      }
+      segs.push({ text: c.pairs[rightOriginalIdx].right, lang: 'en-GB' })
+      speakSequence(segs, 0.95)
     } else {
       const expectedRight = c.pairs[leftPicked].right
-      const wrongRight = c.pairs[rightOriginalIdx].right
+      const meaningFr = c.pairs[leftPicked].left_meaning_fr
       setLastErrorMsg(`La bonne paire était : ${expectedRight}`)
-      // v9.3 — Feedback explicite : dire ce qui aurait été bon
-      speakSequence([
-        { text: 'Non. ', lang: 'fr-FR', pauseAfter: 200 },
-        { text: wrongRight, lang: 'en-GB', pauseAfter: 300 },
-        { text: 'ne va pas ici. Ça aurait été :', lang: 'fr-FR', pauseAfter: 300 },
-        { text: expectedRight, lang: 'en-GB' },
-      ], 0.9)
+      // v9.4 — Feedback explicite avec sens FR
+      const segs: SequenceSegment[] = [{ text: 'Non. ', lang: 'fr-FR', pauseAfter: 200 }]
+      if (meaningFr) {
+        segs.push({ text: `${meaningFr} se dit`, lang: 'fr-FR', pauseAfter: 200 })
+      } else {
+        segs.push({ text: 'La bonne réponse était', lang: 'fr-FR', pauseAfter: 200 })
+      }
+      segs.push({ text: expectedRight, lang: 'en-GB' })
+      speakSequence(segs, 0.9)
     }
     setLeftPicked(null)
   }
@@ -761,12 +870,15 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
             const matched = matches[i] !== undefined
             const isPicked = leftPicked === i
             const isCorrect = matched && matches[i] === i
+            const meaningFr = c.pairs[i].left_meaning_fr
             let cls = 'bg-white border-gray-300'
             if (matched) cls = isCorrect ? 'bg-emerald-100 border-emerald-300' : 'bg-red-100 border-red-300'
             else if (isPicked) cls = 'bg-blue-200 border-blue-400 scale-105'
             return (
-              <button key={i} disabled={matched} onClick={() => clickLeft(i)} className={`w-full p-4 rounded-xl border-2 text-3xl font-bold transition ${cls}`}>
-                {l}
+              <button key={i} disabled={matched} onClick={() => clickLeft(i)} className={`w-full p-3 rounded-xl border-2 transition flex flex-col items-center gap-1 ${cls}`}>
+                <span className="text-3xl font-bold">{l}</span>
+                {/* v9.4 — Affiche le sens FR sous l'emoji pour ceux qui lisent */}
+                {meaningFr && <span className="text-xs font-semibold text-gray-700">{meaningFr}</span>}
               </button>
             )
           })}
@@ -899,6 +1011,7 @@ function StepGapFill({ c, onContinue, onBack, canGoBack }: {
 
 /* ============================================================================
    PHASE 7 — FINAL VALIDATION (mots EN entre **xxx** → parseMixedText les détecte)
+   v9.5 — Ajout bouton "Pratiquer avec ton coach" → /coach
    ============================================================================ */
 function StepFinalValidation({ c, onContinue, userName, lessonTitle }: {
   c: { title_fr: string; achievements: string[] }
@@ -952,7 +1065,20 @@ function StepFinalValidation({ c, onContinue, userName, lessonTitle }: {
         </div>
       )}
 
-      <Button block onClick={onContinue}>Terminer la leçon</Button>
+      <div className="space-y-2">
+        {/* v9.5 — Inviter l'utilisateur à pratiquer avec le coach IA */}
+        <a href="/coach" className="block">
+          <div className="p-3 rounded-xl border-2 border-primary-300 bg-primary-50 hover:bg-primary-100 flex items-center gap-3 cursor-pointer">
+            <div className="text-2xl">💬</div>
+            <div className="flex-1 text-left">
+              <div className="font-bold text-sm text-primary-900">Pratiquer avec ton coach</div>
+              <div className="text-xs text-gray-600">Utilise ces salutations dans une vraie conversation</div>
+            </div>
+            <div className="text-primary-500 text-lg">→</div>
+          </div>
+        </a>
+        <Button block onClick={onContinue}>Terminer la leçon</Button>
+      </div>
     </div>
   )
 }
