@@ -366,11 +366,11 @@ function StepPronunciationBreakdown({ c, onContinue, onBack, canGoBack }: {
       const sc = Math.round((res?.similarity || 0) * 100)
       setScore(sc)
       stopAudioCapture()
-      // v9.2 — Feedback vocal selon le score
+      // v9.7 — Pas d'auto-skip : l'user doit pouvoir ré-écouter sa voix avant
+      // de passer. Bouton "Continuer →" affiché ci-dessous.
       if (sc >= 80) {
         setFeedback('Bravo, tu as bien prononcé !')
         speakSequence([{ text: 'Bravo, tu as bien prononcé !', lang: 'fr-FR' }], 0.95)
-        setTimeout(() => onContinue(), 2200)
       } else if (sc >= 50) {
         setFeedback('Bien, mais tu peux encore t\'améliorer.')
         speakSequence([
@@ -441,8 +441,12 @@ function StepPronunciationBreakdown({ c, onContinue, onBack, canGoBack }: {
 
       <div className="flex gap-2 pt-2">
         {canGoBack && <Button variant="ghost" onClick={onBack}>← Précédent</Button>}
-        {(score === null || score < 80) && (
-          <Button block onClick={onContinue}>Passer →</Button>
+        {/* v9.7 — Bouton Continuer toujours visible après un enregistrement
+            (plus d'auto-skip qui coupe la réécoute) */}
+        {score !== null ? (
+          <Button block onClick={onContinue}>Continuer →</Button>
+        ) : (
+          <Button block variant="ghost" onClick={onContinue}>Passer →</Button>
         )}
       </div>
     </div>
@@ -584,6 +588,26 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
   const [canRetry, setCanRetry] = useState(false)
 
   function normalize(s: string) { return s.toLowerCase().replace(/[^a-z']/g, '') }
+  // v9.7 — Levenshtein distance pour matching tolérant ("helo" ≈ "hello")
+  function lev(a: string, b: string): number {
+    if (!a.length) return b.length
+    if (!b.length) return a.length
+    const m: number[][] = Array.from({ length: b.length + 1 }, (_, i) => [i])
+    for (let j = 0; j <= a.length; j++) m[0][j] = j
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        const cost = b[i - 1] === a[j - 1] ? 0 : 1
+        m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + cost)
+      }
+    }
+    return m[b.length][a.length]
+  }
+  function similar(a: string, b: string): boolean {
+    if (!a || !b) return false
+    if (a === b || a.includes(b) || b.includes(a)) return true
+    const d = lev(a, b)
+    return d / Math.max(a.length, b.length) <= 0.34
+  }
 
   async function recordUser() {
     if (recording || !userTurn) return
@@ -599,11 +623,11 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
       const tNorm = normalize(t)
       const expectedNorm = normalize(userTurn.text_en || '')
       const altList = (c.alternatives_ok || []).map(normalize)
-      const matchedAlt = altList.find(a => tNorm.includes(a))
-      // v9.5 — Cherche une wrong_answer prédéfinie qui matche ce que l'user a dit
-      const matchedWrong = (c.wrong_answers || []).find(w => tNorm.includes(normalize(w.text)))
+      // v9.7 — Matching tolérant via Levenshtein (helo ≈ hello)
+      const matchedAlt = altList.find(a => similar(tNorm, a))
+      const matchedWrong = (c.wrong_answers || []).find(w => similar(tNorm, normalize(w.text)))
 
-      if (sc >= 60 && tNorm.includes(expectedNorm)) {
+      if (sc >= 60 && (similar(tNorm, expectedNorm) || tNorm.includes(expectedNorm))) {
         // Cas 1 — Réponse exacte attendue
         speakSequence([
           { text: 'Bravo !', lang: 'fr-FR', pauseAfter: 400 },
@@ -837,8 +861,9 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
       speakSequence(segs, 0.95)
       setLeftPicked(null)
     } else {
-      // v9.6 — Mauvaise paire : NE PAS verrouiller, laisser l'utilisateur réessayer.
-      // (cohérence grammaire : l'user peut corriger jusqu'à trouver la bonne réponse)
+      // v9.7 — Mauvaise paire : NE PAS reset leftPicked → l'user peut juste
+      // re-cliquer un autre right SANS re-cliquer le left. Le left reste
+      // surligné en bleu pour montrer qu'il est toujours en attente.
       const meaningFr = c.pairs[leftPicked].left_meaning_fr
       const wrongRight = c.pairs[rightOriginalIdx].right
       setLastErrorMsg(`Essaye encore — ${meaningFr || 'cette case'} ne va pas avec ${wrongRight}`)
@@ -851,8 +876,7 @@ function StepAssociation({ c, onContinue, onBack, canGoBack }: {
       segs.push({ text: wrongRight, lang: 'en-GB', pauseAfter: 300 })
       segs.push({ text: 'Essaye encore.', lang: 'fr-FR' })
       speakSequence(segs, 0.9)
-      setLeftPicked(null)
-      // L'user peut re-cliquer sur le même left + un autre right
+      // leftPicked RESTE actif → user re-clique à droite directement
     }
   }
 

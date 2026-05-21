@@ -152,8 +152,9 @@ export default function VocabLessonPage() {
         <Button size="sm" variant="ghost" onClick={() => router.push('/vocab')}>
           ← Retour
         </Button>
-        <button onClick={pauseAndReturnHome} className="text-sm text-gray-600 hover:text-primary-700 underline">
-          💾 Reprendre plus tard
+        {/* v9.7 — Bouton Pause plus visible (intitulé explicite + style bouton) */}
+        <button onClick={pauseAndReturnHome} className="text-sm font-semibold text-primary-700 hover:text-primary-900 bg-primary-50 hover:bg-primary-100 px-3 py-1.5 rounded-full">
+          ⏸️ Pause
         </button>
       </div>
 
