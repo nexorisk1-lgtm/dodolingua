@@ -1081,7 +1081,9 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
 
   function pickLeft(leftIdx: number, leftVal: string) {
     if (feedback !== null) return
-    speak(leftVal)
+    // v9.9 — Détection langue explicite (avant la voix EN lisait du FR comme
+    // "passé affirmatif" en anglais → bug capture 19 de Raïssa)
+    speak(leftVal, null, { lang: detectOptionLang(leftVal) })
     setLastMatchedLeft(null)
     if (selectedRight) {
       commitMatch(leftIdx, selectedRight.idx)
@@ -1098,11 +1100,13 @@ function StepMatch({ step, onContinue, rate }: { step: StepV6; onContinue: (corr
       const leftIdxToUndo = Object.keys(matches).find(k => matches[Number(k)] === idx)
       if (leftIdxToUndo !== undefined) {
         undoMatch(Number(leftIdxToUndo))
-        speak(val)
+        // v9.9 — lang explicite
+        speak(val, null, { lang: detectOptionLang(val) })
       }
       return
     }
-    speak(val)
+    // v9.9 — lang explicite
+    speak(val, null, { lang: detectOptionLang(val) })
     if (selectedLeft !== null) {
       commitMatch(selectedLeft, idx)
       return

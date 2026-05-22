@@ -36,6 +36,8 @@ export default function CheckpointPage() {
   const [score, setScore] = useState({ correct: 0, total: 0 })
   const [bestStreak, setBestStreak] = useState(0)
   const [streak, setStreak] = useState(0)
+  // v9.9 — Bouton "Réécouter" → remount du step via replayKey
+  const [replayKey, setReplayKey] = useState(0)
 
   useEffect(() => {
     (async () => {
@@ -155,8 +157,17 @@ export default function CheckpointPage() {
 
           {currentStep && (
             <Card>
+              <div className="flex justify-end mb-2">
+                <button
+                  onClick={() => { stopSpeaking(); setReplayKey(k => k + 1); }}
+                  className="text-xs font-semibold text-primary-700 hover:text-primary-900 bg-primary-50 hover:bg-primary-100 px-3 py-1 rounded-full"
+                  aria-label="Réécouter la question"
+                >
+                  🔁 Réécouter
+                </button>
+              </div>
               <CheckpointStep
-                key={currentStep.id}
+                key={`${currentStep.id}-${replayKey}`}
                 step={currentStep}
                 onContinue={handleContinue}
                 onBack={handleBack}

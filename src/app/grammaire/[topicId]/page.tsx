@@ -9,6 +9,7 @@ import { GrammarLesson } from '@/components/grammar/GrammarLesson'
 import { GrammarExercise, type GrammarExerciseData } from '@/components/grammar/GrammarExercise'
 import { GrammarStep, type Step } from '@/components/grammar/GrammarStep'
 import { GrammarStepV6, type StepV6 } from '@/components/grammar/GrammarStepV6'
+import { stopSpeaking } from '@/components/games/utils'
 
 interface Topic {
   id: string
@@ -44,6 +45,8 @@ export default function GrammarTopicPage() {
   const [score, setScore] = useState({ correct: 0, total: 0 })
   const [streak, setStreak] = useState(0)
   const [bestStreak, setBestStreak] = useState(0)
+  // v9.9 — Bouton "Réécouter" → remount du step via replayKey
+  const [replayKey, setReplayKey] = useState(0)
 
   useEffect(() => {
     (async () => {
@@ -201,8 +204,17 @@ export default function GrammarTopicPage() {
           - 'v5' ou null → GrammarStep ancien (compat ascendante pour 278 topics non migrés) */}
       {phase === 'steps' && steps[stepIdx] && topic.lesson_format_version === 'v6' && (
         <Card>
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={() => { stopSpeaking(); setReplayKey(k => k + 1); }}
+              className="text-xs font-semibold text-primary-700 hover:text-primary-900 bg-primary-50 hover:bg-primary-100 px-3 py-1 rounded-full"
+              aria-label="Réécouter la question"
+            >
+              🔁 Réécouter
+            </button>
+          </div>
           <GrammarStepV6
-            key={steps[stepIdx].id}
+            key={`${steps[stepIdx].id}-${replayKey}`}
             step={steps[stepIdx] as unknown as StepV6}
             onContinue={handleStepContinue}
             onBack={handleStepBack}
@@ -216,8 +228,17 @@ export default function GrammarTopicPage() {
       )}
       {phase === 'steps' && steps[stepIdx] && topic.lesson_format_version !== 'v6' && (
         <Card>
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={() => { stopSpeaking(); setReplayKey(k => k + 1); }}
+              className="text-xs font-semibold text-primary-700 hover:text-primary-900 bg-primary-50 hover:bg-primary-100 px-3 py-1 rounded-full"
+              aria-label="Réécouter la question"
+            >
+              🔁 Réécouter
+            </button>
+          </div>
           <GrammarStep
-            key={steps[stepIdx].id}
+            key={`${steps[stepIdx].id}-${replayKey}`}
             step={steps[stepIdx]}
             voiceName={voiceName}
             onContinue={handleStepContinue}
