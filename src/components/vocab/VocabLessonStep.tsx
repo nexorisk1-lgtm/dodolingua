@@ -971,13 +971,21 @@ function StepGapFill({ c, onContinue, onBack, canGoBack }: {
   useEffect(() => {
     setPicked(null)
     const sentenceForSpeech = cleanForTTS(c.sentence_with_blank)
-    const segs: SequenceSegment[] = [
-      { text: 'Complète la phrase.', lang: 'fr-FR', pauseAfter: 400 },
-      { text: sentenceForSpeech, lang: 'en-GB', pauseAfter: 600 },
-    ]
+    // v9.10 — Contexte vocal FR explicite pour les illettrés.
+    // Avant : "Complète la phrase. [phrase EN à trou]" → ambigu sans le sens FR.
+    // Maintenant : "Comment dit-on '[sentence_fr]' en anglais ? [phrase EN à trou]"
+    const segs: SequenceSegment[] = c.sentence_fr
+      ? [
+          { text: `Comment dit-on en anglais : ${c.sentence_fr}`, lang: 'fr-FR', pauseAfter: 600 },
+          { text: sentenceForSpeech, lang: 'en-GB', pauseAfter: 600 },
+        ]
+      : [
+          { text: 'Complète la phrase.', lang: 'fr-FR', pauseAfter: 400 },
+          { text: sentenceForSpeech, lang: 'en-GB', pauseAfter: 600 },
+        ]
     const t = setTimeout(() => speakSequence(segs, 0.9), 400)
     return () => { clearTimeout(t); stopSpeaking() }
-  }, [c.sentence_with_blank])
+  }, [c.sentence_with_blank, c.sentence_fr])
 
   function pick(opt: string) {
     if (picked) return
