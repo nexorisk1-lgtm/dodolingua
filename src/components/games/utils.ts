@@ -92,7 +92,15 @@ export function speak(text: string, voiceName?: string | null, optsOrRate: Speak
   // v5.5 — Compat ascendante : si optsOrRate est un nombre, c'est l'ancien `rate`
   const opts: SpeakOptions = typeof optsOrRate === 'number'
     ? { rate: optsOrRate }
-    : optsOrRate
+    : { ...optsOrRate }
+
+  // v9.12 — Garde-fou anti-régression voix EN/FR : si lang n'est pas fourni
+  // explicitement ET le texte contient des accents français évidents, on force
+  // fr-FR. Évite les bugs type "passé affirmatif" lu en voix anglaise (capture 19
+  // de Raïssa). Les appels qui veulent forcer EN doivent passer lang: 'en-GB'.
+  if (!opts.lang && /[éèêëàâäîïôöùûüçÿœæ]/i.test(text)) {
+    opts.lang = 'fr-FR'
+  }
 
   window.speechSynthesis.cancel()
   // v6.1 — Fix DÉFINITIF "capital I" : Daniel/macOS épelle "I" comme une lettre.
@@ -799,4 +807,4 @@ function levenshtein(a: string, b: string): number {
  *    "Bien ! Entre amis se dit Hi"
  *  - Gap fill : timeout 1800→3500ms (correct) et 2800→4500ms (faux) pour
  *    laisser la phrase complète se terminer */
-export const TTS_VERSION = 'v9.11'
+export const TTS_VERSION = 'v9.12'
