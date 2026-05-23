@@ -799,4 +799,4 @@ function levenshtein(a: string, b: string): number {
  *    "Bien ! Entre amis se dit Hi"
  *  - Gap fill : timeout 1800→3500ms (correct) et 2800→4500ms (faux) pour
  *    laisser la phrase complète se terminer */
-export const TTS_VERSION = 'v9.10'
+export const TTS_VERSION = 'v9.11'
