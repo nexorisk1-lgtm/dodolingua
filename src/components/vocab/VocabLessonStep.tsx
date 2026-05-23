@@ -507,7 +507,9 @@ function StepSituationQcm({ c, onContinue, onBack, canGoBack }: {
     <div className="space-y-4 text-center">
       <div className="text-[10px] uppercase font-bold text-gray-500">Situation</div>
       <div className="text-6xl py-2">{c.context_emoji}</div>
-      <div className="text-base text-gray-800 font-semibold">{c.context_fr}</div>
+      {/* v9.16 — Affichage conditionnel : si pas de context_fr (pattern "Comment dit-on X ?"
+          industrialisé bloc 3), on ne met pas de div vide */}
+      {c.context_fr && <div className="text-base text-gray-800 font-semibold">{c.context_fr}</div>}
       <div className="text-sm text-gray-600">{c.question_fr}</div>
 
       <div className="space-y-2">

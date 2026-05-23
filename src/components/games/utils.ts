@@ -800,16 +800,21 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.15 — Corrections vocab A1 leçons 01-08 + checkpoint bloc 1 (retours Raïssa 23 mai) :
- *  - R1 wrap-EN industriel : tous les mots EN A1 entourés de **xxx** dans les feedbacks,
- *    contexts mini-dialogues, définitions, immersion → la voix EN reprend la main
- *    sur les mots EN intercalés (plus de FR qui lit "thank you" en français)
- *  - R2 anti-coupure : mini_dialog Case 2 (alternative valide) utilise désormais
- *    `await speakSequence` au lieu d'un setTimeout fixe 6s → la phrase complète
- *    s'entend toujours (capture 1, 3, 11 de Raïssa)
- *  - R3 vocab cohérence : "Expression utilisée" → "Mot utilisé" partout
- *    "Quelle expression utilises-tu" → "Quel mot utilises-tu"
- *  - R4 liaisons FR : reformulations spécifiques (capture 19)
- *  - Compléments leçon 05 : ajout prononciation + situations pour "same" et "else"
- *    (auparavant manquants ; 6 mots de vocab mais 4 exercices) */
-export const TTS_VERSION = 'v9.15'
+/** v9.16 — Corrections vocab A1 bloc 3 leçons 09-17 (retours Raïssa, 47 captures) :
+ *  - R1 wrap-EN ÉTENDU à TOUT A1 (et non plus juste 01-08). Vocab famille
+ *    intégré : mother/father/brother/sister/grandfather/etc. + ajustement
+ *    false-friend "son" retiré (collision avec possessif FR).
+ *  - R3 industriel : liaisons FR difficiles ("utilise-il", "peut-il dire",
+ *    "Comment appelle-t-on") → reformulées sur toutes les leçons A1.
+ *  - R5 pattern "Comment dit-on X en anglais ?" : situation_qcm du bloc 3
+ *    reformulés en pattern simple. Évite les mises en situation qui ne
+ *    correspondent pas au mot cible (cap 36-39, 44-47 de Raïssa).
+ *  - R6 immersion question : "Que dit cette personne ?" → "Que dirais-tu ?"
+ *    sur leçons 16-17 où le narrateur observe (cap 30, 32-35, 40-43).
+ *  - Fixes par capture : audio_en "his/their" → "my/our" pour cohérence
+ *    1re personne, définitions précisées (parent, cousin), suppression
+ *    de l'association inadaptée L11 (un seul mot).
+ *
+ *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
+ *  validée, renumérotation L11 sans conflit. */
+export const TTS_VERSION = 'v9.16'
