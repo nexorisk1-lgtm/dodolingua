@@ -800,11 +800,16 @@ function levenshtein(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/** v9.8 — 3 ajustements légers timing+UI :
- *  - Immersion : question ("Que dit cette personne ?") retirée de l'affichage,
- *    la voix off la dit (allège l'écran mobile)
- *  - Association : timeout final 1800→3500ms pour ne plus tronquer
- *    "Bien ! Entre amis se dit Hi"
- *  - Gap fill : timeout 1800→3500ms (correct) et 2800→4500ms (faux) pour
- *    laisser la phrase complète se terminer */
-export const TTS_VERSION = 'v9.12'
+/** v9.15 — Corrections vocab A1 leçons 01-08 + checkpoint bloc 1 (retours Raïssa 23 mai) :
+ *  - R1 wrap-EN industriel : tous les mots EN A1 entourés de **xxx** dans les feedbacks,
+ *    contexts mini-dialogues, définitions, immersion → la voix EN reprend la main
+ *    sur les mots EN intercalés (plus de FR qui lit "thank you" en français)
+ *  - R2 anti-coupure : mini_dialog Case 2 (alternative valide) utilise désormais
+ *    `await speakSequence` au lieu d'un setTimeout fixe 6s → la phrase complète
+ *    s'entend toujours (capture 1, 3, 11 de Raïssa)
+ *  - R3 vocab cohérence : "Expression utilisée" → "Mot utilisé" partout
+ *    "Quelle expression utilises-tu" → "Quel mot utilises-tu"
+ *  - R4 liaisons FR : reformulations spécifiques (capture 19)
+ *  - Compléments leçon 05 : ajout prononciation + situations pour "same" et "else"
+ *    (auparavant manquants ; 6 mots de vocab mais 4 exercices) */
+export const TTS_VERSION = 'v9.15'

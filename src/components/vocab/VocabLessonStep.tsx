@@ -639,11 +639,13 @@ function StepMiniDialog({ c, onContinue, onBack, canGoBack }: {
         // Cas 2 — Alternative valide → coach pédagogique chaleureux. Passe en succès.
         setShowExpected(true)
         setFeedbackMsg(c.feedback_alternatives)
-        speakSequence([
+        // v9.15 — Industrialise R2 anti-coupure : attendre la fin de la lecture
+        // AVANT de déclencher onContinue. Le texte pédagogique mixte FR/EN peut
+        // durer 10-15s ; le timeout fixe précédent (6s) coupait toujours la phrase.
+        await speakSequence([
           { text: c.feedback_alternatives, lang: 'fr-FR', pauseAfter: 500 },
         ], 0.95)
-        // v9.6 — Délai plus long (6s) pour bien entendre l'explication pédagogique
-        setTimeout(() => onContinue(), 6000)
+        setTimeout(() => onContinue(), 600)
       } else if (matchedWrong) {
         // v9.6 — Cas 3 — Réponse hors-sujet identifiée. Le coach explique
         // pédagogiquement la nuance, NE punit PAS, et permet de réessayer.
