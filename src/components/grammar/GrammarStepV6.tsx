@@ -645,7 +645,9 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1000 })
-    if (c.question_en) segs.push({ text: c.question_en, lang: 'en-GB', pauseAfter: 1000 })
+    if (c.question_en) segs.push({ text: c.question_en, lang: 'en-GB', pauseAfter: 800 })
+    // v9.84 — Annonce "Réponse :" avant la réponse pour bien la distinguer de la question.
+    if (answerFull) segs.push({ text: 'Réponse :', lang: 'fr-FR', pauseAfter: 300 })
     if (answerFull) segs.push({ text: answerFull, lang: 'en-GB', pauseAfter: 400 })
     if (c.answer_fr) segs.push({ text: c.answer_fr, lang: 'fr-FR', pauseAfter: 800 })
     // v8.5 — Si réponse négative présente, on la joue aussi

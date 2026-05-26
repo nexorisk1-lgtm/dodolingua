@@ -329,6 +329,14 @@ const EN_A1_WORDS = new Set([
   'tom', "tom's", 'john', "john's", 'anna', "anna's", 'mary', 'paul', 'lucy',
   // Mots techniques cours (apostrophe s)
   "mother's", "father's", "sister's", "brother's", "dog's", "cat's", "friend's", "anna's", "john's", "tom's", "ben's",
+  // v9.84 — B1 critique : couvrir les cours USED TO / BE USED TO / GET USED TO et autres B1
+  'used', 'using', 'use', 'uses',
+  'weather', 'spicy', 'cold', 'hot', 'warm',
+  'france', 'canada', 'england', 'germany', 'spain', 'italy', 'china', 'japan',
+  'wake', 'wakes', 'woke', 'waking',
+  'still', 'yet', 'already',
+  'exercise', 'exercises', 'exercising', 'exercised',
+  'meeting', 'meetings',
 ])
 
 export function isEnglishToken(token: string): boolean {
@@ -826,4 +834,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.83'
+export const TTS_VERSION = 'v9.84'
