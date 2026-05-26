@@ -425,8 +425,9 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
-    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB', pauseAfter: 400 })
-    if (c.audio_full && c.audio_fr) segs.push({ text: 'veut dire', lang: 'fr-FR', pauseAfter: 250 })
+    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB', pauseAfter: 600 })
+    // v9.85 — Plus de "veut dire" injecté par le code : créait un doublon avec audio_fr
+    // qui commençait souvent par "Ça veut dire :". L'audio_fr doit être autosuffisant.
     if (c.audio_fr) segs.push({ text: c.audio_fr, lang: 'fr-FR', pauseAfter: 1000 })
     segs.push({ text: 'À toi de parler. Appuie sur le bouton pour parler.', lang: 'fr-FR', pauseAfter: 0 })
     return segs
@@ -783,7 +784,8 @@ function StepValidationFinal({ step, onContinue, rate, userName, topicTitle }: {
             {items.map((it, i) => (
               <li key={i} className="flex items-start gap-2 text-base font-semibold text-gray-900">
                 <span className="text-green-600">✓</span>
-                <span>{it}</span>
+                {/* v9.85 — Parser les **xxx** au lieu d'afficher les astérisques brutes */}
+                <MixedText text={it} />
               </li>
             ))}
           </ul>
@@ -917,28 +919,32 @@ function StepRecognition({
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
-  // v6.1 — Audio auto au mount : intro + question FR + audio EN cible (la bonne phrase)
+  // v9.85 — Refonte ACCESSIBILITÉ ILLETTRÉS : ne JAMAIS lire la bonne réponse en EN
+  // automatiquement. Sinon les illettrés sont défavorisés (ils ne peuvent pas associer
+  // la voix EN à une option sans lire). Maintenant : audio_intro + question_fr seulement.
+  // L'utilisateur clique 🔊 sur chaque option pour entendre, puis clique l'option pour valider.
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
     if (c.question_fr) segs.push({ text: c.question_fr, lang: 'fr-FR', pauseAfter: 800 })
-    if (c.audio_full) segs.push({ text: c.audio_full, lang: 'en-GB' })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoIntro(segments, rate)
   const replay = () => void speakSequence(segments, rate)
 
+  // v9.85 — Bouton 🔊 sur chaque option : lit l'option en EN sans valider
+  function listenOption(idx: number, e: React.MouseEvent) {
+    e.stopPropagation()  // empêche le clic d'être traité comme une sélection
+    const lang = detectOptionLang(options[idx].text)
+    speak(options[idx].text, null, { lang })
+  }
+
   async function pick(idx: number) {
     if (picked !== null && options[picked].correct) return // déjà gagné, ignore
     setPicked(idx)
-    // v8.16 — Détection auto FR/EN pour la voix
     const lang = detectOptionLang(options[idx].text)
     if (options[idx].correct) {
-      // v8.19 — On AWAIT speakSequence pour que la voix finisse de prononcer la
-      // réponse complète avant le passage à la page suivante. Avant v8.19, on
-      // utilisait speak() puis setTimeout 900ms, ce qui coupait les phrases longues
-      // (ex: "Je ne suis pas français" prend ~2s à dire).
       await speakSequence([{ text: options[idx].text, lang }], rate)
       setTimeout(() => onContinue(true), 500)
     } else {
@@ -956,13 +962,9 @@ function StepRecognition({
         {c.question_fr && (
           <MixedText text={c.question_fr} className="text-lg font-semibold text-primary-900 block" />
         )}
-        {/* v6.1 — Bouton audio EN visible pour réécouter la phrase cible */}
-        {c.audio_full && (
-          <button onClick={() => speak(c.audio_full!)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-100 text-primary-800 rounded-full font-bold hover:bg-primary-200">
-            🔊 Réécouter
-          </button>
-        )}
+        {/* v9.85 — Le bouton "Réécouter la bonne réponse" est retiré : il révélait la
+            réponse aux illettrés qui ne pouvaient pas lire. Pour réécouter, utilisez
+            le bouton 🔊 à côté de chaque option ci-dessous. */}
       </div>
       <div className="space-y-2">
         {options.map((opt, idx) => {
@@ -970,16 +972,24 @@ function StepRecognition({
           const isWrong = isPicked && shown === 'wrong'
           const isCorrect = isPicked && opt.correct
           return (
-            <button key={idx}
-              onClick={() => pick(idx)}
-              disabled={isCorrect}
-              className={`w-full p-4 rounded-xl border-2 font-bold text-lg transition-all ${
-                isCorrect ? 'border-ok bg-green-50 text-ok' :
-                isWrong ? 'border-warn bg-red-50 text-warn animate-shake' :
-                'border-rule bg-white hover:bg-primary-50 hover:border-primary-300'
-              }`}>
-              {opt.text}
-            </button>
+            <div key={idx} className="flex items-stretch gap-2">
+              {/* v9.85 — Haut-parleur cliquable : permet d'écouter l'option en EN
+                  sans la valider. Indispensable pour les illettrés. */}
+              <button onClick={(e) => listenOption(idx, e)} aria-label="Écouter cette option"
+                className="flex-none w-12 rounded-xl border-2 border-primary-200 bg-primary-50 hover:bg-primary-100 text-xl flex items-center justify-center">
+                🔊
+              </button>
+              <button
+                onClick={() => pick(idx)}
+                disabled={isCorrect}
+                className={`flex-1 p-4 rounded-xl border-2 font-bold text-lg transition-all ${
+                  isCorrect ? 'border-ok bg-green-50 text-ok' :
+                  isWrong ? 'border-warn bg-red-50 text-warn animate-shake' :
+                  'border-rule bg-white hover:bg-primary-50 hover:border-primary-300'
+                }`}>
+                {opt.text}
+              </button>
+            </div>
           )
         })}
       </div>
