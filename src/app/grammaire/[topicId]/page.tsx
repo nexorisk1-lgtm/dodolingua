@@ -47,6 +47,20 @@ export default function GrammarTopicPage() {
   const [bestStreak, setBestStreak] = useState(0)
   // v9.9 — Bouton "Réécouter" → remount du step via replayKey
   const [replayKey, setReplayKey] = useState(0)
+  // v9.80 — Bouton "Pause / Reprendre" pour interrompre l'audio et prendre des notes
+  const [isPaused, setIsPaused] = useState(false)
+
+  // v9.80 — Toggle pause/resume de la synthèse vocale (Web Speech API)
+  function togglePause() {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume()
+      setIsPaused(false)
+    } else if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.pause()
+      setIsPaused(true)
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -204,9 +218,20 @@ export default function GrammarTopicPage() {
           - 'v5' ou null → GrammarStep ancien (compat ascendante pour 278 topics non migrés) */}
       {phase === 'steps' && steps[stepIdx] && topic.lesson_format_version === 'v6' && (
         <Card>
-          <div className="flex justify-end mb-2">
+          <div className="flex justify-end gap-2 mb-2">
             <button
-              onClick={() => { stopSpeaking(); setReplayKey(k => k + 1); }}
+              onClick={togglePause}
+              className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                isPaused
+                  ? 'text-white bg-amber-500 hover:bg-amber-600'
+                  : 'text-amber-700 bg-amber-50 hover:bg-amber-100'
+              }`}
+              aria-label={isPaused ? 'Reprendre la lecture' : 'Mettre en pause'}
+            >
+              {isPaused ? '▶️ Reprendre' : '⏸ Pause'}
+            </button>
+            <button
+              onClick={() => { stopSpeaking(); setIsPaused(false); setReplayKey(k => k + 1); }}
               className="text-xs font-semibold text-primary-700 hover:text-primary-900 bg-primary-50 hover:bg-primary-100 px-3 py-1 rounded-full"
               aria-label="Réécouter la question"
             >
@@ -228,9 +253,20 @@ export default function GrammarTopicPage() {
       )}
       {phase === 'steps' && steps[stepIdx] && topic.lesson_format_version !== 'v6' && (
         <Card>
-          <div className="flex justify-end mb-2">
+          <div className="flex justify-end gap-2 mb-2">
             <button
-              onClick={() => { stopSpeaking(); setReplayKey(k => k + 1); }}
+              onClick={togglePause}
+              className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                isPaused
+                  ? 'text-white bg-amber-500 hover:bg-amber-600'
+                  : 'text-amber-700 bg-amber-50 hover:bg-amber-100'
+              }`}
+              aria-label={isPaused ? 'Reprendre la lecture' : 'Mettre en pause'}
+            >
+              {isPaused ? '▶️ Reprendre' : '⏸ Pause'}
+            </button>
+            <button
+              onClick={() => { stopSpeaking(); setIsPaused(false); setReplayKey(k => k + 1); }}
               className="text-xs font-semibold text-primary-700 hover:text-primary-900 bg-primary-50 hover:bg-primary-100 px-3 py-1 rounded-full"
               aria-label="Réécouter la question"
             >
