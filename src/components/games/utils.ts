@@ -485,6 +485,12 @@ export interface SequenceSegment {
 // même après stopSpeaking(), créant le bug de décalage audio entre étapes.
 let __sequenceLock = false
 let __sequenceId = 0
+// v9.83 — Flag "stop manuel" : quand l'utilisateur clique sur ⏹ Stop, on évite
+// que l'auto-next (useAutoIntroWithAutoNext) déclenche la lecture de l'étape suivante.
+// Reset automatiquement au démarrage d'une nouvelle speakSequence.
+let __manualStop = false
+export function wasManuallyStopped(): boolean { return __manualStop }
+export function resetManualStop(): void { __manualStop = false }
 
 // v8.0 — Helper d'écoute "est-ce que le TTS est en train de parler"
 // Permet aux composants UI de verrouiller "Suivant" pendant la lecture.
@@ -515,6 +521,7 @@ export async function speakSequence(
   window.speechSynthesis.cancel()
   __sequenceId++  // invalide toute séquence en cours
   __sequenceLock = true
+  __manualStop = false  // v9.83 — reset flag stop manuel à chaque nouvelle séquence
   const myId = __sequenceId
   __notifySpeaking(true)
 
@@ -638,12 +645,14 @@ export async function speakSequence(
   }
 }
 
-/** Stop immédiat de toute lecture en cours (invalide les sequences async actives) */
+/** Stop immédiat de toute lecture en cours (invalide les sequences async actives).
+ *  v9.83 — Set aussi __manualStop = true pour bloquer l'auto-next à l'étape suivante. */
 export function stopSpeaking(): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
   window.speechSynthesis.cancel()
   __sequenceLock = false
   __sequenceId++  // v8.0 — invalide toute speakSequence en cours
+  __manualStop = true  // v9.83 — l'auto-next vérifie ce flag avant de poursuivre
   __notifySpeaking(false)
 }
 
@@ -817,4 +826,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.16'
+export const TTS_VERSION = 'v9.83'

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { speak, speakSequence, stopSpeaking, TTS_VERSION, recognizeSpeech, isEnglishToken, type SequenceSegment } from '@/components/games/utils'
+import { speak, speakSequence, stopSpeaking, wasManuallyStopped, TTS_VERSION, recognizeSpeech, isEnglishToken, type SequenceSegment } from '@/components/games/utils'
 
 /**
  * V6 — Composant unifié pour les 13 types d'étapes du nouveau format grammaire.
@@ -156,8 +156,13 @@ function useAutoIntroWithAutoNext(segments: SequenceSegment[], rate: number, onC
     let cancelled = false
     const run = async () => {
       if (segments.length > 0) await speakSequence(segments, rate)
-      if (!cancelled) {
-        setTimeout(() => { if (!cancelled) onContinue() }, 2000)
+      // v9.83 — Si user a cliqué ⏹ Stop pendant la lecture, on annule l'auto-next.
+      // Sans ce check, l'utilisateur clique Stop, l'audio se coupe, MAIS l'auto-next
+      // passe quand même à l'étape suivante 2s plus tard → impression que ça reprend tout seul.
+      if (!cancelled && !wasManuallyStopped()) {
+        setTimeout(() => {
+          if (!cancelled && !wasManuallyStopped()) onContinue()
+        }, 2000)
       }
     }
     const t = setTimeout(() => void run(), 300)
