@@ -47,19 +47,11 @@ export default function GrammarTopicPage() {
   const [bestStreak, setBestStreak] = useState(0)
   // v9.9 — Bouton "Réécouter" → remount du step via replayKey
   const [replayKey, setReplayKey] = useState(0)
-  // v9.80 — Bouton "Pause / Reprendre" pour interrompre l'audio et prendre des notes
-  const [isPaused, setIsPaused] = useState(false)
-
-  // v9.80 — Toggle pause/resume de la synthèse vocale (Web Speech API)
-  function togglePause() {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume()
-      setIsPaused(false)
-    } else if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.pause()
-      setIsPaused(true)
-    }
+  // v9.82 — Bouton "Stop" : Chrome a un bug qui reprend la lecture après pause()
+  // donc on fait un vrai stop avec stopSpeaking() (cancel + invalide la sequence)
+  // L'utilisateur peut ensuite cliquer "Réécouter" pour relancer depuis le début.
+  function stopAudio() {
+    stopSpeaking()
   }
 
   useEffect(() => {
@@ -220,18 +212,14 @@ export default function GrammarTopicPage() {
         <Card>
           <div className="flex justify-end gap-2 mb-2">
             <button
-              onClick={togglePause}
-              className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                isPaused
-                  ? 'text-white bg-amber-500 hover:bg-amber-600'
-                  : 'text-amber-700 bg-amber-50 hover:bg-amber-100'
-              }`}
-              aria-label={isPaused ? 'Reprendre la lecture' : 'Mettre en pause'}
+              onClick={stopAudio}
+              className="text-xs font-semibold text-amber-700 hover:text-white bg-amber-50 hover:bg-amber-500 px-3 py-1 rounded-full"
+              aria-label="Arrêter l'audio"
             >
-              {isPaused ? '▶️ Reprendre' : '⏸ Pause'}
+              ⏹ Stop
             </button>
             <button
-              onClick={() => { stopSpeaking(); setIsPaused(false); setReplayKey(k => k + 1); }}
+              onClick={() => { stopSpeaking(); setReplayKey(k => k + 1); }}
               className="text-xs font-semibold text-primary-700 hover:text-primary-900 bg-primary-50 hover:bg-primary-100 px-3 py-1 rounded-full"
               aria-label="Réécouter la question"
             >
@@ -255,18 +243,14 @@ export default function GrammarTopicPage() {
         <Card>
           <div className="flex justify-end gap-2 mb-2">
             <button
-              onClick={togglePause}
-              className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                isPaused
-                  ? 'text-white bg-amber-500 hover:bg-amber-600'
-                  : 'text-amber-700 bg-amber-50 hover:bg-amber-100'
-              }`}
-              aria-label={isPaused ? 'Reprendre la lecture' : 'Mettre en pause'}
+              onClick={stopAudio}
+              className="text-xs font-semibold text-amber-700 hover:text-white bg-amber-50 hover:bg-amber-500 px-3 py-1 rounded-full"
+              aria-label="Arrêter l'audio"
             >
-              {isPaused ? '▶️ Reprendre' : '⏸ Pause'}
+              ⏹ Stop
             </button>
             <button
-              onClick={() => { stopSpeaking(); setIsPaused(false); setReplayKey(k => k + 1); }}
+              onClick={() => { stopSpeaking(); setReplayKey(k => k + 1); }}
               className="text-xs font-semibold text-primary-700 hover:text-primary-900 bg-primary-50 hover:bg-primary-100 px-3 py-1 rounded-full"
               aria-label="Réécouter la question"
             >
