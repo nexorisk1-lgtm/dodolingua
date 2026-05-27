@@ -587,8 +587,12 @@ export async function speakSequence(
       // S'applique côté FR uniquement (côté EN il faudrait "means", mais "=" est rare en contenu EN).
       if (seg.lang === 'fr-FR') {
         cleanText = cleanText.replace(/\s*=\s*/g, ' veut dire ')
+        // v9.89 — Remplacement "/" → "ou" pour TTS (ex: "verbe + ING / nom" → "verbe + ING ou nom")
+        cleanText = cleanText.replace(/\s*\/\s*/g, ' ou ')
       } else {
         cleanText = cleanText.replace(/\s*=\s*/g, ' means ')
+        // v9.89 — Remplacement "/" → "," en EN (ex: "am / is / are" → "am, is, are")
+        cleanText = cleanText.replace(/\s*\/\s*/g, ', ')
       }
       // v6.1 — Fix "capital I" via homophone "eye"
       if (seg.lang === 'en-GB' && /^I[.,!?;:]?$/.test(cleanText)) {
@@ -846,4 +850,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.88'
+export const TTS_VERSION = 'v9.89'

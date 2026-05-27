@@ -2,6 +2,13 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { speak, speakSequence, stopSpeaking, wasManuallyStopped, TTS_VERSION, recognizeSpeech, isEnglishToken, type SequenceSegment } from '@/components/games/utils'
 
+// v9.89 — Helper : tout clic utilisateur sur un bouton audio doit annuler l'auto-next
+// pour que la page ne change pas pendant que la personne écoute. Sinon : frustration.
+function userPlay(text: string, opts?: { lang?: 'fr-FR' | 'en-GB' }) {
+  stopSpeaking() // set __manualStop = true → useAutoIntroWithAutoNext skip onContinue
+  speak(text, null, opts ? { lang: opts.lang } : {})
+}
+
 /**
  * V6 — Composant unifié pour les 13 types d'étapes du nouveau format grammaire.
  *
@@ -157,12 +164,12 @@ function useAutoIntroWithAutoNext(segments: SequenceSegment[], rate: number, onC
     const run = async () => {
       if (segments.length > 0) await speakSequence(segments, rate)
       // v9.83 — Si user a cliqué ⏹ Stop pendant la lecture, on annule l'auto-next.
-      // Sans ce check, l'utilisateur clique Stop, l'audio se coupe, MAIS l'auto-next
-      // passe quand même à l'étape suivante 2s plus tard → impression que ça reprend tout seul.
+      // v9.89 — Délai augmenté de 2s → 5s pour laisser le temps de cliquer un exemple
+      //         et l'écouter sans que la page change automatiquement.
       if (!cancelled && !wasManuallyStopped()) {
         setTimeout(() => {
           if (!cancelled && !wasManuallyStopped()) onContinue()
-        }, 2000)
+        }, 5000)
       }
     }
     const t = setTimeout(() => void run(), 300)
@@ -213,7 +220,34 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
 
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
-    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1500 })
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
+
+    // v9.89 — Décomposition audio de la formule pour les illettrés.
+    // Pour chaque token : "plus" en FR entre, puis le mot (EN ou FR selon détection).
+    if (c.formula?.tokens && c.formula.tokens.length > 0) {
+      segs.push({ text: 'On met :', lang: 'fr-FR', pauseAfter: 400 })
+      c.formula.tokens.forEach((t, i) => {
+        if (i > 0) segs.push({ text: 'plus', lang: 'fr-FR', pauseAfter: 150 })
+        const isEN = isEnglishToken(t.text)
+        segs.push({ text: t.text, lang: isEN ? 'en-GB' : 'fr-FR', pauseAfter: 350 })
+      })
+    }
+
+    // v9.89 — Décomposition audio de l'exemple : pour chaque token EN, dire son rôle FR.
+    // Les tokens dont le rôle correspondant est un marqueur EN (used to, am/is/are) :
+    // on ne répète pas le rôle FR (sinon on lirait "used to" en FR après "used to" en EN).
+    if (c.example?.tokens && c.example.tokens.length > 0 && c.formula?.tokens) {
+      segs.push({ text: 'Par exemple :', lang: 'fr-FR', pauseAfter: 600 })
+      c.example.tokens.forEach((t, i) => {
+        segs.push({ text: t.text, lang: 'en-GB', pauseAfter: 250 })
+        const role = c.formula!.tokens[i]
+        if (role && !isEnglishToken(role.text)) {
+          segs.push({ text: role.text, lang: 'fr-FR', pauseAfter: 400 })
+        }
+      })
+      if (c.example.fr) segs.push({ text: c.example.fr, lang: 'fr-FR', pauseAfter: 800 })
+    }
+
     rules.forEach((r) => {
       segs.push({ text: r.text_fr, lang: 'fr-FR', pauseAfter: 1000 })
     })
@@ -283,7 +317,7 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
       {c.example && c.example.tokens && c.example.tokens.length > 0 && (
         <div className="bg-white rounded-xl p-4 border-2 border-primary-200">
           <div className="text-xs uppercase font-bold text-primary-700 tracking-wide mb-3 text-center">✅ Exemple</div>
-          <button onClick={() => speak(exampleEn, null, { lang: 'en-GB' })}
+          <button onClick={() => userPlay(exampleEn, { lang: 'en-GB' })}
             className="w-full flex flex-wrap items-center justify-center gap-2 hover:bg-primary-50 rounded-lg p-2 transition-colors">
             <span className="text-xl">🔊</span>
             {c.example.tokens.map((t, i) => <TokenChip key={i} token={t} />)}
@@ -310,7 +344,7 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
                 {r.examples_en && r.examples_en.length > 0 && r.examples_fr && r.examples_fr.length === r.examples_en.length && (
                   <div className="grid grid-cols-1 gap-1.5 pt-1">
                     {r.examples_en.map((ex, k) => (
-                      <button key={k} onClick={() => speak(ex)}
+                      <button key={k} onClick={() => userPlay(ex, { lang: 'en-GB' })}
                         className="px-3 py-2 rounded-lg bg-white border-2 border-red-300 hover:bg-red-50 flex items-center gap-2 text-left">
                         <span className="text-red-500">🔊</span>
                         <span className="font-extrabold text-red-700">{ex}</span>
@@ -324,7 +358,7 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
                 {r.examples_en && r.examples_en.length > 0 && !r.examples_fr && (
                   <div className="flex flex-wrap gap-2 pt-1">
                     {r.examples_en.map((ex, k) => (
-                      <button key={k} onClick={() => speak(ex)}
+                      <button key={k} onClick={() => userPlay(ex, { lang: 'en-GB' })}
                         className="px-3 py-1.5 rounded-lg bg-white border-2 border-red-300 text-red-700 font-bold hover:bg-red-50 flex items-center gap-1.5">
                         🔊 {ex}
                       </button>
