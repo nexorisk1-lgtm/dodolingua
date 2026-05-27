@@ -198,8 +198,14 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     audio_intro?: string;
     title_fr?: string;
     rules?: { icon: string; text_fr: string; examples_en?: string[]; examples_fr?: string[] }[];
+    // v9.88 — Carte mentale visuelle pour les étapes de structure grammaticale.
+    // formula = la formule abstraite (Sujet + used to + verbe + info), tokens colorés.
+    // example = un exemple concret coloré + sa traduction FR + audio EN au clic.
+    formula?: { tokens: ColorToken[]; separator?: string };
+    example?: { tokens: ColorToken[]; fr?: string; en?: string };
   }
   const rules = c.rules || []
+  const exampleEn = c.example?.en || c.example?.tokens?.map(t => t.text).join(' ') || ''
 
   // v8.11 — Affichage progressif des rules : chaque ligne apparaît quand sa partie
   // audio commence à être lue. Estimation : ~80ms par caractère + pause après segment.
@@ -258,6 +264,34 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
           {/* v9.86 — Parser les **xxx** pour éviter que "**USED TO**" s'affiche avec les astérisques */}
           <MixedText text={c.title_fr} />
         </h2>
+      )}
+      {/* v9.88 — Carte mentale : formule visuelle en chips colorées */}
+      {c.formula && c.formula.tokens && c.formula.tokens.length > 0 && (
+        <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200">
+          <div className="text-xs uppercase font-bold text-blue-700 tracking-wide mb-3 text-center">📐 La formule</div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {c.formula.tokens.map((t, i) => (
+              <span key={i} className="flex items-center gap-2">
+                {i > 0 && <span className="text-gray-400 font-bold text-lg">{c.formula!.separator || '+'}</span>}
+                <TokenChip token={t} />
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* v9.88 — Exemple visuel : tokens colorés cliquables pour entendre EN + traduction FR */}
+      {c.example && c.example.tokens && c.example.tokens.length > 0 && (
+        <div className="bg-white rounded-xl p-4 border-2 border-primary-200">
+          <div className="text-xs uppercase font-bold text-primary-700 tracking-wide mb-3 text-center">✅ Exemple</div>
+          <button onClick={() => speak(exampleEn, null, { lang: 'en-GB' })}
+            className="w-full flex flex-wrap items-center justify-center gap-2 hover:bg-primary-50 rounded-lg p-2 transition-colors">
+            <span className="text-xl">🔊</span>
+            {c.example.tokens.map((t, i) => <TokenChip key={i} token={t} />)}
+          </button>
+          {c.example.fr && (
+            <div className="text-center mt-3 text-gray-700 font-semibold italic">→ {c.example.fr}</div>
+          )}
+        </div>
       )}
       <div className="space-y-3">
         {rules.slice(0, visibleCount).map((r, i) => (
