@@ -351,8 +351,12 @@ const EN_A1_WORDS = new Set([
   'coach', 'coaches', 'their', 'this', 'that',
 ])
 
+// v9.90 — Nettoyage ponctuation avant tokenize pour ne pas casser sur "/" ou "."
+//  Avant : "am / is / are" → ['am','/','is','/','are'] → '/' pas EN → FR (BUG).
+//  Maintenant : "/" et ponctuation finale sont retirés avant la vérification.
 export function isEnglishToken(token: string): boolean {
-  const t = token.toLowerCase().trim().replace(/[.,!?;:]/g, '')
+  // v9.90 — Nettoyer "/" (séparateur alternatives EN) ET ponctuation finale avant tokenize.
+  const t = token.toLowerCase().trim().replace(/[.,!?;:\/]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!t) return false
   // Si le token contient des accents FR → FR direct
   if (/[éèêëàâäîïôöùûüçÿœæ]/i.test(t)) return false
@@ -850,4 +854,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.89'
+export const TTS_VERSION = 'v9.90'

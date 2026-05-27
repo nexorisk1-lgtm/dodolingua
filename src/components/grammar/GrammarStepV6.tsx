@@ -227,7 +227,8 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     if (c.formula?.tokens && c.formula.tokens.length > 0) {
       segs.push({ text: 'On met :', lang: 'fr-FR', pauseAfter: 400 })
       c.formula.tokens.forEach((t, i) => {
-        if (i > 0) segs.push({ text: 'plus', lang: 'fr-FR', pauseAfter: 150 })
+        // v9.90 — "puis" sonne mieux que "plus" en TTS (plus = "ploose" en lecture littérale)
+        if (i > 0) segs.push({ text: 'puis', lang: 'fr-FR', pauseAfter: 150 })
         const isEN = isEnglishToken(t.text)
         segs.push({ text: t.text, lang: isEN ? 'en-GB' : 'fr-FR', pauseAfter: 350 })
       })
@@ -249,7 +250,19 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     }
 
     rules.forEach((r) => {
-      segs.push({ text: r.text_fr, lang: 'fr-FR', pauseAfter: 1000 })
+      segs.push({ text: r.text_fr, lang: 'fr-FR', pauseAfter: 600 })
+      // v9.90 — Auto-lecture des exemples EN + traductions FR de chaque rule
+      // pour que les illettrés entendent la bonne phrase sans cliquer le bouton.
+      // Avant : sur les étapes Erreur, "La bonne phrase est : ..." se terminait
+      // sans qu'on entende l'exemple → utilisateur frustré.
+      if (r.examples_en && r.examples_en.length > 0) {
+        r.examples_en.forEach((ex, idx) => {
+          segs.push({ text: ex, lang: 'en-GB', pauseAfter: 350 })
+          if (r.examples_fr && r.examples_fr[idx]) {
+            segs.push({ text: r.examples_fr[idx], lang: 'fr-FR', pauseAfter: 800 })
+          }
+        })
+      }
     })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
