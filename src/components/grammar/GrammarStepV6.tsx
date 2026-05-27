@@ -1154,18 +1154,25 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
   }
   const rows = c.pattern_rows || []
 
-  const segments: SequenceSegment[] = useMemo(() => {
-    const segs: SequenceSegment[] = []
-    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1500 })
-    rows.forEach(r => {
-      segs.push({ text: `${r.subject} ${r.verb}`, lang: 'en-GB', pauseAfter: 600 })
-    })
-    return segs
+  // v9.93 — Audio_intro seul, sans auto-lecture des paires (cassait la dynamique :
+  // l'utilisateur n'avait pas le temps de cliquer une ligne que la suivante était lue
+  // automatiquement et la page changeait). Maintenant : audio_intro lu, puis l'utilisateur
+  // touche chaque ligne à son rythme. Pas d'auto-next non plus.
+  const introSegments: SequenceSegment[] = useMemo(() => {
+    return c.audio_intro ? [{ text: c.audio_intro, lang: 'fr-FR' as const, pauseAfter: 0 }] : []
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // v7.2 — Auto-next : pattern est passif (lecture du tableau)
-  useAutoIntroWithAutoNext(segments, rate, onContinue)
-  const replay = () => void speakSequence(segments, rate)
+  useAutoIntro(introSegments, rate)
+  const replay = () => void speakSequence(introSegments, rate)
+
+  // v9.93 — Au clic d'une ligne : EN ("I am") puis FR ("je suis") pour bilingue
+  function playRow(r: { subject: string; verb: string; fr: string }) {
+    stopSpeaking()
+    void speakSequence([
+      { text: `${r.subject} ${r.verb}`, lang: 'en-GB', pauseAfter: 400 },
+      { text: r.fr, lang: 'fr-FR' }
+    ], rate)
+  }
 
   return (
     <div className="space-y-5">
@@ -1173,7 +1180,7 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
       <div className="bg-gray-50 rounded-xl p-3 space-y-2">
         {rows.map((r, i) => (
           <button key={i}
-            onClick={() => speak(`${r.subject} ${r.verb}`)}
+            onClick={() => playRow(r)}
             className="w-full flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors">
             <TokenChip token={{ text: r.subject, color: 'blue' }} />
             <span className="text-gray-400 text-xl">→</span>
