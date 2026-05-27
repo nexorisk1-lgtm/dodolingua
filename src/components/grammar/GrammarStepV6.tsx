@@ -175,18 +175,15 @@ function useAutoIntroWithAutoNext(segments: SequenceSegment[], rate: number, onC
 // HEADER GÉNÉRIQUE (icône + label + bouton replay)
 // ============================================================================
 
-function StepHeader({ icon, label, onReplay }: { icon: string; label: string; onReplay?: () => void }) {
+function StepHeader({ icon, label }: { icon: string; label: string; onReplay?: () => void }) {
+  // v9.86 — Le bouton 🔊 individuel du StepHeader est retiré : doublon avec le
+  // bouton "Réécouter" du header global de la page (page.tsx). Le onReplay reste
+  // exposé dans l'interface pour la compat ascendante mais n'est plus utilisé ici.
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="text-xs uppercase font-bold text-primary-500 tracking-wider flex items-center gap-2">
         <span className="text-base">{icon}</span> {label}
       </div>
-      {onReplay && (
-        <button onClick={onReplay} aria-label="Réécouter"
-          className="w-9 h-9 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100 text-base">
-          🔊
-        </button>
-      )}
     </div>
   )
 }
@@ -257,7 +254,10 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     <div className="space-y-5">
       <StepHeader icon="📚" label="Pour commencer" onReplay={replay} />
       {c.title_fr && (
-        <h2 className="text-2xl font-extrabold text-primary-900 text-center">{c.title_fr}</h2>
+        <h2 className="text-2xl font-extrabold text-primary-900 text-center">
+          {/* v9.86 — Parser les **xxx** pour éviter que "**USED TO**" s'affiche avec les astérisques */}
+          <MixedText text={c.title_fr} />
+        </h2>
       )}
       <div className="space-y-3">
         {rules.slice(0, visibleCount).map((r, i) => (
@@ -749,20 +749,24 @@ function StepValidationFinal({ step, onContinue, rate, userName, topicTitle }: {
   // les achievements restaient visuels uniquement → invisible pour les illettrés.
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
+    // v9.86 — Le titre du cours (ex: "USED TO / BE USED TO / GET USED TO") est lu
+    // en voix EN. Pour cela on l'entoure de **xxx** que speakSequence parse pour
+    // basculer en voix anglaise sur la portion concernée.
     if (firstName && topicTitle) {
-      segs.push({ text: `Bravo ${firstName}, tu as terminé ton cours sur ${topicTitle}.`, lang: 'fr-FR', pauseAfter: 1200 })
+      segs.push({ text: `Bravo ${firstName}, tu as terminé ton cours sur **${topicTitle}**.`, lang: 'fr-FR', pauseAfter: 1200 })
     } else if (firstName) {
       segs.push({ text: `Bravo ${firstName}, tu as terminé ce cours.`, lang: 'fr-FR', pauseAfter: 1200 })
     } else if (c.audio_intro) {
       segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
     }
-    // v8.24 — Lecture vocale des achievements (= "Tu sais maintenant..." du pavé vert)
     if (items.length > 0) {
       segs.push({ text: 'Tu sais maintenant :', lang: 'fr-FR', pauseAfter: 800 })
       items.forEach((achievement) => {
         segs.push({ text: achievement, lang: 'fr-FR', pauseAfter: 600 })
       })
     }
+    // v9.86 — Invitation à pratiquer avec le coach (cohérence avec le module vocabulaire)
+    segs.push({ text: 'Maintenant, tu peux aller t\'entraîner avec ton coach pour pratiquer.', lang: 'fr-FR' })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstName, topicTitle])

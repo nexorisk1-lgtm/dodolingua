@@ -115,13 +115,21 @@ export function speak(text: string, voiceName?: string | null, optsOrRate: Speak
   // v5.5 — Si opts.lang est fourni (ex: 'fr-FR'), on prend une voix de cette langue
   // au lieu de la voix utilisateur par défaut. Permet de lire les textes français
   // pour les utilisateurs en parcours oral pur.
+  // v9.86 — Utilise getBestVoice / getBestFrVoice pour avoir la MÊME voix premium
+  // que speakSequence(). Avant : speak() prenait la 1ère voix EN trouvée (souvent
+  // une voix de qualité inférieure) → l'utilisatrice entendait 2 voix EN différentes
+  // entre le 🔊 d'une option et la validation de la bonne réponse.
   if (opts.lang) {
-    const voices = window.speechSynthesis.getVoices()
     const langPrefix = opts.lang.split('-')[0]
-    const v = voices.find(x => x.lang === opts.lang)
-          || voices.find(x => x.lang.startsWith(langPrefix))
-    if (v) { u.voice = v; u.lang = v.lang }
-    else u.lang = opts.lang
+    const best = langPrefix === 'fr' ? getBestFrVoice() : getBestVoice('en')
+    if (best) { u.voice = best; u.lang = best.lang }
+    else {
+      const voices = window.speechSynthesis.getVoices()
+      const v = voices.find(x => x.lang === opts.lang)
+            || voices.find(x => x.lang.startsWith(langPrefix))
+      if (v) { u.voice = v; u.lang = v.lang }
+      else u.lang = opts.lang
+    }
   } else if (voiceName) {
     const v = window.speechSynthesis.getVoices().find(v => v.name === voiceName)
     if (v) { u.voice = v; u.lang = v.lang }
@@ -834,4 +842,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.85'
+export const TTS_VERSION = 'v9.86'
