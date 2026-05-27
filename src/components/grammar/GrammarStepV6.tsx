@@ -249,6 +249,9 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
 
     // v9.89 — Décomposition audio de l'exemple : pour chaque token EN, dire son rôle FR.
     // v9.91 — Chaque segment de token est marqué meta.exampleTokenIdx pour la surbrillance.
+    // v9.96 — Après la décortication, l'anglais dit la phrase complète puis le français
+    //         traduit avec "ça veut dire". Évite que l'utilisateur perçoive le rôle FR
+    //         comme étant la traduction de la phrase.
     if (c.example?.tokens && c.example.tokens.length > 0 && c.formula?.tokens) {
       segs.push({ text: 'Par exemple :', lang: 'fr-FR', pauseAfter: 600 })
       c.example.tokens.forEach((t, i) => {
@@ -258,16 +261,22 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
           segs.push({ text: role.text, lang: 'fr-FR', pauseAfter: 400, meta: { exampleTokenIdx: i } })
         }
       })
-      if (c.example.fr) segs.push({ text: c.example.fr, lang: 'fr-FR', pauseAfter: 800 })
+      // v9.96 — Phrase complète EN puis "Ça veut dire" + traduction FR
+      const fullEn = c.example.en || c.example.tokens.map(t => t.text).join(' ')
+      if (fullEn) segs.push({ text: fullEn, lang: 'en-GB', pauseAfter: 400 })
+      if (c.example.fr) {
+        segs.push({ text: 'Ça veut dire :', lang: 'fr-FR', pauseAfter: 300 })
+        segs.push({ text: c.example.fr, lang: 'fr-FR', pauseAfter: 800 })
+      }
     }
 
     rules.forEach((r) => {
-      segs.push({ text: r.text_fr, lang: 'fr-FR', pauseAfter: 600 })
-      // v9.90 — Auto-lecture des exemples EN + traductions FR de chaque rule
-      // pour que les illettrés entendent la bonne phrase sans cliquer le bouton.
-      // Avant : sur les étapes Erreur, "La bonne phrase est : ..." se terminait
-      // sans qu'on entende l'exemple → utilisateur frustré.
+      segs.push({ text: r.text_fr, lang: 'fr-FR', pauseAfter: 500 })
+      // v9.90 — Auto-lecture des exemples EN + traductions FR de chaque rule.
+      // v9.96 — Injection de "Par exemple :" en FR entre le text_fr et les examples,
+      //         pour marquer une pause claire et éviter l'enchaînement abrupt.
       if (r.examples_en && r.examples_en.length > 0) {
+        segs.push({ text: 'Par exemple :', lang: 'fr-FR', pauseAfter: 400 })
         r.examples_en.forEach((ex, idx) => {
           segs.push({ text: ex, lang: 'en-GB', pauseAfter: 350 })
           if (r.examples_fr && r.examples_fr[idx]) {
