@@ -190,12 +190,15 @@ function useAutoIntroWithAutoNext(
 
 function StepHeader({ icon, label }: { icon: string; label: string; onReplay?: () => void }) {
   // v9.86 — Le bouton 🔊 individuel du StepHeader est retiré : doublon avec le
-  // bouton "Réécouter" du header global de la page (page.tsx). Le onReplay reste
-  // exposé dans l'interface pour la compat ascendante mais n'est plus utilisé ici.
+  // bouton "Réécouter" du header global de la page (page.tsx).
+  // v9.92 — Icône rendue conditionnellement : si icon="" (vide), on n'affiche RIEN.
+  // RÈGLE IMPÉRATIVE : pour l'étape Repeat, ne JAMAIS remettre d'icône micro dans
+  // ce header — il y a déjà le gros micro central, c'est un doublon visuel.
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="text-xs uppercase font-bold text-primary-500 tracking-wider flex items-center gap-2">
-        <span className="text-base">{icon}</span> {label}
+        {icon && <span className="text-base">{icon}</span>}
+        {label}
       </div>
     </div>
   )
@@ -221,6 +224,8 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
   const exampleEn = c.example?.en || c.example?.tokens?.map(t => t.text).join(' ') || ''
   // v9.91 — État pour la surbrillance du chip d'exemple en cours de lecture
   const [highlightedExampleIdx, setHighlightedExampleIdx] = useState<number | null>(null)
+  // v9.92 — Surbrillance étendue : aussi sur les chips de la FORMULE pendant la lecture
+  const [highlightedFormulaIdx, setHighlightedFormulaIdx] = useState<number | null>(null)
 
   // v8.11 — Affichage progressif des rules : chaque ligne apparaît quand sa partie
   // audio commence à être lue. Estimation : ~80ms par caractère + pause après segment.
@@ -231,14 +236,14 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
 
     // v9.89 — Décomposition audio de la formule pour les illettrés.
-    // Pour chaque token : "plus" en FR entre, puis le mot (EN ou FR selon détection).
+    // v9.92 — Chaque token de la formule a maintenant meta.formulaTokenIdx pour la surbrillance.
     if (c.formula?.tokens && c.formula.tokens.length > 0) {
       segs.push({ text: 'On met :', lang: 'fr-FR', pauseAfter: 400 })
       c.formula.tokens.forEach((t, i) => {
         // v9.90 — "puis" sonne mieux que "plus" en TTS (plus = "ploose" en lecture littérale)
         if (i > 0) segs.push({ text: 'puis', lang: 'fr-FR', pauseAfter: 150 })
         const isEN = isEnglishToken(t.text)
-        segs.push({ text: t.text, lang: isEN ? 'en-GB' : 'fr-FR', pauseAfter: 350 })
+        segs.push({ text: t.text, lang: isEN ? 'en-GB' : 'fr-FR', pauseAfter: 350, meta: { formulaTokenIdx: i } })
       })
     }
 
@@ -274,12 +279,21 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // v9.91 — Callback pour la surbrillance : quand un segment d'exemple démarre,
-  // on met l'index correspondant en évidence. Sinon on reset.
+  // v9.91 — Callback pour la surbrillance : quand un segment démarre, on met l'index
+  // correspondant en évidence (formule OU exemple selon meta). v9.92 — étendue à la formule.
   const onSegStart = (_idx: number, seg: SequenceSegment) => {
-    const tokenIdx = seg.meta?.exampleTokenIdx
-    if (typeof tokenIdx === 'number') setHighlightedExampleIdx(tokenIdx as number)
-    else setHighlightedExampleIdx(null)
+    const formulaIdx = seg.meta?.formulaTokenIdx
+    const exampleIdx = seg.meta?.exampleTokenIdx
+    if (typeof formulaIdx === 'number') {
+      setHighlightedFormulaIdx(formulaIdx as number)
+      setHighlightedExampleIdx(null)
+    } else if (typeof exampleIdx === 'number') {
+      setHighlightedExampleIdx(exampleIdx as number)
+      setHighlightedFormulaIdx(null)
+    } else {
+      setHighlightedFormulaIdx(null)
+      setHighlightedExampleIdx(null)
+    }
   }
   useAutoIntroWithAutoNext(segments, rate, onContinue, onSegStart)
 
@@ -326,7 +340,8 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
           <MixedText text={c.title_fr} />
         </h2>
       )}
-      {/* v9.88 — Carte mentale : formule visuelle en chips colorées */}
+      {/* v9.88 — Carte mentale : formule visuelle en chips colorées
+          v9.92 — Surbrillance synchronisée avec la lecture audio */}
       {c.formula && c.formula.tokens && c.formula.tokens.length > 0 && (
         <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200">
           <div className="text-xs uppercase font-bold text-blue-700 tracking-wide mb-3 text-center">📐 La formule</div>
@@ -334,7 +349,11 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
             {c.formula.tokens.map((t, i) => (
               <span key={i} className="flex items-center gap-2">
                 {i > 0 && <span className="text-gray-400 font-bold text-lg">{c.formula!.separator || '+'}</span>}
-                <TokenChip token={t} />
+                <span className={`inline-block transition-all duration-200 ${
+                  highlightedFormulaIdx === i ? 'scale-125 ring-4 ring-primary-400 ring-offset-2 rounded-lg' : ''
+                }`}>
+                  <TokenChip token={t} />
+                </span>
               </span>
             ))}
           </div>
@@ -625,8 +644,9 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
 
   return (
     <div className="space-y-5">
-      {/* v9.87 — Retrait du 🎤 dans le header (doublon avec le micro central) */}
-      <StepHeader icon="🗣️" label="Répète à voix haute" />
+      {/* v9.92 — Aucune icône dans le header Repeat. RÈGLE : pas de doublon micro.
+          Ne JAMAIS remettre 🎤 ni 🗣️ ici. */}
+      <StepHeader icon="" label="Répète à voix haute" />
 
       {/* Emoji contextuel */}
       {c.media?.emoji && <div className="text-center text-5xl">{c.media.emoji}</div>}
@@ -963,31 +983,43 @@ function StepImmersion({ step, onContinue, rate }: { step: StepV6; onContinue: (
 function StepDiscoverText({ step, onContinue, rate }: { step: StepV6; onContinue: () => void; rate: number }) {
   const c = step.content_json as { audio_intro?: string; tokens?: ColorToken[]; audio_fr?: string; media?: { emoji?: string } }
   const tokens = c.tokens || []
+  // v9.92 — Surbrillance du token en cours de lecture audio (comme StepIntro)
+  const [highlightedTokenIdx, setHighlightedTokenIdx] = useState<number | null>(null)
 
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
-    tokens.forEach(t => segs.push({ text: t.text, lang: 'en-GB', pauseAfter: 600 }))
+    // v9.92 — Chaque token est marqué pour surbrillance pendant la lecture
+    tokens.forEach((t, i) => segs.push({ text: t.text, lang: 'en-GB', pauseAfter: 600, meta: { tokenIdx: i } }))
     if (c.audio_fr) segs.push({ text: c.audio_fr, lang: 'fr-FR' })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // v9.92 — Callback sync surbrillance
+  const onSegStart = (_idx: number, seg: SequenceSegment) => {
+    const tokenIdx = seg.meta?.tokenIdx
+    if (typeof tokenIdx === 'number') setHighlightedTokenIdx(tokenIdx as number)
+    else setHighlightedTokenIdx(null)
+  }
   // v7.2 — Auto-next : discover_text est passif (visualisation tokens)
-  useAutoIntroWithAutoNext(segments, rate, onContinue)
-  const replay = () => void speakSequence(segments, rate)
+  useAutoIntroWithAutoNext(segments, rate, onContinue, onSegStart)
+  const replay = () => void speakSequence(segments, rate, onSegStart)
 
   return (
     <div className="space-y-6">
       <StepHeader icon="🎨" label="Découverte" onReplay={replay} />
       <div className="text-center space-y-4 py-4">
         {c.media?.emoji && <div className="text-5xl">{c.media.emoji}</div>}
-        {/* v6.1 — Tokens avec emoji + meaning_fr en dessous (ancrage cognitif renforcé) */}
+        {/* v6.1 — Tokens avec emoji + meaning_fr en dessous (ancrage cognitif renforcé)
+            v9.92 — Surbrillance synchronisée avec la lecture audio */}
         <div className="flex flex-wrap items-end justify-center gap-2">
           {tokens.map((t, i) => (
             <button
               key={i}
-              onClick={() => speak(t.text)}
-              className={`flex flex-col items-center gap-1 rounded-lg border-2 font-bold px-3 py-2 hover:scale-105 transition-transform ${colorClass(t.color)}`}>
+              onClick={() => userPlay(t.text, { lang: 'en-GB' })}
+              className={`flex flex-col items-center gap-1 rounded-lg border-2 font-bold px-3 py-2 hover:scale-105 transition-all duration-200 ${colorClass(t.color)} ${
+                highlightedTokenIdx === i ? 'scale-125 ring-4 ring-primary-400 ring-offset-2' : ''
+              }`}>
               <span className="text-2xl">{t.text}</span>
               {(t.emoji || t.meaning_fr) && (
                 <span className="text-[11px] font-medium opacity-90 leading-none">
