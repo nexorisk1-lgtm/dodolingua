@@ -349,6 +349,10 @@ const EN_A1_WORDS = new Set([
   'drive', 'drives', 'driving', 'drove',
   'school', 'schools', 'class', 'classes',
   'coach', 'coaches', 'their', 'this', 'that',
+  // v9.95 — Mots ajoutés pour la batch A1 (cours 2 à 6)
+  'call', 'calls', 'calling', 'called',
+  'well', 'ready', 'too',
+  'bag', 'bags',
 ])
 
 // v9.90 — Nettoyage ponctuation avant tokenize pour ne pas casser sur "/" ou "."
@@ -868,4 +872,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.94'
+export const TTS_VERSION = 'v9.95'
