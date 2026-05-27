@@ -429,7 +429,7 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
     // v9.85 — Plus de "veut dire" injecté par le code : créait un doublon avec audio_fr
     // qui commençait souvent par "Ça veut dire :". L'audio_fr doit être autosuffisant.
     if (c.audio_fr) segs.push({ text: c.audio_fr, lang: 'fr-FR', pauseAfter: 1000 })
-    segs.push({ text: 'À toi de parler. Appuie sur le bouton pour parler.', lang: 'fr-FR', pauseAfter: 0 })
+    segs.push({ text: 'À toi de parler. Appuie sur le micro pour parler.', lang: 'fr-FR', pauseAfter: 0 })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -524,7 +524,8 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
 
   return (
     <div className="space-y-5">
-      <StepHeader icon="🎤" label="Répète à voix haute" />
+      {/* v9.87 — Retrait du 🎤 dans le header (doublon avec le micro central) */}
+      <StepHeader icon="🗣️" label="Répète à voix haute" />
 
       {/* Emoji contextuel */}
       {c.media?.emoji && <div className="text-center text-5xl">{c.media.emoji}</div>}

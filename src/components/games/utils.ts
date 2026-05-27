@@ -345,6 +345,10 @@ const EN_A1_WORDS = new Set([
   'still', 'yet', 'already',
   'exercise', 'exercises', 'exercising', 'exercised',
   'meeting', 'meetings',
+  // v9.87 — Mots manquants détectés sur le cours USED TO (drive, school, etc.)
+  'drive', 'drives', 'driving', 'drove',
+  'school', 'schools', 'class', 'classes',
+  'coach', 'coaches', 'their', 'this', 'that',
 ])
 
 export function isEnglishToken(token: string): boolean {
@@ -842,4 +846,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.86'
+export const TTS_VERSION = 'v9.87'
