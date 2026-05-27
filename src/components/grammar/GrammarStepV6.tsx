@@ -139,12 +139,13 @@ function TokenChip({ token, size = 'md' }: { token: ColorToken; size?: 'sm' | 'm
   )
 }
 
-/** Joue automatiquement l'audio d'introduction d'une étape (au mount) */
-function useAutoIntro(segments: SequenceSegment[], rate: number) {
+/** Joue automatiquement l'audio d'introduction d'une étape (au mount).
+ *  v9.91 — onSegmentStart optionnel pour synchroniser un effet visuel. */
+function useAutoIntro(segments: SequenceSegment[], rate: number, onSegmentStart?: (idx: number, seg: SequenceSegment) => void) {
   useEffect(() => {
     if (segments.length === 0) return
     const t = setTimeout(() => {
-      void speakSequence(segments, rate)
+      void speakSequence(segments, rate, onSegmentStart)
     }, 300)
     return () => {
       clearTimeout(t)
@@ -158,11 +159,16 @@ function useAutoIntro(segments: SequenceSegment[], rate: number) {
  *  Pour les étapes passives (intro, role_explanation, discover_text, pattern,
  *  dialog, contractions_intro) où l'utilisateur n'a pas de choix à faire.
  *  Accessibilité illettrés : pas besoin de comprendre le texte du bouton. */
-function useAutoIntroWithAutoNext(segments: SequenceSegment[], rate: number, onContinue: () => void) {
+function useAutoIntroWithAutoNext(
+  segments: SequenceSegment[],
+  rate: number,
+  onContinue: () => void,
+  onSegmentStart?: (idx: number, seg: SequenceSegment) => void
+) {
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      if (segments.length > 0) await speakSequence(segments, rate)
+      if (segments.length > 0) await speakSequence(segments, rate, onSegmentStart)
       // v9.83 — Si user a cliqué ⏹ Stop pendant la lecture, on annule l'auto-next.
       // v9.89 — Délai augmenté de 2s → 5s pour laisser le temps de cliquer un exemple
       //         et l'écouter sans que la page change automatiquement.
@@ -213,6 +219,8 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
   }
   const rules = c.rules || []
   const exampleEn = c.example?.en || c.example?.tokens?.map(t => t.text).join(' ') || ''
+  // v9.91 — État pour la surbrillance du chip d'exemple en cours de lecture
+  const [highlightedExampleIdx, setHighlightedExampleIdx] = useState<number | null>(null)
 
   // v8.11 — Affichage progressif des rules : chaque ligne apparaît quand sa partie
   // audio commence à être lue. Estimation : ~80ms par caractère + pause après segment.
@@ -235,15 +243,14 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     }
 
     // v9.89 — Décomposition audio de l'exemple : pour chaque token EN, dire son rôle FR.
-    // Les tokens dont le rôle correspondant est un marqueur EN (used to, am/is/are) :
-    // on ne répète pas le rôle FR (sinon on lirait "used to" en FR après "used to" en EN).
+    // v9.91 — Chaque segment de token est marqué meta.exampleTokenIdx pour la surbrillance.
     if (c.example?.tokens && c.example.tokens.length > 0 && c.formula?.tokens) {
       segs.push({ text: 'Par exemple :', lang: 'fr-FR', pauseAfter: 600 })
       c.example.tokens.forEach((t, i) => {
-        segs.push({ text: t.text, lang: 'en-GB', pauseAfter: 250 })
+        segs.push({ text: t.text, lang: 'en-GB', pauseAfter: 250, meta: { exampleTokenIdx: i } })
         const role = c.formula!.tokens[i]
         if (role && !isEnglishToken(role.text)) {
-          segs.push({ text: role.text, lang: 'fr-FR', pauseAfter: 400 })
+          segs.push({ text: role.text, lang: 'fr-FR', pauseAfter: 400, meta: { exampleTokenIdx: i } })
         }
       })
       if (c.example.fr) segs.push({ text: c.example.fr, lang: 'fr-FR', pauseAfter: 800 })
@@ -267,7 +274,14 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useAutoIntroWithAutoNext(segments, rate, onContinue)
+  // v9.91 — Callback pour la surbrillance : quand un segment d'exemple démarre,
+  // on met l'index correspondant en évidence. Sinon on reset.
+  const onSegStart = (_idx: number, seg: SequenceSegment) => {
+    const tokenIdx = seg.meta?.exampleTokenIdx
+    if (typeof tokenIdx === 'number') setHighlightedExampleIdx(tokenIdx as number)
+    else setHighlightedExampleIdx(null)
+  }
+  useAutoIntroWithAutoNext(segments, rate, onContinue, onSegStart)
 
   // v8.11 — Timers d'affichage : chaque rule apparaît quand sa partie audio démarre
   useEffect(() => {
@@ -333,7 +347,13 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
           <button onClick={() => userPlay(exampleEn, { lang: 'en-GB' })}
             className="w-full flex flex-wrap items-center justify-center gap-2 hover:bg-primary-50 rounded-lg p-2 transition-colors">
             <span className="text-xl">🔊</span>
-            {c.example.tokens.map((t, i) => <TokenChip key={i} token={t} />)}
+            {c.example.tokens.map((t, i) => (
+              <span key={i} className={`inline-block transition-all duration-200 ${
+                highlightedExampleIdx === i ? 'scale-125 ring-4 ring-primary-400 ring-offset-2 rounded-lg' : ''
+              }`}>
+                <TokenChip token={t} />
+              </span>
+            ))}
           </button>
           {c.example.fr && (
             <div className="text-center mt-3 text-gray-700 font-semibold italic">→ {c.example.fr}</div>
@@ -997,7 +1017,7 @@ function StepRecognition({
   step, onContinue, rate,
 }: { step: StepV6; onContinue: (correct: boolean) => void; rate: number }) {
   const c = step.content_json as {
-    audio_intro?: string; question_fr?: string; audio_full?: string;
+    audio_intro?: string; context_fr?: string; question_fr?: string; audio_full?: string;
     options?: { text: string; correct: boolean }[];
     media?: { emoji?: string };
   }
@@ -1011,7 +1031,9 @@ function StepRecognition({
   // L'utilisateur clique 🔊 sur chaque option pour entendre, puis clique l'option pour valider.
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
-    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1200 })
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1000 })
+    // v9.91 — Lecture audio : contexte (gros à l'écran) PUIS question (petit gris)
+    if (c.context_fr) segs.push({ text: c.context_fr, lang: 'fr-FR', pauseAfter: 600 })
     if (c.question_fr) segs.push({ text: c.question_fr, lang: 'fr-FR', pauseAfter: 800 })
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1045,8 +1067,13 @@ function StepRecognition({
       <StepHeader icon="🎯" label="Reconnaissance" onReplay={replay} />
       <div className="text-center space-y-2 py-3">
         {c.media?.emoji && <div className="text-5xl">{c.media.emoji}</div>}
+        {/* v9.91 — Contexte affiché GROS au-dessus de la question */}
+        {c.context_fr && (
+          <MixedText text={c.context_fr} className="text-lg font-semibold text-primary-900 block" />
+        )}
+        {/* v9.91 — Question affichée en PETIT GRIS en dessous (séparation visuelle nette) */}
         {c.question_fr && (
-          <MixedText text={c.question_fr} className="text-lg font-semibold text-primary-900 block" />
+          <MixedText text={c.question_fr} className={`block ${c.context_fr ? 'text-sm text-gray-500 italic mt-1' : 'text-lg font-semibold text-primary-900'}`} />
         )}
         {/* v9.85 — Le bouton "Réécouter la bonne réponse" est retiré : il révélait la
             réponse aux illettrés qui ne pouvaient pas lire. Pour réécouter, utilisez

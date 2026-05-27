@@ -500,6 +500,8 @@ export interface SequenceSegment {
   pauseAfter?: number
   /** Vitesse spécifique (sinon utilise rate global) */
   rate?: number
+  /** v9.91 — Métadonnée libre exploitée par onSegmentStart (ex: index du token visuel à highlight) */
+  meta?: Record<string, unknown>
 }
 
 // v8.0 — Cancellation token : chaque speakSequence prend un ID au démarrage.
@@ -534,7 +536,10 @@ function __notifySpeaking(s: boolean) {
  */
 export async function speakSequence(
   segments: SequenceSegment[],
-  globalRate: number = 0.9
+  globalRate: number = 0.9,
+  // v9.91 — Callback déclenché au démarrage de la lecture de chaque segment source.
+  // Permet à un composant de mettre en surbrillance un élément visuel sync avec l'audio.
+  onSegmentStart?: (origIdx: number, seg: SequenceSegment) => void
 ): Promise<void> {
   if (typeof window === 'undefined' || !window.speechSynthesis) return
   // v8.2 — Plus de blocage `if (__sequenceLock) return`. Au lieu de refuser
@@ -561,11 +566,12 @@ export async function speakSequence(
     if (myId !== __sequenceId) return
 
     // v7.1 — Déplier chaque segment FR contenant des **xxx** en sous-segments alternés FR/EN
-    const expanded: SequenceSegment[] = []
-    for (const seg of segments) {
+    // v9.91 — On garde origIdx + isFirstOfOrig pour pouvoir appeler onSegmentStart au bon moment.
+    const expanded: (SequenceSegment & { _origIdx: number; _isFirstOfOrig: boolean })[] = []
+    segments.forEach((seg, origIdx) => {
       if (seg.lang === 'en-GB' || !/\*\*[^*]+\*\*/.test(seg.text)) {
-        expanded.push(seg)
-        continue
+        expanded.push({ ...seg, _origIdx: origIdx, _isFirstOfOrig: true })
+        return
       }
       const sub = parseMixedText(seg.text, seg.lang)
       sub.forEach((s, idx) => {
@@ -574,13 +580,21 @@ export async function speakSequence(
           lang: s.lang,
           rate: seg.rate,
           pauseAfter: idx === sub.length - 1 ? seg.pauseAfter : 200,
+          meta: seg.meta,
+          _origIdx: origIdx,
+          _isFirstOfOrig: idx === 0,
         })
       })
-    }
+    })
 
     for (let i = 0; i < expanded.length; i++) {
       if (myId !== __sequenceId) return  // v8.0 — abandon avant chaque segment
       const seg = expanded[i]
+      // v9.91 — Au premier sous-segment d'un segment source, notifier l'appelant
+      // pour qu'il puisse synchroniser un effet visuel (ex: surbrillance d'un token).
+      if (onSegmentStart && seg._isFirstOfOrig) {
+        try { onSegmentStart(seg._origIdx, segments[seg._origIdx]) } catch {}
+      }
       let cleanText = seg.text.replace(/\*\*/g, '').trim()
       // v8.0 — Filtre ponctuation isolée (point, virgule seuls = bruit parasite)
       if (/^[.,!?;:\-\s]*$/.test(cleanText)) continue
@@ -854,4 +868,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.90'
+export const TTS_VERSION = 'v9.91'
