@@ -361,10 +361,10 @@ const EN_A1_WORDS = new Set([
   'tree', 'trees', 'door', 'doors', 'moon', 'sun', 'sky',
   'sweet', 'tall',
   'whose',
-  // v9.99 — Lettres/suffixes pédagogiques pour cours pluriels (v3_a1_05_1)
-  // Sans cette whitelist, la lettre "y" entre **xx** était lue "i" par la voix FR.
-  'y', 'ies', 'es', 'ays', 'eys', 'ch', 'sh', 'x', 's',
-  // v9.99 — Pluriels manquants pour cours pluriels
+  // v9.99 — Pluriels manquants pour cours pluriels (v3_a1_05_1)
+  // NB : les LETTRES isolées (y, ies, es, ch, sh, x, s) NE sont PAS ajoutées
+  // car les cours en français doivent prononcer les lettres en français
+  // (ex: "i grec", "esse", "ixe") via texte FR brut, pas via voix EN.
   'cities', 'stories', 'families', 'watches',
 ])
 
