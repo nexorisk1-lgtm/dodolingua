@@ -355,6 +355,12 @@ const EN_A1_WORDS = new Set([
   'bag', 'bags',
   // v9.97 — Mots EN incorrects volontaires (exemples d'erreurs) à lire EN
   "amn't", 'mary',
+  // v9.98 — Pronoms possessifs + démonstratifs + objets courants cours #7-#11
+  'mine', 'yours', 'hers', 'ours', 'theirs',
+  'these', 'those',
+  'tree', 'trees', 'door', 'doors', 'moon', 'sun', 'sky',
+  'sweet', 'tall',
+  'whose',
 ])
 
 // v9.90 — Nettoyage ponctuation avant tokenize pour ne pas casser sur "/" ou "."
@@ -874,4 +880,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.97'
+export const TTS_VERSION = 'v9.98'
