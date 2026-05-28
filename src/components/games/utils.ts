@@ -361,6 +361,11 @@ const EN_A1_WORDS = new Set([
   'tree', 'trees', 'door', 'doors', 'moon', 'sun', 'sky',
   'sweet', 'tall',
   'whose',
+  // v9.99 — Lettres/suffixes pédagogiques pour cours pluriels (v3_a1_05_1)
+  // Sans cette whitelist, la lettre "y" entre **xx** était lue "i" par la voix FR.
+  'y', 'ies', 'es', 'ays', 'eys', 'ch', 'sh', 'x', 's',
+  // v9.99 — Pluriels manquants pour cours pluriels
+  'cities', 'stories', 'families', 'watches',
 ])
 
 // v9.90 — Nettoyage ponctuation avant tokenize pour ne pas casser sur "/" ou "."
@@ -880,4 +885,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.98'
+export const TTS_VERSION = 'v9.99'

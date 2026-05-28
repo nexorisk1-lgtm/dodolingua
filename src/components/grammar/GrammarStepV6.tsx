@@ -132,9 +132,13 @@ function TokenChip({ token, size = 'md' }: { token: ColorToken; size?: 'sm' | 'm
       </span>
     )
   }
+  // v9.99 — Strip ** markers from chip text. Markers are used to force EN voice
+  // in mixed FR/EN chips (ex: "nom en **y**") via speakSequence re-expansion,
+  // but they shouldn't appear in the visual chip.
+  const displayText = (token.text || '').replace(/\*\*/g, '')
   return (
     <span className={`inline-block rounded-lg border-2 font-bold ${sz} ${colorClass(token.color)}`}>
-      {token.text}
+      {displayText}
     </span>
   )
 }
