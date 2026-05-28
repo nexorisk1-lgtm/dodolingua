@@ -761,6 +761,7 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
   const c = step.content_json as {
     audio_intro?: string;
     question_en?: string;
+    question_fr?: string;
     answer_tokens?: ColorToken[];
     answer_fr?: string;
     answer_en_full?: string;
@@ -777,7 +778,9 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
   const segments: SequenceSegment[] = useMemo(() => {
     const segs: SequenceSegment[] = []
     if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR', pauseAfter: 1000 })
-    if (c.question_en) segs.push({ text: c.question_en, lang: 'en-GB', pauseAfter: 800 })
+    if (c.question_en) segs.push({ text: c.question_en, lang: 'en-GB', pauseAfter: 400 })
+    // v9.97 — Lecture de la traduction FR de la question (immersion + accessibilité illettrés)
+    if (c.question_fr) segs.push({ text: c.question_fr, lang: 'fr-FR', pauseAfter: 600 })
     // v9.84 — Annonce "Réponse :" avant la réponse pour bien la distinguer de la question.
     if (answerFull) segs.push({ text: 'Réponse :', lang: 'fr-FR', pauseAfter: 300 })
     if (answerFull) segs.push({ text: answerFull, lang: 'en-GB', pauseAfter: 400 })
@@ -808,6 +811,10 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
             <div className="flex-1">
               <div className="text-xs uppercase font-bold text-gray-500 tracking-wide">Question</div>
               <div className="text-xl font-bold text-primary-900 mt-1">{c.question_en}</div>
+              {/* v9.97 — Traduction FR de la question affichée sous l'EN */}
+              {c.question_fr && (
+                <div className="text-sm italic text-gray-600 mt-1">→ {c.question_fr}</div>
+              )}
             </div>
           </div>
         </button>

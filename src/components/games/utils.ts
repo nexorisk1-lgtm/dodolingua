@@ -353,6 +353,8 @@ const EN_A1_WORDS = new Set([
   'call', 'calls', 'calling', 'called',
   'well', 'ready', 'too',
   'bag', 'bags',
+  // v9.97 — Mots EN incorrects volontaires (exemples d'erreurs) à lire EN
+  "amn't", 'mary',
 ])
 
 // v9.90 — Nettoyage ponctuation avant tokenize pour ne pas casser sur "/" ou "."
@@ -872,4 +874,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.96'
+export const TTS_VERSION = 'v9.97'
