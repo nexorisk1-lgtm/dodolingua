@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { speak, speakSequence, stopSpeaking, wasManuallyStopped, TTS_VERSION, recognizeSpeech, isEnglishToken, type SequenceSegment } from '@/components/games/utils'
+import { speak, speakSequence, stopSpeaking, wasManuallyStopped, TTS_VERSION, recognizeSpeech, isEnglishToken, toDisplay, type SequenceSegment } from '@/components/games/utils'
 
 // v9.89 — Helper : tout clic utilisateur sur un bouton audio doit annuler l'auto-next
 // pour que la page ne change pas pendant que la personne écoute. Sinon : frustration.
@@ -110,7 +110,9 @@ function detectOptionLang(text: string): 'fr-FR' | 'en-GB' {
 /** v8.0 — Rend un texte avec markdown **xxx** en gras (au lieu de l'afficher brut).
  *  Avant v8.0, "Tu viens d'entendre **She's happy**" s'affichait avec les astérisques. */
 function MixedText({ text, className }: { text: string; className?: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/)
+  // v9.100 — Expand [[affichage::audio]] vers l'affichage uniquement.
+  const displayed = toDisplay(text)
+  const parts = displayed.split(/(\*\*[^*]+\*\*)/)
   return (
     <span className={className}>
       {parts.map((part, i) =>
@@ -135,7 +137,8 @@ function TokenChip({ token, size = 'md' }: { token: ColorToken; size?: 'sm' | 'm
   // v9.99 — Strip ** markers from chip text. Markers are used to force EN voice
   // in mixed FR/EN chips (ex: "nom en **y**") via speakSequence re-expansion,
   // but they shouldn't appear in the visual chip.
-  const displayText = (token.text || '').replace(/\*\*/g, '')
+  // v9.100 — Aussi expand [[affichage::audio]] vers l'affichage uniquement.
+  const displayText = toDisplay((token.text || '').replace(/\*\*/g, ''))
   return (
     <span className={`inline-block rounded-lg border-2 font-bold ${sz} ${colorClass(token.color)}`}>
       {displayText}
@@ -399,7 +402,7 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
               <span className="text-3xl">{r.icon}</span>
               <div className="flex-1 space-y-2">
                 <div className="text-lg font-semibold text-primary-900 leading-snug">
-                  {r.text_fr.split(/(\*\*[^*]+\*\*)/).map((part, j) =>
+                  {toDisplay(r.text_fr).split(/(\*\*[^*]+\*\*)/).map((part, j) =>
                     part.startsWith('**') && part.endsWith('**')
                       ? <strong key={j} className="text-primary-700 font-extrabold">{part.slice(2, -2)}</strong>
                       : <span key={j}>{part}</span>
@@ -478,7 +481,7 @@ function StepRoleExplanation({ step, onContinue, rate }: { step: StepV6; onConti
     <div className="space-y-5">
       <StepHeader icon="🔍" label="Lecture guidée" onReplay={replay} />
       {c.title_fr && (
-        <h2 className="text-xl font-extrabold text-primary-900 text-center">{c.title_fr}</h2>
+        <h2 className="text-xl font-extrabold text-primary-900 text-center">{toDisplay(c.title_fr)}</h2>
       )}
 
       {/* Phrase complète tout en haut */}
@@ -498,7 +501,7 @@ function StepRoleExplanation({ step, onContinue, rate }: { step: StepV6; onConti
             <span className="text-2xl">{t.emoji}</span>
             <div className="flex-1 text-left">
               <div className="text-2xl font-extrabold">{t.text}</div>
-              <div className="text-xs font-medium opacity-80">{t.role_fr} → <span className="font-bold">{t.meaning_fr}</span></div>
+              <div className="text-xs font-medium opacity-80">{toDisplay(t.role_fr)} → <span className="font-bold">{toDisplay(t.meaning_fr)}</span></div>
             </div>
             <span className="text-base">🔊</span>
           </button>
@@ -673,7 +676,7 @@ function StepRepeat({ step, onContinue, rate }: { step: StepV6; onContinue: () =
             <span className="text-sm font-bold uppercase text-primary-700 tracking-wider">Écouter le modèle</span>
           </div>
           <div className="text-2xl font-extrabold text-primary-900 leading-tight">{c.audio_full}</div>
-          {c.audio_fr && <div className="text-sm italic text-gray-600 mt-1">→ {c.audio_fr}</div>}
+          {c.audio_fr && <div className="text-sm italic text-gray-600 mt-1">→ {toDisplay(c.audio_fr)}</div>}
         </button>
       )}
 
@@ -817,7 +820,7 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
               <div className="text-xl font-bold text-primary-900 mt-1">{c.question_en}</div>
               {/* v9.97 — Traduction FR de la question affichée sous l'EN */}
               {c.question_fr && (
-                <div className="text-sm italic text-gray-600 mt-1">→ {c.question_fr}</div>
+                <div className="text-sm italic text-gray-600 mt-1">→ {toDisplay(c.question_fr)}</div>
               )}
             </div>
           </div>
@@ -835,7 +838,7 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 {answerTokens.map((t, i) => <TokenChip key={i} token={t} />)}
               </div>
-              {c.answer_fr && <div className="text-sm italic text-gray-700 mt-2">→ {c.answer_fr}</div>}
+              {c.answer_fr && <div className="text-sm italic text-gray-700 mt-2">→ {toDisplay(c.answer_fr)}</div>}
             </div>
           </div>
         </button>
@@ -856,7 +859,7 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
               ) : (
                 <div className="text-xl font-bold text-red-900 mt-2">{answerNegFull}</div>
               )}
-              {c.answer_neg_fr && <div className="text-sm italic text-gray-700 mt-2">→ {c.answer_neg_fr}</div>}
+              {c.answer_neg_fr && <div className="text-sm italic text-gray-700 mt-2">→ {toDisplay(c.answer_neg_fr)}</div>}
             </div>
           </div>
         </button>
@@ -985,7 +988,7 @@ function StepImmersion({ step, onContinue, rate }: { step: StepV6; onContinue: (
           <div className="text-3xl font-extrabold text-primary-900">{c.audio_full}</div>
         )}
         {c.audio_fr && (
-          <div className="text-base italic text-gray-600">→ {c.audio_fr}</div>
+          <div className="text-base italic text-gray-600">→ {toDisplay(c.audio_fr)}</div>
         )}
       </div>
       <button onClick={onContinue}
@@ -1044,13 +1047,13 @@ function StepDiscoverText({ step, onContinue, rate }: { step: StepV6; onContinue
               {(t.emoji || t.meaning_fr) && (
                 <span className="text-[11px] font-medium opacity-90 leading-none">
                   {t.emoji && <span className="text-base mr-1">{t.emoji}</span>}
-                  {t.meaning_fr}
+                  {toDisplay(t.meaning_fr)}
                 </span>
               )}
             </button>
           ))}
         </div>
-        {c.audio_fr && <div className="text-base italic text-gray-600">→ {c.audio_fr}</div>}
+        {c.audio_fr && <div className="text-base italic text-gray-600">→ {toDisplay(c.audio_fr)}</div>}
         <div className="text-xs text-gray-400">Tape sur un mot pour l&apos;écouter</div>
       </div>
       <button onClick={onContinue}
@@ -1213,7 +1216,7 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
                 <TokenChip token={{ text: r.verb, color: 'red' }} />
               </>
             )}
-            <span className="ml-auto text-sm italic text-gray-500">{r.fr}</span>
+            <span className="ml-auto text-sm italic text-gray-500">{toDisplay(r.fr)}</span>
             <span className="text-primary-500">🔊</span>
           </button>
         ))}
@@ -1620,7 +1623,7 @@ function StepTapBuild({ step, onContinue, rate }: { step: StepV6; onContinue: (c
       <StepHeader icon="🧩" label="Construis la phrase" />
       {c.audio_target_fr && (
         <div className="text-center text-base font-semibold text-primary-900 bg-blue-50 p-3 rounded-lg">
-          {c.audio_target_fr}
+          {toDisplay(c.audio_target_fr)}
         </div>
       )}
 

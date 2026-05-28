@@ -383,9 +383,24 @@ export function isEnglishToken(token: string): boolean {
   return words.every(w => EN_A1_WORDS.has(w))
 }
 
+/** v9.100 — Syntaxe [[affichage::audio]] pour découpler ce qui s'affiche
+ *  de ce que le TTS lit (utile pour les lettres : "y" affiché, "i grec" lu).
+ *  toDisplay : pour rendu visuel ; toAudio : pour TTS.
+ *  Rétrocompatible — textes sans [[ ]] inchangés. */
+export function toDisplay(text: string | undefined | null): string {
+  if (!text) return ''
+  return text.replace(/\[\[([^\]:]*)::([^\]]*)\]\]/g, '$1')
+}
+export function toAudio(text: string | undefined | null): string {
+  if (!text) return ''
+  return text.replace(/\[\[([^\]:]*)::([^\]]*)\]\]/g, '$2')
+}
+
 /** Parse un texte mixte FR/EN : tokens entre **xxx** = EN par défaut,
  *  sauf si tous les mots du token sont FR (blacklist ou présence d'accents). */
 function parseMixedText(text: string, primaryLang: 'fr-FR' | 'en-GB' = 'fr-FR'): MixedSegment[] {
+  // v9.100 — Expand [[display::audio]] → audio pour le TTS
+  text = toAudio(text)
   const segments: MixedSegment[] = []
   // v5.8 — Uniquement **xxx** pour marquer les mots EN.
   // Le pattern 'xxx' a été retiré car il matchait aussi les apostrophes
@@ -885,4 +900,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.99'
+export const TTS_VERSION = 'v9.100'
