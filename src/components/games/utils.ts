@@ -370,6 +370,18 @@ const EN_A1_WORDS = new Set([
   // car les cours en français doivent prononcer les lettres en français
   // (ex: "i grec", "esse", "ixe") via texte FR brut, pas via voix EN.
   'cities', 'stories', 'families', 'watches',
+  // v9.102 — DISTRACTORS fautifs (formes EN incorrectes utilisées comme pièges
+  // dans les exercices recognition et les rules d'erreurs fréquentes).
+  // Sans ces entrées, isEnglishToken renvoyait false sur "**babys**" → voix FR ❌.
+  'babys', 'babyes', 'citys', 'cityes', 'storys',
+  'boxs', 'boxies', 'busies', 'bus',
+  'childs', 'mans', 'womans', 'foots', 'mouses', 'sheeps', 'fishes', 'deers',
+  'goose', 'geese', 'tooth', 'teeth', 'foot', 'feet',
+  'child', 'children', 'man', 'men', 'woman', 'women', 'mouse', 'mice',
+  'sheep', 'fish', 'deer',
+  'dogies', 'plays', 'works', 'sings', 'dances', 'runs', 'speaks',
+  // v9.102 — pluriel-related vocabulary
+  'every', 'everyday', 'sometimes', 'never', 'always', 'often', 'usually', 'rarely',
 ])
 
 // v9.90 — Nettoyage ponctuation avant tokenize pour ne pas casser sur "/" ou "."
@@ -908,4 +920,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.101'
+export const TTS_VERSION = 'v9.102'

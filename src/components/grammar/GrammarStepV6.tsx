@@ -103,8 +103,13 @@ function shuffle<T>(arr: T[]): T[] {
  *  Avant v8.17 : utilisait une liste limitée de mots FR (manquait "pas", "oui",
  *  "non", etc.) — ces mots étaient lus en voix anglaise. */
 function detectOptionLang(text: string): 'fr-FR' | 'en-GB' {
+  // v9.102 — Les options de recognition sont par définition en anglais
+  // (la détection auto plantait sur les distractors fautifs type "babys",
+  // "childs", "He has three box" qui ne sont pas dans la whitelist EN
+  // → voix FR par défaut, bug visible aux yeux/oreilles des illettrés).
+  // Si jamais un texte contient des accents FR, on respecte le FR.
   if (/[éèêëàâäîïôöùûüçÿœæ]/i.test(text)) return 'fr-FR'
-  return isEnglishToken(text) ? 'en-GB' : 'fr-FR'
+  return 'en-GB'
 }
 
 /** v8.0 — Rend un texte avec markdown **xxx** en gras (au lieu de l'afficher brut).
@@ -851,7 +856,7 @@ function StepDialog({ step, onContinue, rate }: { step: StepV6; onContinue: () =
           <div className="flex items-center gap-3">
             <span className="text-2xl">🔊</span>
             <div className="flex-1">
-              <div className="text-xs uppercase font-bold text-red-700 tracking-wide">Ou bien (réponse négative)</div>
+              <div className="text-xs uppercase font-bold text-red-700 tracking-wide">Ou bien (autre proposition de réponse)</div>
               {answerNegTokens.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
                   {answerNegTokens.map((t, i) => <TokenChip key={i} token={t} />)}
