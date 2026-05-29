@@ -107,6 +107,10 @@ export function speak(text: string, voiceName?: string | null, optsOrRate: Speak
   // Solution : utiliser l'homophone "eye" qui se prononce strictement /aɪ/
   // (identique au pronom "I"). Visuel inchangé, audio parfait.
   let textToSpeak = text
+  // v9.101 — Expand [[display::audio]] côté FR uniquement (les chips EN sont lues telles quelles).
+  if (opts.lang === 'fr-FR' || (!opts.lang && /[éèêëàâäîïôöùûüçÿœæ]/i.test(textToSpeak))) {
+    textToSpeak = toAudio(textToSpeak)
+  }
   if (!opts.lang || opts.lang.startsWith('en')) {
     if (/^I[.,!?;:]?$/.test(textToSpeak.trim())) textToSpeak = 'eye'
   }
@@ -599,10 +603,14 @@ export async function speakSequence(
 
     // v7.1 — Déplier chaque segment FR contenant des **xxx** en sous-segments alternés FR/EN
     // v9.91 — On garde origIdx + isFirstOfOrig pour pouvoir appeler onSegmentStart au bon moment.
+    // v9.101 — toAudio() appliqué sur TOUS les segments FR (pas seulement ceux avec **).
+    // Avant : un segment FR sans ** passait brut au TTS, donc "[[y::i grec]]" était lu littéralement.
     const expanded: (SequenceSegment & { _origIdx: number; _isFirstOfOrig: boolean })[] = []
     segments.forEach((seg, origIdx) => {
       if (seg.lang === 'en-GB' || !/\*\*[^*]+\*\*/.test(seg.text)) {
-        expanded.push({ ...seg, _origIdx: origIdx, _isFirstOfOrig: true })
+        // v9.101 — expand [[display::audio]] même sur les segments sans **
+        const expandedText = seg.lang === 'fr-FR' ? toAudio(seg.text) : seg.text
+        expanded.push({ ...seg, text: expandedText, _origIdx: origIdx, _isFirstOfOrig: true })
         return
       }
       const sub = parseMixedText(seg.text, seg.lang)
@@ -900,4 +908,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.100'
+export const TTS_VERSION = 'v9.101'
