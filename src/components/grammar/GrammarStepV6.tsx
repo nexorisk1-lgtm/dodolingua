@@ -246,6 +246,8 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
   const [highlightedExampleIdx, setHighlightedExampleIdx] = useState<number | null>(null)
   // v9.92 — Surbrillance étendue : aussi sur les chips de la FORMULE pendant la lecture
   const [highlightedFormulaIdx, setHighlightedFormulaIdx] = useState<number | null>(null)
+  // v9.105 — Surbrillance N exemples : on track quel exemple est actif (0, 1, 2…)
+  const [highlightedExIdx, setHighlightedExIdx] = useState<number | null>(null)
 
   // v8.11 — Affichage progressif des rules : chaque ligne apparaît quand sa partie
   // audio commence à être lue. Estimation : ~80ms par caractère + pause après segment.
@@ -314,8 +316,6 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // v9.105 — Surbrillance N exemples : on track quel exemple est actif (0, 1, 2…)
-  const [highlightedExIdx, setHighlightedExIdx] = useState<number | null>(null)
   // v9.91 — Callback pour la surbrillance : quand un segment démarre, on met l'index
   // correspondant en évidence (formule OU exemple selon meta). v9.92 — étendue à la formule.
   // v9.105 — Gère aussi meta.exampleIdx (quel exemple parmi N).
