@@ -229,8 +229,10 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     // v9.88 — Carte mentale visuelle pour les étapes de structure grammaticale.
     // formula = la formule abstraite (Sujet + used to + verbe + info), tokens colorés.
     // example = un exemple concret coloré + sa traduction FR + audio EN au clic.
+    // v9.106 — label_fr ajouté aussi sur `example` pour unifier le type avec `examples[]`
+    // (rétrocompatible : optionnel).
     formula?: { tokens: ColorToken[]; separator?: string };
-    example?: { tokens: ColorToken[]; fr?: string; en?: string };
+    example?: { tokens: ColorToken[]; fr?: string; en?: string; label_fr?: string };
     // v9.105 — Support N exemples distincts (Raïssa : "si N exemples, N pavés séparés").
     // Si `examples` est présent et non vide, on rend chaque entrée dans son propre pavé.
     // Sinon fallback sur `example` singulier (rétrocompatible).
