@@ -382,6 +382,12 @@ const EN_A1_WORDS = new Set([
   'dogies', 'plays', 'works', 'sings', 'dances', 'runs', 'speaks',
   // v9.102 — pluriel-related vocabulary
   'every', 'everyday', 'sometimes', 'never', 'always', 'often', 'usually', 'rarely',
+  // v9.103 — Cours A1 #27/#28/#29 (quantités : some/few/little, many/much/a lot, countable)
+  // NB : "kilo/kilos" volontairement EXCLUS (mot identique FR/EN, doit être lu en français)
+  'rice', 'piece', 'pieces', 'glass', 'glasses', 'bottle', 'bottles', 'cup', 'cups',
+  'slice', 'slices', 'bowl', 'bowls', 'spoon', 'spoons',
+  'sugar', 'salt', 'cheese', 'butter', 'flour', 'soup', 'juice', 'wine', 'beer',
+  'homework', 'information', 'advice', 'news',
 ])
 
 // v9.90 — Nettoyage ponctuation avant tokenize pour ne pas casser sur "/" ou "."
@@ -920,4 +926,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.102'
+export const TTS_VERSION = 'v9.105'

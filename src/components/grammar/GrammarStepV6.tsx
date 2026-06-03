@@ -231,8 +231,16 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     // example = un exemple concret coloré + sa traduction FR + audio EN au clic.
     formula?: { tokens: ColorToken[]; separator?: string };
     example?: { tokens: ColorToken[]; fr?: string; en?: string };
+    // v9.105 — Support N exemples distincts (Raïssa : "si N exemples, N pavés séparés").
+    // Si `examples` est présent et non vide, on rend chaque entrée dans son propre pavé.
+    // Sinon fallback sur `example` singulier (rétrocompatible).
+    examples?: { tokens: ColorToken[]; fr?: string; en?: string; label_fr?: string }[];
   }
   const rules = c.rules || []
+  // v9.105 — Liste effective des exemples : examples array > example singulier
+  const examplesList = (c.examples && c.examples.length > 0)
+    ? c.examples
+    : (c.example ? [c.example] : [])
   const exampleEn = c.example?.en || c.example?.tokens?.map(t => t.text).join(' ') || ''
   // v9.91 — État pour la surbrillance du chip d'exemple en cours de lecture
   const [highlightedExampleIdx, setHighlightedExampleIdx] = useState<number | null>(null)
@@ -262,24 +270,30 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     // v9.89 — Décomposition audio de l'exemple : pour chaque token EN, dire son rôle FR.
     // v9.91 — Chaque segment de token est marqué meta.exampleTokenIdx pour la surbrillance.
     // v9.96 — Après la décortication, l'anglais dit la phrase complète puis le français
-    //         traduit avec "ça veut dire". Évite que l'utilisateur perçoive le rôle FR
-    //         comme étant la traduction de la phrase.
-    if (c.example?.tokens && c.example.tokens.length > 0 && c.formula?.tokens) {
-      segs.push({ text: 'Par exemple :', lang: 'fr-FR', pauseAfter: 600 })
-      c.example.tokens.forEach((t, i) => {
-        segs.push({ text: t.text, lang: 'en-GB', pauseAfter: 250, meta: { exampleTokenIdx: i } })
-        const role = c.formula!.tokens[i]
-        if (role && !isEnglishToken(role.text)) {
-          segs.push({ text: role.text, lang: 'fr-FR', pauseAfter: 400, meta: { exampleTokenIdx: i } })
+    //         traduit avec "ça veut dire".
+    // v9.105 — Itérer sur examplesList (N exemples distincts). Pour chaque exemple,
+    //         décomposer en chips EN + rôle FR puis phrase complète + "Ça veut dire".
+    //         Label "Premier exemple", "Deuxième exemple", "Troisième exemple" si N>1.
+    if (examplesList.length > 0 && c.formula?.tokens) {
+      const labels = ['Premier exemple', 'Deuxième exemple', 'Troisième exemple', 'Quatrième exemple', 'Cinquième exemple']
+      examplesList.forEach((ex, exIdx) => {
+        if (!ex.tokens || ex.tokens.length === 0) return
+        const label = ex.label_fr || (examplesList.length > 1 ? `${labels[exIdx] || `Exemple ${exIdx + 1}`} :` : 'Par exemple :')
+        segs.push({ text: label, lang: 'fr-FR', pauseAfter: 600 })
+        ex.tokens.forEach((t, i) => {
+          segs.push({ text: t.text, lang: 'en-GB', pauseAfter: 250, meta: { exampleIdx: exIdx, exampleTokenIdx: i } })
+          const role = c.formula!.tokens[i]
+          if (role && !isEnglishToken(role.text)) {
+            segs.push({ text: role.text, lang: 'fr-FR', pauseAfter: 400, meta: { exampleIdx: exIdx, exampleTokenIdx: i } })
+          }
+        })
+        const fullEn = ex.en || ex.tokens.map(t => t.text).join(' ')
+        if (fullEn) segs.push({ text: fullEn, lang: 'en-GB', pauseAfter: 400, meta: { exampleIdx: exIdx } })
+        if (ex.fr) {
+          segs.push({ text: 'Ça veut dire :', lang: 'fr-FR', pauseAfter: 300 })
+          segs.push({ text: ex.fr, lang: 'fr-FR', pauseAfter: 800 })
         }
       })
-      // v9.96 — Phrase complète EN puis "Ça veut dire" + traduction FR
-      const fullEn = c.example.en || c.example.tokens.map(t => t.text).join(' ')
-      if (fullEn) segs.push({ text: fullEn, lang: 'en-GB', pauseAfter: 400 })
-      if (c.example.fr) {
-        segs.push({ text: 'Ça veut dire :', lang: 'fr-FR', pauseAfter: 300 })
-        segs.push({ text: c.example.fr, lang: 'fr-FR', pauseAfter: 800 })
-      }
     }
 
     rules.forEach((r) => {
@@ -300,20 +314,32 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // v9.105 — Surbrillance N exemples : on track quel exemple est actif (0, 1, 2…)
+  const [highlightedExIdx, setHighlightedExIdx] = useState<number | null>(null)
   // v9.91 — Callback pour la surbrillance : quand un segment démarre, on met l'index
   // correspondant en évidence (formule OU exemple selon meta). v9.92 — étendue à la formule.
+  // v9.105 — Gère aussi meta.exampleIdx (quel exemple parmi N).
   const onSegStart = (_idx: number, seg: SequenceSegment) => {
     const formulaIdx = seg.meta?.formulaTokenIdx
     const exampleIdx = seg.meta?.exampleTokenIdx
+    const exIdx = seg.meta?.exampleIdx
     if (typeof formulaIdx === 'number') {
       setHighlightedFormulaIdx(formulaIdx as number)
       setHighlightedExampleIdx(null)
+      setHighlightedExIdx(null)
     } else if (typeof exampleIdx === 'number') {
       setHighlightedExampleIdx(exampleIdx as number)
       setHighlightedFormulaIdx(null)
+      if (typeof exIdx === 'number') setHighlightedExIdx(exIdx as number)
+    } else if (typeof exIdx === 'number') {
+      // Phrase complète d'un exemple
+      setHighlightedExIdx(exIdx as number)
+      setHighlightedFormulaIdx(null)
+      setHighlightedExampleIdx(null)
     } else {
       setHighlightedFormulaIdx(null)
       setHighlightedExampleIdx(null)
+      setHighlightedExIdx(null)
     }
   }
   useAutoIntroWithAutoNext(segments, rate, onContinue, onSegStart)
@@ -380,26 +406,39 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
           </div>
         </div>
       )}
-      {/* v9.88 — Exemple visuel : tokens colorés cliquables pour entendre EN + traduction FR */}
-      {c.example && c.example.tokens && c.example.tokens.length > 0 && (
-        <div className="bg-white rounded-xl p-4 border-2 border-primary-200">
-          <div className="text-xs uppercase font-bold text-primary-700 tracking-wide mb-3 text-center">✅ Exemple</div>
-          <button onClick={() => userPlay(exampleEn, { lang: 'en-GB' })}
-            className="w-full flex flex-wrap items-center justify-center gap-2 hover:bg-primary-50 rounded-lg p-2 transition-colors">
-            <span className="text-xl">🔊</span>
-            {c.example.tokens.map((t, i) => (
-              <span key={i} className={`inline-block transition-all duration-200 ${
-                highlightedExampleIdx === i ? 'scale-125 ring-4 ring-primary-400 ring-offset-2 rounded-lg' : ''
-              }`}>
-                <TokenChip token={t} />
-              </span>
-            ))}
-          </button>
-          {c.example.fr && (
-            <div className="text-center mt-3 text-gray-700 font-semibold italic">→ {c.example.fr}</div>
-          )}
-        </div>
-      )}
+      {/* v9.88 — Exemple visuel : tokens colorés cliquables pour entendre EN + traduction FR
+          v9.105 — Si `examples` array (N exemples), rend N pavés distincts.
+          Sinon fallback sur `example` singulier (rétrocompatible). */}
+      {examplesList.map((ex, exIdx) => {
+        if (!ex.tokens || ex.tokens.length === 0) return null
+        const exEn = ex.en || ex.tokens.map(t => t.text).join(' ')
+        const label = ex.label_fr || (examplesList.length > 1 ? `Exemple ${exIdx + 1}` : 'Exemple')
+        const isActive = highlightedExIdx === exIdx
+        return (
+          <div key={exIdx} className={`bg-white rounded-xl p-4 border-2 transition-all duration-200 ${
+            isActive ? 'border-primary-500 ring-2 ring-primary-300' : 'border-primary-200'
+          }`}>
+            <div className="text-xs uppercase font-bold text-primary-700 tracking-wide mb-3 text-center">✅ {label}</div>
+            <button onClick={() => userPlay(exEn, { lang: 'en-GB' })}
+              className="w-full flex flex-wrap items-center justify-center gap-2 hover:bg-primary-50 rounded-lg p-2 transition-colors">
+              <span className="text-xl">🔊</span>
+              {ex.tokens.map((t, i) => {
+                const tokenActive = highlightedExIdx === exIdx && highlightedExampleIdx === i
+                return (
+                  <span key={i} className={`inline-block transition-all duration-200 ${
+                    tokenActive ? 'scale-125 ring-4 ring-primary-400 ring-offset-2 rounded-lg' : ''
+                  }`}>
+                    <TokenChip token={t} />
+                  </span>
+                )
+              })}
+            </button>
+            {ex.fr && (
+              <div className="text-center mt-3 text-gray-700 font-semibold italic">→ {ex.fr}</div>
+            )}
+          </div>
+        )
+      })}
       <div className="space-y-3">
         {rules.slice(0, visibleCount).map((r, i) => (
           <div key={i} className="bg-blue-50 border-l-4 border-primary-500 p-4 rounded-r-lg animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -1078,8 +1117,11 @@ function StepRecognition({
 }: { step: StepV6; onContinue: (correct: boolean) => void; rate: number }) {
   const c = step.content_json as {
     audio_intro?: string; context_fr?: string; question_fr?: string; audio_full?: string;
-    options?: { text: string; correct: boolean }[];
+    options?: { text: string; correct: boolean; explanation_fr?: string }[];
     media?: { emoji?: string };
+    // v9.105 — Explication post-erreur (Raïssa : "marteler la règle"). Affiché + lu
+    // après mauvaise réponse. Peut être au niveau du step (règle générale) ou par option.
+    explanation_fr?: string;
   }
   const options = c.options || []
   const [picked, setPicked] = useState<number | null>(null)
@@ -1116,9 +1158,24 @@ function StepRecognition({
       await speakSequence([{ text: options[idx].text, lang }], rate)
       setTimeout(() => onContinue(true), 500)
     } else {
-      speak(options[idx].text, null, { lang })
+      // v9.105 — Mauvaise réponse : lire le mot puis "Pas tout à fait. La bonne réponse est X.
+      // Pourquoi ? [explication]" — pour marteler la règle.
+      const correctOpt = options.find(o => o.correct)
+      const explanation = options[idx].explanation_fr || c.explanation_fr
+      const correctLang = correctOpt ? detectOptionLang(correctOpt.text) : 'en-GB'
+      const segs: SequenceSegment[] = [
+        { text: options[idx].text, lang, pauseAfter: 400 },
+        { text: 'Pas tout à fait. La bonne réponse est :', lang: 'fr-FR', pauseAfter: 400 },
+      ]
+      if (correctOpt) segs.push({ text: correctOpt.text, lang: correctLang, pauseAfter: 600 })
+      if (explanation) {
+        segs.push({ text: 'Pourquoi ?', lang: 'fr-FR', pauseAfter: 300 })
+        segs.push({ text: explanation, lang: 'fr-FR', pauseAfter: 600 })
+      }
+      void speakSequence(segs, rate)
       setShown('wrong')
-      setTimeout(() => { setPicked(null); setShown('idle') }, 1200)
+      // v9.105 — Laisser plus de temps pour lire l'explication avant reset (5s si explication, sinon 1.5s)
+      setTimeout(() => { setPicked(null); setShown('idle') }, explanation ? 5500 : 1500)
     }
   }
 
@@ -1166,6 +1223,13 @@ function StepRecognition({
           )
         })}
       </div>
+      {/* v9.105 — Affichage de l'explication après mauvaise réponse */}
+      {shown === 'wrong' && picked !== null && (options[picked].explanation_fr || c.explanation_fr) && (
+        <div className="bg-yellow-50 border-l-4 border-warn p-3 rounded-r-lg text-sm">
+          <div className="font-bold text-warn mb-1">✗ Pas tout à fait. Pourquoi ?</div>
+          <MixedText text={options[picked].explanation_fr || c.explanation_fr || ''} className="text-gray-700" />
+        </div>
+      )}
       <div className="text-xs text-center text-gray-400">Tape une réponse — l&apos;audio se déclenche automatiquement</div>
     </div>
   )
@@ -1580,6 +1644,8 @@ function StepTapBuild({ step, onContinue, rate }: { step: StepV6; onContinue: (c
   const c = step.content_json as {
     audio_intro?: string; audio_target?: string; audio_target_fr?: string;
     expected_tokens?: ColorToken[]; distractors?: ColorToken[];
+    // v9.105 — Explication post-erreur. Affichée + lue après mauvaise composition.
+    explanation_fr?: string;
   }
   const expected = c.expected_tokens || []
   const distractors = c.distractors || []
@@ -1615,8 +1681,20 @@ function StepTapBuild({ step, onContinue, rate }: { step: StepV6; onContinue: (c
     const ok = userText === expectedText
     setFeedback(ok)
     if (ok && c.audio_target) speak(c.audio_target)
-    // v8.21 — Auto-next après bonne réponse (Raïssa : "je veux pas cliquer Continuer à chaque fois")
+    // v8.21 — Auto-next après bonne réponse
     if (ok) setTimeout(() => onContinue(true), 1800)
+    // v9.105 — Mauvaise composition : lire "Pas tout à fait. La bonne réponse est X. Pourquoi ? [explication]"
+    if (!ok) {
+      const segs: SequenceSegment[] = [
+        { text: 'Pas tout à fait. La bonne réponse est :', lang: 'fr-FR', pauseAfter: 400 },
+      ]
+      if (c.audio_target) segs.push({ text: c.audio_target, lang: 'en-GB', pauseAfter: 600 })
+      if (c.explanation_fr) {
+        segs.push({ text: 'Pourquoi ?', lang: 'fr-FR', pauseAfter: 300 })
+        segs.push({ text: c.explanation_fr, lang: 'fr-FR', pauseAfter: 600 })
+      }
+      void speakSequence(segs, rate)
+    }
   }
   function reset() {
     setPicked([])
@@ -1678,6 +1756,13 @@ function StepTapBuild({ step, onContinue, rate }: { step: StepV6; onContinue: (c
               <div className="flex flex-wrap gap-2">
                 {expected.map((t, i) => <TokenChip key={i} token={t} />)}
               </div>
+              {/* v9.105 — Explication post-erreur pour marteler la règle */}
+              {c.explanation_fr && (
+                <div className="mt-3 bg-yellow-50 border-l-4 border-warn p-3 rounded-r-lg text-sm">
+                  <div className="font-bold text-warn mb-1">Pourquoi ?</div>
+                  <MixedText text={c.explanation_fr} className="text-gray-700" />
+                </div>
+              )}
             </>
           )}
           <div className="flex gap-2">
