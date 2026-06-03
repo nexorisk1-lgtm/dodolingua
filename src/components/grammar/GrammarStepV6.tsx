@@ -241,7 +241,6 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
   const examplesList = (c.examples && c.examples.length > 0)
     ? c.examples
     : (c.example ? [c.example] : [])
-  const exampleEn = c.example?.en || c.example?.tokens?.map(t => t.text).join(' ') || ''
   // v9.91 — État pour la surbrillance du chip d'exemple en cours de lecture
   const [highlightedExampleIdx, setHighlightedExampleIdx] = useState<number | null>(null)
   // v9.92 — Surbrillance étendue : aussi sur les chips de la FORMULE pendant la lecture
