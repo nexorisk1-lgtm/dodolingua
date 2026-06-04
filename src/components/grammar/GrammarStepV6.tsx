@@ -232,11 +232,12 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
     // v9.106 — label_fr ajouté aussi sur `example` pour unifier le type avec `examples[]`
     // (rétrocompatible : optionnel).
     formula?: { tokens: ColorToken[]; separator?: string };
-    example?: { tokens: ColorToken[]; fr?: string; en?: string; label_fr?: string };
+    example?: { tokens: ColorToken[]; fr?: string; en?: string; label_fr?: string; rule_fr?: string };
     // v9.105 — Support N exemples distincts (Raïssa : "si N exemples, N pavés séparés").
     // Si `examples` est présent et non vide, on rend chaque entrée dans son propre pavé.
     // Sinon fallback sur `example` singulier (rétrocompatible).
-    examples?: { tokens: ColorToken[]; fr?: string; en?: string; label_fr?: string }[];
+    // v9.108 — `rule_fr` : rappel pédagogique affiché + lu après l'exemple.
+    examples?: { tokens: ColorToken[]; fr?: string; en?: string; label_fr?: string; rule_fr?: string }[];
   }
   const rules = c.rules || []
   // v9.105 — Liste effective des exemples : examples array > example singulier
@@ -295,6 +296,11 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
         if (ex.fr) {
           segs.push({ text: 'Ça veut dire :', lang: 'fr-FR', pauseAfter: 300 })
           segs.push({ text: ex.fr, lang: 'fr-FR', pauseAfter: 800 })
+        }
+        // v9.108 — Rappel pédagogique après chaque exemple (parsing **xx** pour voix EN).
+        if (ex.rule_fr) {
+          segs.push({ text: 'Rappel :', lang: 'fr-FR', pauseAfter: 300 })
+          segs.push({ text: ex.rule_fr, lang: 'fr-FR', pauseAfter: 800, meta: { exampleIdx: exIdx } })
         }
       })
     }
@@ -436,6 +442,13 @@ function StepIntro({ step, onContinue, rate }: { step: StepV6; onContinue: () =>
             </button>
             {ex.fr && (
               <div className="text-center mt-3 text-gray-700 font-semibold italic">→ {ex.fr}</div>
+            )}
+            {/* v9.108 — Rappel pédagogique sous l'exemple (rappel des règles du sujet) */}
+            {ex.rule_fr && (
+              <div className="mt-3 bg-amber-50 border-l-4 border-amber-400 p-3 rounded-r-lg text-sm">
+                <span className="font-bold text-amber-700">💡 Rappel : </span>
+                <MixedText text={ex.rule_fr} className="text-gray-700" />
+              </div>
             )}
           </div>
         )
@@ -1124,7 +1137,9 @@ function StepRecognition({
     // après mauvaise réponse. Peut être au niveau du step (règle générale) ou par option.
     explanation_fr?: string;
   }
-  const options = c.options || []
+  // v9.108 — Shuffle des options à chaque mount pour que la bonne réponse ne soit
+  // pas toujours en première position (problème UX remonté par Raïssa).
+  const options = useMemo(() => shuffle(c.options || []), [step.id])
   const [picked, setPicked] = useState<number | null>(null)
   const [shown, setShown] = useState<'idle' | 'wrong'>('idle')
 
