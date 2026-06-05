@@ -1174,8 +1174,9 @@ function StepRecognition({
       await speakSequence([{ text: options[idx].text, lang }], rate)
       setTimeout(() => onContinue(true), 500)
     } else {
-      // v9.105 — Mauvaise réponse : lire le mot puis "Pas tout à fait. La bonne réponse est X.
-      // Pourquoi ? [explication]" — pour marteler la règle.
+      // v9.105 — Mauvaise réponse : lire "Pas tout à fait. La bonne réponse est X. Pourquoi ? [explication]"
+      // v9.110 — On AWAIT le speakSequence : l'affichage de l'explication reste visible
+      // tant que la voix parle (Raïssa : "l'affichage dure 1s mais la voix continue").
       const correctOpt = options.find(o => o.correct)
       const explanation = options[idx].explanation_fr || c.explanation_fr
       const correctLang = correctOpt ? detectOptionLang(correctOpt.text) : 'en-GB'
@@ -1188,10 +1189,12 @@ function StepRecognition({
         segs.push({ text: 'Pourquoi ?', lang: 'fr-FR', pauseAfter: 300 })
         segs.push({ text: explanation, lang: 'fr-FR', pauseAfter: 600 })
       }
-      void speakSequence(segs, rate)
       setShown('wrong')
-      // v9.105 — Laisser plus de temps pour lire l'explication avant reset (5s si explication, sinon 1.5s)
-      setTimeout(() => { setPicked(null); setShown('idle') }, explanation ? 5500 : 1500)
+      // v9.110 — AWAIT : reset uniquement APRÈS que toute la séquence audio est finie.
+      // Avant : timer fixe 5.5s, l'affichage disparaissait avant la fin du speech.
+      await speakSequence(segs, rate)
+      // Petite pause supplémentaire pour laisser lire l'explication à l'écran
+      setTimeout(() => { setPicked(null); setShown('idle') }, 800)
     }
   }
 
