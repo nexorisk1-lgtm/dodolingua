@@ -1262,6 +1262,9 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
   const c = step.content_json as {
     audio_intro?: string;
     pattern_rows?: { subject: string; verb: string; fr: string }[];
+    // v9.111 — Note pédagogique affichée + lue après le pattern.
+    // Ex: "You are s'utilise pour le sujet tu ou vous."
+    note_fr?: string;
   }
   const rows = c.pattern_rows || []
 
@@ -1269,8 +1272,12 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
   // l'utilisateur n'avait pas le temps de cliquer une ligne que la suivante était lue
   // automatiquement et la page changeait). Maintenant : audio_intro lu, puis l'utilisateur
   // touche chaque ligne à son rythme. Pas d'auto-next non plus.
+  // v9.111 — Si note_fr présent, on l'inclut dans l'intro après l'audio_intro.
   const introSegments: SequenceSegment[] = useMemo(() => {
-    return c.audio_intro ? [{ text: c.audio_intro, lang: 'fr-FR' as const, pauseAfter: 0 }] : []
+    const segs: SequenceSegment[] = []
+    if (c.audio_intro) segs.push({ text: c.audio_intro, lang: 'fr-FR' as const, pauseAfter: 600 })
+    if (c.note_fr) segs.push({ text: c.note_fr, lang: 'fr-FR' as const, pauseAfter: 0 })
+    return segs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoIntro(introSegments, rate)
@@ -1309,6 +1316,13 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
           </button>
         ))}
       </div>
+      {/* v9.111 — Note pédagogique sous le pattern (ex: explication You = tu ou vous) */}
+      {c.note_fr && (
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-3 rounded-r-lg text-sm">
+          <span className="font-bold text-amber-700">💡 </span>
+          <MixedText text={c.note_fr} className="text-gray-700" />
+        </div>
+      )}
       <button onClick={onContinue}
         className="w-full p-4 bg-primary-700 text-white rounded-xl font-semibold hover:bg-primary-900 text-lg">
         Suivant →
