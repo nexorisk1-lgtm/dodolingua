@@ -1264,7 +1264,7 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
     // v9.112 — `marker` optionnel : 3ème chip jaune (négation, particule, modal)
     // pour décomposer ex: [I, am, not] au lieu de [I, am not].
     // Couleur du `subject` configurable via `subject_color` (défaut "blue").
-    pattern_rows?: { subject: string; verb: string; marker?: string; fr: string; subject_color?: 'blue' | 'yellow' | 'red' | 'green' | 'purple' | 'gray' }[];
+    pattern_rows?: { subject: string; verb: string; marker?: string; fr: string; subject_color?: 'blue' | 'yellow' | 'red' | 'green' | 'purple' }[];
     note_fr?: string;
   }
   const rows = c.pattern_rows || []
