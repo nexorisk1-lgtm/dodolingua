@@ -387,7 +387,11 @@ const EN_A1_WORDS = new Set([
   'rice', 'piece', 'pieces', 'glass', 'glasses', 'bottle', 'bottles', 'cup', 'cups',
   'slice', 'slices', 'bowl', 'bowls', 'spoon', 'spoons',
   'sugar', 'salt', 'cheese', 'butter', 'flour', 'soup', 'juice', 'wine', 'beer',
-  'homework', 'information', 'advice', 'news',
+  'homework',
+  // v9.109 — RETIRÉ : 'information', 'advice', 'news' — homographes FR/EN qui
+  // créaient un bug critique (chip formula "information" lu en voix anglaise au
+  // lieu de française). Pour les utiliser en EN dans le cours 10_3, encadrer
+  // explicitement par **xxx** dans les textes FR.
 ])
 
 // v9.90 — Nettoyage ponctuation avant tokenize pour ne pas casser sur "/" ou "."
@@ -926,4 +930,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.108'
+export const TTS_VERSION = 'v9.109'
