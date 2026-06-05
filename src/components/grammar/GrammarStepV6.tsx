@@ -1261,9 +1261,10 @@ function StepRecognition({
 function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () => void; rate: number }) {
   const c = step.content_json as {
     audio_intro?: string;
-    pattern_rows?: { subject: string; verb: string; fr: string }[];
-    // v9.111 — Note pédagogique affichée + lue après le pattern.
-    // Ex: "You are s'utilise pour le sujet tu ou vous."
+    // v9.112 — `marker` optionnel : 3ème chip jaune (négation, particule, modal)
+    // pour décomposer ex: [I, am, not] au lieu de [I, am not].
+    // Couleur du `subject` configurable via `subject_color` (défaut "blue").
+    pattern_rows?: { subject: string; verb: string; marker?: string; fr: string; subject_color?: 'blue' | 'yellow' | 'red' | 'green' | 'purple' | 'gray' }[];
     note_fr?: string;
   }
   const rows = c.pattern_rows || []
@@ -1286,9 +1287,11 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
   // v9.93 — Au clic d'une ligne : EN ("I am") puis FR ("je suis") pour bilingue
   // v9.94 — r.verb peut être vide (pour les pronoms seuls), dans ce cas on ne lit
   //         que subject + fr.
-  function playRow(r: { subject: string; verb: string; fr: string }) {
+  // v9.112 — r.marker optionnel (négation, particule). Inclus dans le texte EN lu.
+  function playRow(r: { subject: string; verb: string; marker?: string; fr: string }) {
     stopSpeaking()
-    const enText = r.verb ? `${r.subject} ${r.verb}` : r.subject
+    const parts = [r.subject, r.verb, r.marker].filter(Boolean)
+    const enText = parts.join(' ')
     void speakSequence([
       { text: enText, lang: 'en-GB', pauseAfter: 400 },
       { text: r.fr, lang: 'fr-FR' }
@@ -1303,12 +1306,19 @@ function StepPattern({ step, onContinue, rate }: { step: StepV6; onContinue: () 
           <button key={i}
             onClick={() => playRow(r)}
             className="w-full flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:bg-primary-50 transition-colors">
-            <TokenChip token={{ text: r.subject, color: 'blue' }} />
+            <TokenChip token={{ text: r.subject, color: r.subject_color || 'blue' }} />
             {/* v9.94 — Chip verb conditionnel : pour les patterns sans paire (ex: pronoms seuls). */}
             {r.verb && (
               <>
                 <span className="text-gray-400 text-xl">→</span>
                 <TokenChip token={{ text: r.verb, color: 'red' }} />
+              </>
+            )}
+            {/* v9.112 — Chip marker optionnel (négation, particule) en jaune */}
+            {r.marker && (
+              <>
+                <span className="text-gray-400 text-xl">→</span>
+                <TokenChip token={{ text: r.marker, color: 'yellow' }} />
               </>
             )}
             <span className="ml-auto text-sm italic text-gray-500">{toDisplay(r.fr)}</span>
