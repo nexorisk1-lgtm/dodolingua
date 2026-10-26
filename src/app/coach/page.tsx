@@ -4,103 +4,69 @@ import { useEffect, useRef, useState } from 'react'
 import { Container } from '@/components/ui/Container'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Mascot } from '@/components/Mascot'
 import { createClient } from '@/lib/supabase/client'
-import { speak, getBestVoice, waitForVoices } from '@/components/games/utils'
-import {
-  PronunciationBadge,
-  extractWordScores,
-  scoreAgainstTarget,
-  extractTargetPhrase,
-  type WordScore,
-} from '@/components/coach/PronunciationBadge'
+import { speak } from '@/components/games/utils'
+import { PronunciationBadge, extractWordScores, type WordScore } from '@/components/coach/PronunciationBadge'
+import type { CoachMode } from '@/types/database'
 
 /**
- * v3.1 — Coach Speaking refondu.
+ * v3 — Refonte coach speaking
  *
- * Patterns benchmarkés (sources : ELSA, Praktika, Langua, Babbel, Loora) :
- *  - Axe 1 (ELSA) : surlignage prononciation vert/rouge en mode speaking_pur,
- *    BASÉ SUR LA PHRASE CIBLE (pas la confidence brute).
- *  - Axe 2 (Praktika) : bouton 💡 corrections à la demande sur messages user
- *    en mode tuteur (PAS de correction automatique).
- *  - Axe 3 : isolation stricte des fils de conversation par mode (étanchéité).
- *  - Axe 4 (Babbel) : "breathing cue" sur le bouton micro à l'état idle.
- *  - Axe 5 : espace libre toujours disponible.
- *  - Axe 9 (Pimsleur/ELSA) : mode speaking_pur avec drill (bouton 🔁 Refaire).
+ * Lot 1 (étanchéité) : un fil de messages PAR mode. Switcher de mode = changer
+ *   d'onglet et de fil ; aucun mélange entre Libre / Tuteur / Ami.
+ * Lot 2 (anti-boucle) : le micro est explicitement arrêté avant TTS et redémarre
+ *   300 ms après la fin du TTS si la voix est ON. speak() expose maintenant
+ *   onstart / onend pour cela.
+ * Lot 3 (3 états) : machine d'état explicite — 'idle' | 'listening' | 'thinking'
+ *   | 'speaking'. Bandeau visible en haut. Mic désactivé pendant 'thinking' et
+ *   'speaking'.
  *
- * Bugs corrigés :
- *  - Bug 1 (v3) : threads par mode → switcher de mode ne mélange plus les conversations
- *  - Bug 2 (v3) : speakClean stoppe le micro AVANT TTS, redémarre après onend
- *
- * Nouveautés v3.1 :
- *  - Score Speaking pur fiable : extrait la phrase cible du dernier message
- *    du coach et compare la transcription. Vert si match, rouge sinon.
- *  - Enregistrement audio en parallèle du STT en mode speaking_pur. Bouton
- *    "▶️ Réécouter ma voix" pour s'auto-évaluer.
- *  - Hauteur de conversation augmentée (60 → 70vh) + scroll moins agressif :
- *    si l'utilisateur a scrollé manuellement, on n'auto-scroll plus tant qu'il
- *    n'est pas revenu en bas.
- *
- * TODO v3.2 :
- *  - Capter les corrections du Tuteur (endpoint /api/coach/correct) pour les
- *    injecter dans le module Révisions de l'app (idée Raïssa du 30/04/2026).
- *  - Persistance des threads en BDD (Supabase) pour retrouver l'historique
- *    entre sessions.
+ * v3 — 6 axes benchmarkés (sources : ELSA, Praktika, Langua, Babbel, Loora) :
+ *  - Axe 1 (ELSA) : surlignage prononciation vert/jaune/rouge → PronunciationBadge
+ *      affiché sur les messages utilisateur en mode "speaking_pur".
+ *  - Axe 2 (Praktika) : bouton 💡 "Voir correction" sur chaque message utilisateur
+ *      en mode Tuteur. PAS de correction automatique. Appelle /api/coach/correct.
+ *  - Axe 3 (déjà couvert par Lot 1) : isolation des fils par mode.
+ *  - Axe 4 (Babbel) : "breathing cue" — animation pulse-soft sur le bouton micro
+ *      à l'état idle (CSS .animate-breath).
+ *  - Axe 5 : espace de discussion libre TOUJOURS disponible (onglet "Libre" en
+ *      premier, jamais retiré).
+ *  - Axe 9 (Pimsleur/ELSA) : mode Coach speaking pur + bouton 🔁 Refaire pour
+ *      répéter et comparer le score.
  */
-
-type Mode = 'tuteur' | 'ami' | 'auto' | 'speaking_pur' | 'pro_grc' | 'debutant'
-type CoachState = 'idle' | 'listening' | 'thinking' | 'speaking'
-
-// v3.3.2 — Scénarios étendus : 12 situations + 12 thèmes
-type Scenario =
-  | 'daily' | 'meeting' | 'restaurant' | 'cafe' | 'hotel' | 'travel'
-  | 'shopping' | 'pro' | 'phone' | 'health' | 'park' | 'info'
-  | 'colors' | 'clothes' | 'food' | 'family' | 'weather' | 'hobbies'
-  | 'animals' | 'house' | 'numbers' | 'calendar' | 'emotions' | 'irregular_verbs'
-
-interface ScenarioOpt { key: Scenario; emoji: string; label: string }
-
-const SCENARIOS_SITUATIONS: ScenarioOpt[] = [
-  { key: 'daily',      emoji: '👋',  label: 'Quotidien' },
-  { key: 'meeting',    emoji: '🤝',  label: 'Présentations' },
-  { key: 'restaurant', emoji: '🍽️', label: 'Restaurant' },
-  { key: 'cafe',       emoji: '☕',  label: 'Café' },
-  { key: 'hotel',      emoji: '🏨',  label: 'Hôtel' },
-  { key: 'travel',     emoji: '✈️',  label: 'Voyage' },
-  { key: 'shopping',   emoji: '🛍️', label: 'Shopping' },
-  { key: 'pro',        emoji: '💼',  label: 'Pro' },
-  { key: 'phone',      emoji: '📞',  label: 'Téléphone' },
-  { key: 'health',     emoji: '🏥',  label: 'Santé' },
-  { key: 'park',       emoji: '🌳',  label: 'Parc' },
-  { key: 'info',       emoji: '❓',  label: 'Renseignement' },
-]
-
-const SCENARIOS_THEMES: ScenarioOpt[] = [
-  { key: 'colors',          emoji: '🎨', label: 'Couleurs' },
-  { key: 'clothes',         emoji: '👕', label: 'Vêtements' },
-  { key: 'food',            emoji: '🍎', label: 'Nourriture' },
-  { key: 'family',          emoji: '👨‍👩‍👧', label: 'Famille' },
-  { key: 'weather',         emoji: '🌦️', label: 'Météo' },
-  { key: 'hobbies',         emoji: '⚽', label: 'Loisirs' },
-  { key: 'animals',         emoji: '🐾', label: 'Animaux' },
-  { key: 'house',           emoji: '🏠', label: 'Maison' },
-  { key: 'numbers',         emoji: '🔢', label: 'Chiffres' },
-  { key: 'calendar',        emoji: '📅', label: 'Calendrier' },
-  { key: 'emotions',        emoji: '😊', label: 'Émotions' },
-  { key: 'irregular_verbs', emoji: '🔁', label: 'Verbes irrég.' },
-]
 
 interface Msg {
   role: 'user' | 'model'
   text: string
-  /** v3.1 — scores de prononciation par mot (mode speaking_pur uniquement) */
+  /** v3 axe 1 — scores de prononciation par mot (mode speaking_pur uniquement) */
   wordScores?: WordScore[]
-  /** v3.1 — true si scoring basé sur match phrase cible */
-  hasTarget?: boolean
-  /** v3.1 — Blob URL de l'enregistrement audio de l'utilisateur (mode speaking_pur) */
-  audioUrl?: string
-  /** v3 — correction à la demande (mode tuteur) */
+  /** v3 axe 2 — correction à la demande pour les messages user en mode Tuteur */
   correction?: { state: 'loading' | 'ready' | 'error'; text?: string }
+}
+
+// 'auto' = pas d'override (le serveur choisit selon les goals de l'utilisateur)
+type ModeKey = 'auto' | CoachMode
+type CoachState = 'idle' | 'listening' | 'thinking' | 'speaking'
+
+// Modes obligatoires v3 (validés avec Raïssa) — toujours présents quels que soient les goals
+const MANDATORY_MODES: CoachMode[] = ['professeur', 'speaking_pur']
+
+const MODE_LABELS: Record<CoachMode, string> = {
+  conversationnel: '💬 Ami',
+  hybride: '🎯 Hybride',
+  professeur: '🎓 Tuteur',
+  business: '💼 Business',
+  guide: '✈️ Guide',
+  expert_grc: '🛡️ GRC',
+  culturel: '🎉 Culturel',
+  speaking_pur: '🎙️ Speaking pur',
+}
+
+const STATE_BADGE: Record<CoachState, { label: string; cls: string }> = {
+  idle:      { label: '○ Prêt',          cls: 'bg-gray-100 text-gray-600' },
+  listening: { label: '🎤 Écoute',       cls: 'bg-blue-100 text-blue-700 animate-pulse' },
+  thinking:  { label: '⏳ Réfléchit…',   cls: 'bg-amber-100 text-amber-700' },
+  speaking:  { label: '🔊 Parle',         cls: 'bg-emerald-100 text-emerald-700' },
 }
 
 declare global {
@@ -110,403 +76,123 @@ declare global {
   }
 }
 
-const MODE_TABS_BASE: { key: Mode; emoji: string; label: string; sub: string }[] = [
-  { key: 'debutant',     emoji: '🌱', label: 'Débutant',      sub: 'FR + EN' },
-  { key: 'ami',          emoji: '💬', label: 'Ami',           sub: 'Discute librement' },
-  { key: 'auto',         emoji: '🎯', label: 'Auto',          sub: 'Équilibré' },
-  { key: 'tuteur',       emoji: '🎓', label: 'Tuteur',        sub: '💡 à la demande' },
-  { key: 'speaking_pur', emoji: '🎙️', label: 'Speaking pur',  sub: 'Prononciation' },
-]
-
-// v3.4 — Mode Pro GRC visible UNIQUEMENT pour les admins
-const MODE_TAB_PRO_GRC: { key: Mode; emoji: string; label: string; sub: string } =
-  { key: 'pro_grc', emoji: '🛡️', label: 'Pro GRC', sub: 'Mentor métier' }
-
-const STATE_BADGE: Record<CoachState, { label: string; cls: string }> = {
-  idle:      { label: '○ Prêt',          cls: 'bg-gray-100 text-gray-600' },
-  listening: { label: '🎤 Écoute',       cls: 'bg-blue-100 text-blue-700 animate-pulse' },
-  thinking:  { label: '⏳ Réfléchit…',   cls: 'bg-amber-100 text-amber-700' },
-  speaking:  { label: '🔊 Parle',         cls: 'bg-emerald-100 text-emerald-700' },
-}
-
-function cleanForVoice(text: string): string {
-  const conversationalLines = text
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    .filter(l => !/^Correction\s*:/i.test(l))
-    .filter(l => !/^Better\s*:/i.test(l))
-    .filter(l => !/^\[FR\]/i.test(l))  // v3.2 — ne lis pas la trad française à voix haute
-    .join('. ')
-
-  return conversationalLines
-    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F2FF}\u{FE00}-\u{FE0F}\u{1F100}-\u{1F1FF}]/gu, '')
-    .replace(/\*\*/g, '')
-    .replace(/\*/g, '')
-    .replace(/->/g, ' ')
-    .replace(/→/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
+/** v1.3 — Ponctuation basique sur transcripts STT bruts. */
 function addBasicPunctuation(raw: string): string {
   const trimmed = raw.trim()
   if (!trimmed) return ''
   let out = trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
-  const isQuestion = /^(who|what|when|where|why|how|do|does|did|can|could|is|are|am|will|would|should|may|might)\b/i.test(trimmed)
-  if (!/[.!?]$/.test(out)) out += isQuestion ? '?' : '.'
+  const startsWithQuestion = /^(who|what|when|where|why|how|do|does|did|can|could|is|are|am|will|would|should|may|might)\b/i.test(trimmed)
+  if (!/[.!?]$/.test(out)) {
+    out += startsWithQuestion ? '?' : '.'
+  }
   return out
 }
 
-function parseCorrection(line: string): { wrong: string; correct: string; reason?: string } | null {
-  const m = line.match(/^Correction:\s*(.+?)\s*(?:->|→)\s*(.+?)(?:\s*\((.+?)\))?\.?\s*$/i)
-  if (!m) return null
-  return { wrong: m[1].trim(), correct: m[2].trim(), reason: m[3]?.trim() }
-}
-
-function MessageContent({ text }: { text: string }) {
-  const lines = text.split('\n').filter(l => l.trim() !== '')
-  return (
-    <div className="space-y-2">
-      {lines.map((line, i) => {
-        const corr = parseCorrection(line)
-        if (corr) {
-          return (
-            <div key={i} className="bg-amber-50 border-l-4 border-accent-500 rounded p-2 my-1">
-              <div className="text-[11px] font-bold text-accent-700 uppercase tracking-wide">💡 Correction</div>
-              <div className="mt-1 text-sm">
-                <span className="line-through text-warn">{corr.wrong}</span>
-                <span className="mx-2 text-gray-400">→</span>
-                <span className="font-bold text-ok">{corr.correct}</span>
-              </div>
-              {corr.reason && (
-                <div className="text-xs italic text-gray-600 mt-1">📖 {corr.reason}</div>
-              )}
-            </div>
-          )
-        }
-        // v3.2 — Ligne de traduction FR : rendu en italique gris, plus petit
-        if (/^\[FR\]\s*/i.test(line)) {
-          const french = line.replace(/^\[FR\]\s*/i, '')
-          return (
-            <div key={i} className="text-[12px] italic text-gray-500 leading-snug pl-1">
-              🇫🇷 {french}
-            </div>
-          )
-        }
-        return <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{line}</div>
-      })}
-    </div>
-  )
-}
-
-function hasCorrection(text: string): boolean {
-  return /correction\s*:/i.test(text)
-}
-
 export default function CoachPage() {
-  // v3 — un fil par mode
-  const [threads, setThreads] = useState<Record<Mode, Msg[]>>({
-    ami: [], auto: [], tuteur: [], speaking_pur: [], pro_grc: [], debutant: [],
-  })
-  const [activeMode, setActiveMode] = useState<Mode>('auto')
-  // v3.4 — admin status (pour afficher le mode Pro GRC)
-  const [isAdmin, setIsAdmin] = useState(false)
-  // v3.3 — scénario sélectionné en mode speaking_pur
-  const [scenario, setScenario] = useState<Scenario>('daily')
-  const messages = threads[activeMode]
+  // Lot 1 — un fil par mode
+  const [threads, setThreads] = useState<Partial<Record<ModeKey, Msg[]>>>({ auto: [] })
+  const [activeKey, setActiveKey] = useState<ModeKey>('auto')
 
   const [val, setVal] = useState('')
+  const [activeModes, setActiveModes] = useState<CoachMode[]>([])
   const [voiceName, setVoiceName] = useState<string | null>(null)
   const [voiceOn, setVoiceOn] = useState(true)
-  const [voiceConvMode, setVoiceConvMode] = useState(false)
+
   const [state, setState] = useState<CoachState>('idle')
   const [error, setError] = useState<string | null>(null)
-  const [voiceReady, setVoiceReady] = useState(false)
-  // v3.5 — persistance : true quand on a chargé les threads depuis la BDD
-  const [threadsLoaded, setThreadsLoaded] = useState(false)
-  // v3.8 — mots de révision dûs intégrés au coach (tuteur/speaking_pur)
-  const [reviewWords, setReviewWords] = useState<string[]>([])
 
-  const voiceConvModeRef = useRef(false)
-  // v3.5 — debounce de la sauvegarde des threads (un timer par mode)
-  const saveTimersRef = useRef<Partial<Record<Mode, any>>>({})
-  const ttsActiveRef = useRef(false)
-  const silenceTimerRef = useRef<any>(null)
-  const lastTranscriptRef = useRef('')
-  const lastConfidenceRef = useRef<number>(0)
   const scrollRef = useRef<HTMLDivElement>(null)
-  // v3.1 — Track si l'user a scrollé manuellement vers le haut
-  const userHasScrolledUpRef = useRef(false)
   const recRef = useRef<any>(null)
-  const greetedRef = useRef<Record<Mode, boolean>>({ ami: false, auto: false, tuteur: false, speaking_pur: false, pro_grc: false, debutant: false })
+  const ttsActiveRef = useRef(false)
+  // v3 axe 1 — pour capter le score de confidence du dernier résultat STT
+  const lastConfidenceRef = useRef<number>(0)
 
-  // v3.1 — Audio recording (parallèle au SpeechRecognition)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioStreamRef = useRef<MediaStream | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const lastAudioUrlRef = useRef<string | null>(null)
-
-  useEffect(() => { voiceConvModeRef.current = voiceConvMode }, [voiceConvMode])
-
-  const loading = state === 'thinking'
-  const recording = state === 'listening'
-  const micDisabled = state === 'thinking' || state === 'speaking'
+  const messages = threads[activeKey] || []
 
   useEffect(() => {
     (async () => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      // v3.4 — admin status (pour afficher le mode Pro GRC)
-      const { data: prof } = await supabase.from('profiles')
-        .select('is_admin').eq('id', user.id).single()
-      if (prof?.is_admin) setIsAdmin(true)
+      const { data: p } = await supabase.from('user_preferences')
+        .select('coach_modes_cached').eq('user_id', user.id).single()
+      const userModes = (p?.coach_modes_cached || ['hybride']) as CoachMode[]
+      // v3 axe 5 + contraintes Raïssa : on FORCE les 2 modes obligatoires en plus des modes utilisateur
+      const merged = Array.from(new Set([...userModes, ...MANDATORY_MODES]))
+      setActiveModes(merged)
+      setThreads(prev => {
+        const next: Partial<Record<ModeKey, Msg[]>> = { ...prev }
+        if (!next.auto) next.auto = []
+        for (const m of merged) if (!next[m]) next[m] = []
+        return next
+      })
       const { data: v } = await supabase.from('user_voice_pref')
         .select('voice_name').eq('user_id', user.id).eq('lang_code', 'en-GB').maybeSingle()
-      await waitForVoices(2000)
-      if (v?.voice_name) {
-        setVoiceName(v.voice_name)
-      } else {
-        const best = getBestVoice('en')
-        if (best?.name) setVoiceName(best.name)
-      }
-
-      // v3.5 — Charge les threads persistés depuis la BDD
-      try {
-        const res = await fetch('/api/coach/threads')
-        if (res.ok) {
-          const data = await res.json()
-          if (data?.threads) {
-            setThreads(prev => ({ ...prev, ...data.threads }))
-            // Si un thread est déjà rempli, on n'a pas besoin de re-greeter pour ce mode
-            for (const m of ['ami','auto','tuteur','speaking_pur','pro_grc','debutant'] as Mode[]) {
-              if ((data.threads[m] || []).length > 0) {
-                greetedRef.current[m] = true
-              }
-            }
-          }
-        }
-      } catch {}
-      setThreadsLoaded(true)
-      setVoiceReady(true)
+      if (v) setVoiceName(v.voice_name)
     })()
   }, [])
 
-  // Greeting initial (UNE FOIS PAR MODE — sauf en speaking_pur où on re-greet quand le scénario change)
-  // v3.5 — attend aussi que les threads BDD soient chargés
-  // v3.5.1 — garde-fou : si le fil a déjà du contenu (chargé depuis BDD ou suite à un envoi),
-  //          on NE re-greete PAS, peu importe l'état de greetedRef. Évite le bug "Hello en milieu de conv".
   useEffect(() => {
-    if (!voiceReady || !threadsLoaded) return
-    if (greetedRef.current[activeMode]) return
-    const currentThread = threads[activeMode]
-    if (currentThread && currentThread.length > 0) {
-      // Le fil n'est pas vide → on considère le greeting déjà fait
-      greetedRef.current[activeMode] = true
-      return
-    }
-    greetedRef.current[activeMode] = true
-    sendInitialGreeting(activeMode)
-  }, [voiceReady, threadsLoaded, activeMode, scenario])
-
-  // v3.2.1 — Scroll uniquement sur l'arrivée d'un NOUVEAU message (pas sur update d'un existant
-  // comme la correction qui passe de loading à ready). Évite le bouncing qui interrompait le
-  // scroll manuel en mode Tuteur. Scroll instant ('auto') pour ne pas interférer avec le scroll
-  // de l'utilisateur.
-  useEffect(() => {
-    if (userHasScrolledUpRef.current) return
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'auto' })
-  }, [messages.length])
-
-  // v3.5 — Sauvegarde debouncée du thread du mode actif quand il change
-  useEffect(() => {
-    if (!threadsLoaded) return  // évite de wipe la BDD avec un thread vide pendant le chargement
-    const modeToSave = activeMode
-    const msgs = threads[modeToSave]
-    if (!msgs) return
-    // Annule le timer précédent pour ce mode
-    const existing = saveTimersRef.current[modeToSave]
-    if (existing) clearTimeout(existing)
-    // Reprogramme dans 500ms
-    saveTimersRef.current[modeToSave] = window.setTimeout(() => {
-      // On ne persiste que les champs significatifs (le serveur strip aussi)
-      const clean = msgs.map(m => {
-        const out: any = { role: m.role, text: m.text }
-        if (m.wordScores) out.wordScores = m.wordScores
-        if (m.hasTarget) out.hasTarget = true
-        return out
-      })
-      fetch('/api/coach/threads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: modeToSave, messages: clean }),
-      }).catch(() => {})
-    }, 500)
-  }, [threads, activeMode, threadsLoaded])
-
-  // Détecter le scroll manuel de l'utilisateur
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const onScroll = () => {
-      if (!el) return
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-      // v3.2.1 — 100px de tolérance (au lieu de 50) pour être plus permissif :
-      // dès que l'user remonte un peu, on coupe l'auto-scroll
-      userHasScrolledUpRef.current = distFromBottom > 100
-    }
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [])
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+  }, [messages])
 
   function stopMic() {
     try { recRef.current?.stop() } catch {}
     recRef.current = null
-    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
-    // Arrêter aussi l'enregistrement audio s'il tourne
-    stopAudioRecording()
   }
 
-  // v3.1 — Audio recording lifecycle
-  async function startAudioRecording() {
-    if (typeof window === 'undefined' || !navigator.mediaDevices) return
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      audioStreamRef.current = stream
-      audioChunksRef.current = []
-      const mr = new MediaRecorder(stream)
-      mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data)
-      }
-      mr.onstop = () => {
-        if (audioChunksRef.current.length === 0) return
-        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' })
-        const url = URL.createObjectURL(blob)
-        lastAudioUrlRef.current = url
-        // Cleanup stream
-        try { audioStreamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
-        audioStreamRef.current = null
-      }
-      mr.start()
-      mediaRecorderRef.current = mr
-    } catch (e) {
-      // Microphone refusé ou indisponible — on ne bloque pas le STT pour autant
-      mediaRecorderRef.current = null
-    }
-  }
-
-  function stopAudioRecording() {
-    try {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop()
-      }
-    } catch {}
-    mediaRecorderRef.current = null
-  }
-
-  function speakClean(text: string, onEnd?: () => void) {
-    if (!voiceOn) { onEnd?.(); return }
-    const cleanText = cleanForVoice(text)
-    if (!cleanText) { onEnd?.(); return }
-    if (typeof window === 'undefined' || !window.speechSynthesis) { onEnd?.(); return }
-
+  function speakSafely(text: string) {
+    if (!voiceOn) return
+    // v9.117 — Filtrer les réponses vides ou juste points de suspension
+    // (le coach répond parfois "..." sur mobile → la voix lit "point de suspension")
+    const clean = text.trim()
+    if (!clean || /^[\s.…!?]+$/.test(clean)) return
     stopMic()
     ttsActiveRef.current = true
     setState('speaking')
-
-    window.speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(cleanText)
-    if (voiceName) {
-      const v = window.speechSynthesis.getVoices().find((vc: SpeechSynthesisVoice) => vc.name === voiceName)
-      if (v) { u.voice = v; u.lang = v.lang }
-    } else {
-      u.lang = 'en-GB'
-    }
-    u.rate = 0.85
-    u.pitch = 1
-
-    let ended = false
-    const fire = () => {
-      if (ended) return
-      ended = true
-      ttsActiveRef.current = false
-      window.setTimeout(() => {
-        if (!ttsActiveRef.current) setState('idle')
-        onEnd?.()
-      }, 300)
-    }
-    u.onend = fire
-    u.onerror = fire
-    const safetyMs = Math.min(30_000, cleanText.length * 60 + 500)
-    window.setTimeout(fire, safetyMs)
-
-    window.speechSynthesis.speak(u)
-  }
-
-  async function sendInitialGreeting(mode: Mode) {
-    setState('thinking')
-    try {
-      const res = await fetch('/api/coach', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: '__START__' }],
-          mode,
-          scenario: mode === 'speaking_pur' ? scenario : undefined,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.reply) {
-        if (Array.isArray(data.reviewWords)) setReviewWords(data.reviewWords)
-        setThreads(prev => ({ ...prev, [mode]: [{ role: 'model', text: data.reply }] }))
-        speakClean(data.reply, () => {
-          if (voiceConvModeRef.current && state !== 'listening') {
-            setTimeout(() => startContinuousRecording(), 400)
-          }
-        })
-      } else {
-        setState('idle')
-      }
-    } catch {
-      setState('idle')
-    }
+    speak(clean, voiceName, {
+      // v9.117 — Le coach parle TOUJOURS en anglais, forcer la voix EN.
+      // Avant : si l'utilisateur avait une voix FR en préférence par défaut (iPhone),
+      // le coach lisait avec un accent français lourd.
+      lang: 'en-GB',
+      onstart: () => { ttsActiveRef.current = true; setState('speaking') },
+      onend: () => {
+        ttsActiveRef.current = false
+        window.setTimeout(() => {
+          if (!ttsActiveRef.current) setState('idle')
+        }, 300)
+      },
+    } as any)
   }
 
   /**
-   * v3.1 — Récupère la phrase cible à comparer pour le scoring speaking_pur.
-   * On la cherche dans le DERNIER message du coach.
+   * Envoi d'un message au coach.
+   * @param text  contenu (sinon prend la valeur de l'input)
+   * @param wordScores  (axe 1) scores de prononciation à attacher au message user
+   *                    si on vient du STT en mode speaking_pur.
    */
-  function getCurrentTargetPhrase(): string | null {
-    const lastModel = [...threads.speaking_pur].reverse().find(m => m.role === 'model')
-    if (!lastModel) return null
-    return extractTargetPhrase(lastModel.text)
-  }
-
-  async function send(text?: string, wordScores?: WordScore[], audioUrl?: string, hasTarget?: boolean) {
+  async function send(text?: string, wordScores?: WordScore[]) {
     const message = (text ?? val).trim()
-    if (!message || loading || state === 'speaking') return
+    if (!message || state === 'thinking' || state === 'speaking') return
     setError(null)
 
-    const currentMode = activeMode
+    const currentKey = activeKey
+    const currentThread = threads[currentKey] || []
     const userMsg: Msg = { role: 'user', text: message }
     if (wordScores && wordScores.length) userMsg.wordScores = wordScores
-    if (hasTarget) userMsg.hasTarget = true
-    if (audioUrl) userMsg.audioUrl = audioUrl
-    const next: Msg[] = [...threads[currentMode], userMsg]
-    setThreads(prev => ({ ...prev, [currentMode]: next }))
+    const next: Msg[] = [...currentThread, userMsg]
+    setThreads(prev => ({ ...prev, [currentKey]: next }))
     setVal('')
     stopMic()
     setState('thinking')
-    // L'user vient d'envoyer, on revient en bas du fil
-    userHasScrolledUpRef.current = false
 
     try {
       const res = await fetch('/api/coach', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // L'API attend des objets {role, text} simples ; on retire wordScores et correction.
           messages: next.map(m => ({ role: m.role, text: m.text })),
-          mode: currentMode,
-          scenario: currentMode === 'speaking_pur' ? scenario : undefined,
+          mode_override: currentKey === 'auto' ? null : currentKey,
         }),
       })
       const data = await res.json()
@@ -515,15 +201,10 @@ export default function CoachPage() {
         setState('idle')
         return
       }
-      // v3.8 — capte les mots de révision pour afficher le bandeau
-      if (Array.isArray(data.reviewWords)) setReviewWords(data.reviewWords)
       const updated: Msg[] = [...next, { role: 'model', text: data.reply }]
-      setThreads(prev => ({ ...prev, [currentMode]: updated }))
-      speakClean(data.reply, () => {
-        if (voiceConvModeRef.current && state !== 'listening') {
-          setTimeout(() => startContinuousRecording(), 400)
-        }
-      })
+      setThreads(prev => ({ ...prev, [currentKey]: updated }))
+      if (voiceOn) speakSafely(data.reply)
+      else setState('idle')
     } catch (e: any) {
       setError(e.message || 'Erreur réseau')
       setState('idle')
@@ -534,439 +215,220 @@ export default function CoachPage() {
     if (state === 'thinking' || state === 'speaking') return
     const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
     if (!SR) {
-      setError('Reconnaissance vocale non disponible. Utilise Chrome.')
+      setError('Reconnaissance vocale non disponible sur ce navigateur. Utilise plutôt Chrome.')
       return
     }
     const rec = new SR()
     rec.lang = 'en-GB'
-    rec.continuous = true
+    rec.continuous = false
     rec.interimResults = true
     lastConfidenceRef.current = 0
-
-    // v3.8.2 — Démarre l'enregistrement audio dans TOUS les modes (pas que speaking_pur)
-    // Permet 'Réécouter ma voix' partout
-    startAudioRecording()
-
     rec.onstart = () => setState('listening')
-    rec.onerror = (e: any) => { setError('Erreur micro : ' + e.error); setState('idle'); stopAudioRecording() }
-    rec.onend = () => setState(s => s === 'listening' ? 'idle' : s)
-    rec.onresult = (e: any) => {
-      let transcript = ''
-      let confidence = 0
-      for (let i = 0; i < e.results.length; i++) {
-        transcript += e.results[i][0].transcript
-        if (typeof e.results[i][0].confidence === 'number') confidence = e.results[i][0].confidence
-      }
-      lastConfidenceRef.current = confidence
-      setVal(transcript.trim())
-    }
-    try { rec.start(); recRef.current = rec } catch (err: any) { setError(err.message) }
-  }
-
-  function startContinuousRecording() {
-    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
-    if (!SR) {
-      setError('Reconnaissance vocale non disponible. Utilise Chrome.')
-      setVoiceConvMode(false)
-      return
-    }
-    if (recRef.current) return
-    const rec = new SR()
-    rec.lang = 'en-GB'
-    rec.continuous = true
-    rec.interimResults = true
-    lastConfidenceRef.current = 0
-
-    // v3.8.2 — Audio capturé dans tous les modes
-    startAudioRecording()
-
-    rec.onstart = () => { setState('listening'); lastTranscriptRef.current = '' }
     rec.onerror = (e: any) => {
-      if (e.error === 'no-speech' && voiceConvModeRef.current) {
-        setState('idle')
-        stopAudioRecording()
-        setTimeout(() => { if (voiceConvModeRef.current) startContinuousRecording() }, 300)
-        return
-      }
       setError('Erreur micro : ' + e.error)
       setState('idle')
-      stopAudioRecording()
     }
     rec.onend = () => {
       setState(s => s === 'listening' ? 'idle' : s)
-      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null }
     }
     rec.onresult = (e: any) => {
       let transcript = ''
       let confidence = 0
-      for (let i = 0; i < e.results.length; i++) {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
         transcript += e.results[i][0].transcript
-        if (typeof e.results[i][0].confidence === 'number') confidence = e.results[i][0].confidence
+        // En mode non-continu, le dernier résultat porte la confiance globale
+        if (typeof e.results[i][0].confidence === 'number') {
+          confidence = e.results[i][0].confidence
+        }
       }
-      transcript = transcript.trim()
-      lastTranscriptRef.current = transcript
-      lastConfidenceRef.current = confidence
-      setVal(transcript)
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
-      silenceTimerRef.current = setTimeout(() => {
-        const finalText = lastTranscriptRef.current.trim()
-        try { rec.stop() } catch {}
-        // Stop audio recording → laisse onstop générer le blob URL
-        stopAudioRecording()
-        // Délai court pour que le blob URL soit disponible
-        setTimeout(() => {
-          if (finalText.length > 0) {
-            const punct = addBasicPunctuation(finalText)
-            let scores: WordScore[] | undefined
-            let hasTarget = false
-            if (activeMode === 'speaking_pur') {
-              const target = getCurrentTargetPhrase()
-              if (target) {
-                scores = scoreAgainstTarget(punct, target, lastConfidenceRef.current)
-                hasTarget = true
-              } else {
-                scores = extractWordScores(punct, lastConfidenceRef.current)
-              }
-            }
-            const audioUrl = lastAudioUrlRef.current || undefined
-            lastAudioUrlRef.current = null
-            send(punct, scores, audioUrl, hasTarget)
-          }
-        }, 250)
-      }, 1500)
+      if (e.results[e.results.length - 1].isFinal) {
+        const punctuated = addBasicPunctuation(transcript)
+        // v3 axe 1 — n'attache les scores QU'EN mode speaking_pur (sinon bruit visuel)
+        const scores = activeKey === 'speaking_pur'
+          ? extractWordScores(punctuated, confidence)
+          : undefined
+        lastConfidenceRef.current = confidence
+        send(punctuated, scores)
+      } else {
+        setVal(transcript)
+      }
     }
     try { rec.start(); recRef.current = rec } catch (err: any) { setError(err.message) }
   }
 
-  function toggleVoiceConvMode() {
-    const next = !voiceConvMode
-    setVoiceConvMode(next)
-    if (next) {
-      if (state !== 'thinking' && state !== 'listening') {
-        setTimeout(() => startContinuousRecording(), 200)
-      }
-    } else {
-      stopMic()
-      try { window.speechSynthesis.cancel() } catch {}
-      setState('idle')
-    }
-  }
-
-  async function stopRecording() {
+  function stopRecording() {
     stopMic()
-    setState('idle')
-    // Bouton stop manuel — si on était en speaking_pur, attache aussi les wordScores et l'audio
-    setVal(prev => {
-      if (!prev) return prev
-      const punct = prev
-      let scores: WordScore[] | undefined
-      let hasTarget = false
-      let audioUrl: string | undefined
-      if (activeMode === 'speaking_pur') {
-        const target = getCurrentTargetPhrase()
-        if (target) {
-          scores = scoreAgainstTarget(punct, target, lastConfidenceRef.current)
-          hasTarget = true
-        } else {
-          scores = extractWordScores(punct, lastConfidenceRef.current)
-        }
-        audioUrl = lastAudioUrlRef.current || undefined
-        lastAudioUrlRef.current = null
-      }
-      // En mode speaking_pur on auto-envoie ; sinon on garde dans l'input
-      if (activeMode === 'speaking_pur' && punct.trim()) {
-        // Délai pour laisser le blob arriver
-        setTimeout(() => send(punct, scores, audioUrl, hasTarget), 250)
-        return ''
-      }
-      // Sinon, ponctuation Gemini en background
-      ;(async () => {
-        try {
-          const res = await fetch('/api/punctuate', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: prev, lang: 'en-GB' }),
-          })
-          const data = await res.json()
-          if (data?.text && data.text.trim().length > 0) {
-            setVal(data.text)
-          } else {
-            setVal(addBasicPunctuation(prev))
-          }
-        } catch {
-          setVal(addBasicPunctuation(prev))
-        }
-      })()
-      return prev
-    })
+    setState(s => s === 'listening' ? 'idle' : s)
   }
 
-  function switchMode(m: Mode) {
-    if (m === activeMode) return
+  function switchTo(key: ModeKey) {
+    if (key === activeKey) return
     if (state === 'listening') stopMic()
-    try { window.speechSynthesis.cancel() } catch {}
-    ttsActiveRef.current = false
-    setActiveMode(m)
+    setActiveKey(key)
     setVal('')
-    setError(null)
-    setState('idle')
-    userHasScrolledUpRef.current = false
-  }
-
-  /** v3.3 — Change le scénario speaking_pur. Reset le fil et re-greet pour basculer le contexte. */
-  function changeScenario(s: Scenario) {
-    if (s === scenario) return
-    if (state === 'listening') stopMic()
-    try { window.speechSynthesis.cancel() } catch {}
-    ttsActiveRef.current = false
-    setScenario(s)
-    setVal('')
-    setError(null)
-    setState('idle')
-    // Reset le fil speaking_pur pour démarrer le nouveau scénario à zéro
-    setThreads(prev => ({ ...prev, speaking_pur: [] }))
-    greetedRef.current.speaking_pur = false  // permet le re-greeting via useEffect
-  }
-
-  async function requestCorrection(msgIndex: number) {
-    const thread = threads[activeMode]
-    const target = thread[msgIndex]
-    if (!target || target.role !== 'user') return
-    if (target.correction?.state === 'ready') {
-      const updated = [...thread]
-      updated[msgIndex] = { ...target, correction: undefined }
-      setThreads(prev => ({ ...prev, [activeMode]: updated }))
-      return
-    }
-    {
-      const updated = [...thread]
-      updated[msgIndex] = { ...target, correction: { state: 'loading' } }
-      setThreads(prev => ({ ...prev, [activeMode]: updated }))
-    }
-    try {
-      const res = await fetch('/api/coach/correct', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ utterance: target.text, source_mode: activeMode }),
-      })
-      const data = await res.json()
-      const fresh = threads[activeMode]
-      const updated = [...fresh]
-      const idx = updated.findIndex(m => m === target)
-      const useIdx = idx >= 0 ? idx : msgIndex
-      if (!res.ok) {
-        updated[useIdx] = { ...target, correction: { state: 'error', text: data.error || 'Erreur' } }
-      } else {
-        updated[useIdx] = { ...target, correction: { state: 'ready', text: data.correction } }
-      }
-      setThreads(prev => ({ ...prev, [activeMode]: updated }))
-    } catch {
-      const fresh = threads[activeMode]
-      const updated = [...fresh]
-      const useIdx = updated.findIndex(m => m === target)
-      const idx = useIdx >= 0 ? useIdx : msgIndex
-      updated[idx] = { ...target, correction: { state: 'error', text: 'Réseau indisponible' } }
-      setThreads(prev => ({ ...prev, [activeMode]: updated }))
-    }
-  }
-
-  function redoUtterance(text: string) {
-    if (state === 'thinking' || state === 'speaking') return
-    setVal(text)
-  }
-
-  /** v3.1 — Réécouter l'enregistrement audio d'un message user. */
-  function playUserAudio(audioUrl: string) {
-    try {
-      // Stoppe TTS pour ne pas se chevaucher
-      window.speechSynthesis.cancel()
-    } catch {}
-    const audio = new Audio(audioUrl)
-    audio.play().catch(() => {})
+    setThreads(prev => prev[key] ? prev : { ...prev, [key]: [] })
   }
 
   function clearActiveThread() {
     if (!confirm('Effacer le fil de ce mode ?')) return
-    setThreads(prev => ({ ...prev, [activeMode]: [] }))
-    greetedRef.current[activeMode] = false
+    setThreads(prev => ({ ...prev, [activeKey]: [] }))
   }
 
-  const lastModelMsg = [...messages].reverse().find(m => m.role === 'model')
-  const dodoPose = lastModelMsg
-    ? (hasCorrection(lastModelMsg.text) ? 'study' : 'happy')
-    : 'idle'
+  /**
+   * v3 axe 2 — Demande la correction d'un message user (à la demande, jamais auto).
+   * Met à jour le message du fil avec la correction renvoyée.
+   */
+  async function requestCorrection(msgIndex: number) {
+    const thread = threads[activeKey] || []
+    const target = thread[msgIndex]
+    if (!target || target.role !== 'user') return
+    // Si déjà corrigé, on toggle l'affichage en effaçant
+    if (target.correction?.state === 'ready') {
+      const updated = [...thread]
+      updated[msgIndex] = { ...target, correction: undefined }
+      setThreads(prev => ({ ...prev, [activeKey]: updated }))
+      return
+    }
+    // Marque "loading"
+    {
+      const updated = [...thread]
+      updated[msgIndex] = { ...target, correction: { state: 'loading' } }
+      setThreads(prev => ({ ...prev, [activeKey]: updated }))
+    }
+    try {
+      const res = await fetch('/api/coach/correct', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ utterance: target.text }),
+      })
+      const data = await res.json()
+      const fresh = threads[activeKey] || thread
+      const updated = [...fresh]
+      // Re-find index by reference (le fil peut avoir bougé entre temps)
+      const idx = updated.indexOf(target) >= 0 ? updated.indexOf(target) : msgIndex
+      if (!res.ok) {
+        updated[idx] = { ...target, correction: { state: 'error', text: data.error || 'Erreur' } }
+      } else {
+        updated[idx] = { ...target, correction: { state: 'ready', text: data.correction } }
+      }
+      setThreads(prev => ({ ...prev, [activeKey]: updated }))
+    } catch (e: any) {
+      const fresh = threads[activeKey] || thread
+      const updated = [...fresh]
+      const idx = updated.indexOf(target) >= 0 ? updated.indexOf(target) : msgIndex
+      updated[idx] = { ...target, correction: { state: 'error', text: 'Réseau indisponible' } }
+      setThreads(prev => ({ ...prev, [activeKey]: updated }))
+    }
+  }
+
+  /** v3 axe 9 — Drill : repropose la même phrase à dire (mode speaking_pur). */
+  function redoUtterance(text: string) {
+    if (state === 'thinking' || state === 'speaking') return
+    setVal(text)
+    // L'utilisateur lit la phrase à nouveau au micro pour comparer son score
+  }
 
   const badge = STATE_BADGE[state]
-  const isTuteurMode = activeMode === 'tuteur'
-  const isSpeakingPurMode = activeMode === 'speaking_pur'
+  const micDisabled = state === 'thinking' || state === 'speaking'
+
+  // v3 axe 5 + contraintes : "Libre" toujours en premier, puis modes (avec les 2 obligatoires garantis)
+  const tabs: ModeKey[] = ['auto', ...activeModes]
+
+  // Détermine si le mode actif est Tuteur ou Speaking pur (pour boutons spécifiques)
+  const isTuteurMode = activeKey === 'professeur'
+  const isSpeakingPurMode = activeKey === 'speaking_pur'
 
   return (
-    <Container className="max-w-2xl space-y-3 pb-20">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Mascot pose={dodoPose} size={56} animation="breathe" className="shrink-0" />
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-2xl font-bold text-primary-900 truncate">Dodo, ton coach</h1>
-            <div className="text-[11px] sm:text-xs text-gray-500 truncate">Discute en anglais — chaque mode a son fil</div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-[11px] px-2.5 py-1 rounded-full font-semibold ${badge.cls}`}>{badge.label}</span>
+    <Container className="max-w-2xl space-y-3">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-primary-900">💬 Coach</h1>
+        <div className="flex items-center gap-2">
+          <span className={`text-[11px] px-2.5 py-1 rounded-full font-semibold ${badge.cls}`}>
+            {badge.label}
+          </span>
           <button onClick={() => setVoiceOn(!voiceOn)}
-            className={`text-xs px-3 py-1.5 rounded-full font-semibold whitespace-nowrap ${voiceOn ? 'bg-primary-700 text-white' : 'bg-white border border-rule text-gray-600'}`}>
-            {voiceOn ? '🔊 Voix' : '🔇 Voix'}
+            className={`text-xs px-3 py-1.5 rounded-full font-semibold ${voiceOn ? 'bg-primary-700 text-white' : 'bg-white border border-rule text-gray-600'}`}>
+            {voiceOn ? '🔊 Voix ON' : '🔇 Voix OFF'}
           </button>
         </div>
       </div>
 
-      <Card className="!p-3">
-        <div className="text-xs font-bold text-gray-700 mb-2">Comment veux-tu apprendre aujourd&apos;hui ?</div>
-        <div className={`grid grid-cols-2 ${isAdmin ? "sm:grid-cols-6" : "sm:grid-cols-5"} gap-2`}>
-          {[...MODE_TABS_BASE, ...(isAdmin ? [MODE_TAB_PRO_GRC] : [])].map(t => {
-            const isActive = activeMode === t.key
-            const count = threads[t.key].length
+      <Card className="!p-2">
+        <div className="text-[10px] uppercase font-bold text-gray-500 px-2 py-1">
+          Modes — chaque onglet a son propre fil de conversation
+        </div>
+        <div className="flex flex-wrap gap-1 px-1">
+          {tabs.map(k => {
+            const label = k === 'auto' ? '💬 Libre' : MODE_LABELS[k]
+            const count = (threads[k] || []).length
+            const isActive = activeKey === k
+            const isMandatory = k !== 'auto' && MANDATORY_MODES.includes(k)
             return (
-              <button key={t.key} onClick={() => switchMode(t.key)}
-                className={`relative flex flex-col items-center gap-0.5 p-2 rounded-xl text-center transition ${isActive ? 'bg-primary-700 text-white shadow-sm' : 'bg-white border border-rule hover:border-primary-300'}`}>
-                <span className="text-xl leading-none">{t.emoji}</span>
-                <span className="text-xs font-bold">{t.label}</span>
-                <span className={`text-[10px] leading-tight ${isActive ? 'text-white/80' : 'text-gray-500'}`}>{t.sub}</span>
-                {count > 0 && (
-                  <span className={`absolute top-1 right-1 text-[9px] px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/30 text-white' : 'bg-primary-100 text-primary-700'}`}>{count}</span>
-                )}
+              <button key={k} onClick={() => switchTo(k)}
+                className={`text-[11px] px-2.5 py-1 rounded-full ${isActive ? 'bg-primary-700 text-white' : 'bg-white border border-rule text-gray-700'}`}
+                title={isMandatory ? 'Mode obligatoire (Tuteur ou Speaking pur)' : undefined}>
+                {label}{count > 0 && <span className="ml-1 opacity-70">· {count}</span>}
               </button>
             )
           })}
         </div>
-        <div className="text-[11px] text-gray-600 px-1 pt-2 italic">
-          {activeMode === 'ami' && '💬 Comme avec un pote anglophone : on parle, on rigole, je corrige rarement.'}
-          {activeMode === 'auto' && '🎯 Mix idéal : conversation fluide + 1-2 corrections quand c&apos;est utile.'}
-          {activeMode === 'tuteur' && '🎓 Mode tuteur : conversation pédagogique. Pas de correction automatique — clique sur 💡 sur tes messages pour en demander une.'}
-          {activeMode === 'speaking_pur' && '🎙️ Mode speaking pur : focus prononciation. Choisis un scénario ci-dessous pour bosser des phrases ciblées.'}
-          {activeMode === 'pro_grc' && '🛡️ Mode Pro GRC : mentor métier en anglais (audit, KYC, AML, three lines of defense…). Voice-first. Pour des notes écrites, dis "Write that down" ou "Recap in writing".'}
-          {activeMode === 'debutant' && '🌱 Mode Débutant : Dodo parle EN + FR à chaque ligne. Tu peux répondre en français, il reformulera en anglais simple. Idéal A0/A1.'}
-        </div>
-        {activeMode === 'speaking_pur' && (
-          <div className="mt-3 pt-3 border-t border-rule space-y-3">
-            <div>
-              <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">📍 Situations</div>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                {SCENARIOS_SITUATIONS.map(s => {
-                  const active = scenario === s.key
-                  return (
-                    <button key={s.key} onClick={() => changeScenario(s.key)}
-                      className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg text-center transition ${active ? 'bg-emerald-600 text-white shadow-sm' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}`}>
-                      <span className="text-base leading-none">{s.emoji}</span>
-                      <span className="text-[10px] font-bold">{s.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase font-bold text-gray-500 px-1 mb-1">🧠 Thèmes</div>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                {SCENARIOS_THEMES.map(s => {
-                  const active = scenario === s.key
-                  return (
-                    <button key={s.key} onClick={() => changeScenario(s.key)}
-                      className={`flex flex-col items-center gap-0.5 p-1.5 rounded-lg text-center transition ${active ? 'bg-purple-600 text-white shadow-sm' : 'bg-purple-50 text-purple-800 hover:bg-purple-100'}`}>
-                      <span className="text-base leading-none">{s.emoji}</span>
-                      <span className="text-[10px] font-bold">{s.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        )}
       </Card>
 
-            {/* v3.8 — Bandeau mots de révision intégrés (tuteur/speaking_pur) */}
-      {reviewWords.length > 0 && (activeMode === 'tuteur' || activeMode === 'speaking_pur') && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[12px]">
-          <div className="font-bold text-amber-700 flex items-center gap-2">
-            <span>🔁 Mots de ta révision intégrés</span>
-            <span className="text-[10px] bg-amber-200 px-1.5 py-0.5 rounded-full">{reviewWords.length}</span>
-          </div>
-          <div className="text-amber-700 mt-0.5">
-            Aujourd&apos;hui, on retrouve : <b>{reviewWords.slice(0, 5).join(', ')}</b>{reviewWords.length > 5 ? '…' : ''}
-          </div>
-          <div className="text-[10px] text-amber-600 italic mt-0.5">
-            Le coach va les utiliser naturellement dans la conversation pour t&apos;aider à les fixer.
-          </div>
+      {/* Sous-titre contextuel selon le mode */}
+      {isSpeakingPurMode && (
+        <div className="text-[11px] text-emerald-700 bg-emerald-50 px-3 py-2 rounded-md">
+          🎙️ <b>Mode Speaking pur</b> — Focus prononciation et fluidité. Pas de correction de grammaire ici. Parle au micro pour voir ton score par mot.
+        </div>
+      )}
+      {isTuteurMode && (
+        <div className="text-[11px] text-amber-700 bg-amber-50 px-3 py-2 rounded-md">
+          🎓 <b>Mode Tuteur</b> — Révisions, grammaire, contexte pro. Clique sur 💡 sur tes propres messages pour voir une correction ciblée.
         </div>
       )}
 
-      <button onClick={toggleVoiceConvMode}
-        className={`w-full p-3 rounded-2xl border-2 transition-all ${
-          voiceConvMode
-            ? 'bg-gradient-to-r from-primary-700 to-primary-500 text-white border-primary-700 shadow-lg'
-            : 'bg-white border-rule hover:border-primary-300 text-gray-700'
-        }`}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className={`text-2xl ${voiceConvMode ? 'animate-pulse' : ''}`}>
-              {voiceConvMode ? '🎙️' : '🎤'}
-            </div>
-            <div className="text-left">
-              <div className="font-bold text-sm">
-                {voiceConvMode ? 'Conversation vocale ACTIVE' : 'Mode Conversation Vocale'}
-              </div>
-              <div className={`text-[11px] ${voiceConvMode ? 'text-white/80' : 'text-gray-500'}`}>
-                {voiceConvMode
-                  ? recording ? '🟢 Je t’écoute… parle' : loading ? '⏳ Dodo réfléchit…' : '🔊 Dodo parle'
-                  : 'Active pour parler en continu, mains libres'}
-              </div>
-            </div>
-          </div>
-          <div className={`w-11 h-6 rounded-full p-0.5 transition ${voiceConvMode ? 'bg-white/30' : 'bg-gray-200'}`}>
-            <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${voiceConvMode ? 'translate-x-5' : ''}`} />
-          </div>
-        </div>
-      </button>
-
       <Card className="!p-3">
-        {/* v3.1 — Hauteur augmentée 60vh → 70vh */}
-        <div ref={scrollRef} className="h-[70vh] overflow-y-auto space-y-2 px-1 py-2">
-          {messages.length === 0 && !loading && (
-            <div className="text-center py-12">
-              <Mascot pose="idle" size={140} animation="wave" />
-              <div className="text-sm text-gray-400 italic mt-4">Dodo arrive…</div>
-            </div>
-          )}
-          {messages.length === 0 && loading && (
-            <div className="text-center py-12">
-              <Mascot pose="study" size={140} animation="breathe" />
-              <div className="text-sm text-gray-400 italic mt-4">Dodo prépare ton accueil…</div>
-            </div>
+        <div ref={scrollRef} className="h-[55vh] overflow-y-auto space-y-2 px-1 py-2">
+          {messages.length === 0 && (
+            <>
+              {/* v9.117 — Vraie bulle d'accueil du coach, lisible en anglais */}
+              <div className="max-w-[85%] mr-auto">
+                <div className="p-3 rounded-2xl text-sm bg-primary-50 text-gray-800 rounded-bl-md">
+                  Hi! 👋 What would you like to practice today?
+                  <button onClick={() => speakSafely('Hi! What would you like to practice today?')}
+                    className="block mt-1 text-[10px] opacity-60">🔊</button>
+                </div>
+              </div>
+              <div className="text-center text-[11px] text-gray-400 italic pt-4">
+                💡 Tape ou clique sur 🎤 pour parler
+              </div>
+            </>
           )}
           {messages.map((m, i) => (
             <div key={i} className={`max-w-[85%] ${m.role === 'user' ? 'ml-auto' : 'mr-auto'}`}>
               <div className={`p-3 rounded-2xl text-sm ${m.role === 'user' ? 'bg-primary-700 text-white rounded-br-md' : 'bg-primary-50 text-gray-800 rounded-bl-md'}`}>
-                {m.role === 'model' ? (
-                  <>
-                    <MessageContent text={m.text} />
-                    <button onClick={() => speakClean(m.text)} className="block mt-2 text-[10px] opacity-60 hover:opacity-100">🔊 Réécouter</button>
-                  </>
-                ) : (
-                  m.wordScores
-                    ? <PronunciationBadge words={m.wordScores} hasTarget={!!m.hasTarget} />
-                    : <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
+                {/* Axe 1 — Surlignage prononciation pour les messages user en mode speaking_pur */}
+                {m.role === 'user' && m.wordScores
+                  ? <PronunciationBadge words={m.wordScores} />
+                  : m.text}
+                {/* Boutons sous le message coach */}
+                {m.role === 'model' && (
+                  <button onClick={() => speakSafely(m.text)} className="block mt-1 text-[10px] opacity-60">🔊</button>
                 )}
               </div>
 
-              {/* v3 axe 2 — Bouton 💡 sur messages user en mode tuteur */}
+              {/* Axe 2 — Bouton 💡 sur messages user en mode Tuteur (à la demande) */}
               {m.role === 'user' && isTuteurMode && (
                 <div className="mt-1 text-right">
                   <button
                     onClick={() => requestCorrection(i)}
-                    disabled={m.correction?.state === 'loading'}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 hover:bg-amber-200">
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 hover:bg-amber-200"
+                    disabled={m.correction?.state === 'loading'}>
                     {m.correction?.state === 'loading'  ? '⏳ Correction…'
                      : m.correction?.state === 'ready'  ? '✕ Masquer la correction'
                      : '💡 Voir correction'}
                   </button>
                 </div>
               )}
+              {/* Affichage de la correction en mode Tuteur */}
               {m.role === 'user' && m.correction?.state === 'ready' && m.correction.text && (
                 <div className="mt-1 text-[12px] bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-2 whitespace-pre-line">
                   {m.correction.text}
@@ -978,60 +440,54 @@ export default function CoachPage() {
                 </div>
               )}
 
-              {/* v3.8.2 — Bouton 'Réécouter ma voix' visible dans TOUS les modes si audio capturé */}
-              {m.role === 'user' && m.audioUrl && (
-                <div className="mt-1 text-right space-x-2">
+              {/* Axe 9 — Bouton Refaire sur messages user en mode speaking_pur */}
+              {m.role === 'user' && isSpeakingPurMode && m.wordScores && (
+                <div className="mt-1 text-right">
                   <button
-                    onClick={() => playUserAudio(m.audioUrl!)}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200">
-                    ▶️ Réécouter ma voix
+                    onClick={() => redoUtterance(m.text)}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
+                    🔁 Refaire cette phrase
                   </button>
-                  {/* Refaire reste réservé à speaking_pur (drill) */}
-                  {isSpeakingPurMode && m.wordScores && (
-                    <button
-                      onClick={() => redoUtterance(m.text)}
-                      className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
-                      🔁 Refaire cette phrase
-                    </button>
-                  )}
                 </div>
               )}
             </div>
           ))}
-          {loading && messages.length > 0 && (
-            <div className="flex items-center gap-2 text-xs text-gray-400 italic">
-              <Mascot pose="study" size={32} animation="breathe" />
-              Dodo réfléchit…
-            </div>
-          )}
+          {state === 'thinking' && <div className="text-xs text-gray-400 italic">Le coach réfléchit…</div>}
           {error && <div className="text-xs text-warn p-2 bg-red-50 rounded">{error}</div>}
         </div>
 
         <div className="flex gap-2 pt-2 border-t border-rule">
           <input value={val} onChange={e => setVal(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-            disabled={micDisabled || recording}
+            disabled={micDisabled || state === 'listening'}
             placeholder={
-              recording ? 'Parle… clique stop quand fini'
+              state === 'listening' ? 'Parle… 🎤'
               : state === 'speaking' ? 'Le coach parle…'
               : state === 'thinking' ? 'Le coach réfléchit…'
               : 'Tape ou parle…'
             }
             className="flex-1 px-3 py-2 border border-rule rounded-full text-sm disabled:bg-gray-50" />
-          {!recording ? (
+          {state !== 'listening' ? (
             <button onClick={startRecording} disabled={micDisabled}
               className={`w-10 h-10 rounded-full bg-primary-50 text-primary-700 text-lg hover:bg-primary-100 disabled:opacity-40 disabled:cursor-not-allowed ${state === 'idle' && !micDisabled ? 'animate-breath' : ''}`}
-              title={micDisabled ? 'Indisponible pendant que le coach parle/réfléchit' : 'Parler à Dodo'}>🎤</button>
+              title={micDisabled ? 'Indisponible pendant que le coach parle/réfléchit' : 'Parler au coach'}>
+              🎤
+            </button>
           ) : (
-            <button onClick={stopRecording} className="w-10 h-10 rounded-full bg-warn text-white text-lg animate-pulse" title="Arrêter">■</button>
+            <button onClick={stopRecording}
+              className="w-10 h-10 rounded-full bg-warn text-white text-lg animate-pulse"
+              title="Arrêter">
+              ■
+            </button>
           )}
           <Button size="sm" onClick={() => send()} disabled={micDisabled || !val.trim()}>Envoyer</Button>
         </div>
 
         {messages.length > 0 && (
           <div className="pt-2 text-right">
-            <button onClick={clearActiveThread} className="text-[10px] text-gray-400 hover:text-warn underline">
-              Effacer ce fil
+            <button onClick={clearActiveThread}
+              className="text-xs px-3 py-1.5 rounded-full bg-red-50 text-red-700 hover:bg-red-100 font-semibold">
+              🗑️ Nouvelle conversation
             </button>
           </div>
         )}

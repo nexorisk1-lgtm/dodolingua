@@ -65,6 +65,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // v9.117 — Garde-fou : si le modèle répond "..." ou vide, remplacer par un
+  // vrai message d'invitation (évite "point de suspension" lu par la voix FR).
+  if (!reply || !reply.trim() || /^[\s.…!?]+$/.test(reply.trim())) {
+    console.warn('[coach] Empty/dotted reply from provider, falling back to default')
+    reply = "Could you say that again? I didn't catch it."
+  }
+
   await supabase.from('audit_log').insert({
     user_id: user.id, action: 'coach_message',
     payload_json: { user_msg: messages[messages.length - 1]?.text?.slice(0, 200), modes: prefs?.coach_modes_cached, provider },
