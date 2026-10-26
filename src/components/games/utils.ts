@@ -334,6 +334,8 @@ const EN_A1_WORDS = new Set([
   "i'm", "you're", "he's", "she's", "it's", "we're", "they're",
   "isn't", "aren't", "wasn't", "weren't",
   "don't", "doesn't", "didn't", "won't", "can't", "couldn't",
+  // v9.114 — Contractions des mots-question (manquaient → lus en FR par TTS)
+  "who's", "what's", "where's", "when's", "how's",
   "i've", "you've", "he's", "she's", "we've", "they've",
   "i'd", "you'd", "he'd", "she'd", "we'd", "they'd",
   "i'll", "you'll", "he'll", "she'll", "we'll", "they'll",
@@ -930,4 +932,4 @@ function levenshtein(a: string, b: string): number {
  *
  *  Auto-vérif appliquée : 12 spot-checks SQL passés, idempotence wrap_en
  *  validée, renumérotation L11 sans conflit. */
-export const TTS_VERSION = 'v9.113'
+export const TTS_VERSION = 'v9.114'
