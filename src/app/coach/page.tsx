@@ -150,10 +150,10 @@ export default function CoachPage() {
     stopMic()
     ttsActiveRef.current = true
     setState('speaking')
+    // v9.118 — Le coach parle TOUJOURS en anglais, forcer la voix EN.
+    // Avant : si l'utilisateur avait une voix FR en préférence par défaut (iPhone),
+    // le coach lisait avec un accent français lourd.
     speak(clean, voiceName, {
-      // v9.117 — Le coach parle TOUJOURS en anglais, forcer la voix EN.
-      // Avant : si l'utilisateur avait une voix FR en préférence par défaut (iPhone),
-      // le coach lisait avec un accent français lourd.
       lang: 'en-GB',
       onstart: () => { ttsActiveRef.current = true; setState('speaking') },
       onend: () => {
@@ -162,7 +162,7 @@ export default function CoachPage() {
           if (!ttsActiveRef.current) setState('idle')
         }, 300)
       },
-    } as any)
+    })
   }
 
   /**

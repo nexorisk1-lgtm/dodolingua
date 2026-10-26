@@ -8,8 +8,9 @@
  */
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
-const PRIMARY_MODEL = 'openai/gpt-oss-20b'      // 1000 t/s, moins cher
-const FALLBACK_MODEL = 'openai/gpt-oss-120b'    // 500 t/s, plus intelligent
+// v9.118 — Primaire = 120B (meilleur sur C1/C2/business), fallback = 20B (rapide, moins cher)
+const PRIMARY_MODEL = 'openai/gpt-oss-120b'     // 500 t/s, intelligent (C1/C2/pro)
+const FALLBACK_MODEL = 'openai/gpt-oss-20b'     // 1000 t/s, rapide (fallback)
 
 export interface GroqMessage {
   role: 'user' | 'model'
