@@ -1,8 +1,15 @@
+/**
+ * Client Groq — OpenAI GPT-OSS 20B (rapide, pas cher) avec fallback 120B (qualité).
+ * Les modèles Llama ont été reclassés Enterprise par Groq en 2026 ; GPT-OSS
+ * reste accessible aux comptes standards. Pricing extrêmement bas (<1 $/mois
+ * pour usage perso raisonnable). Compte Groq avec crédit free initial ou
+ * payment method.
+ * API compatible OpenAI.
+ */
+
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
-
-const PRIMARY_MODEL = 'llama-3.3-70b-versatile'
-
-const FALLBACK_MODEL = 'llama-3.1-8b-instant'
+const PRIMARY_MODEL = 'openai/gpt-oss-20b'      // 1000 t/s, moins cher
+const FALLBACK_MODEL = 'openai/gpt-oss-120b'    // 500 t/s, plus intelligent
 
 export interface GroqMessage {
   role: 'user' | 'model'
@@ -55,6 +62,7 @@ export async function askGroq(messages: GroqMessage[], opts: GroqOptions = {}): 
   try {
     return await tryModel(PRIMARY_MODEL)
   } catch (e1) {
+    // Fallback sur 8B Instant si 70B rate-limite ou tombe
     return await tryModel(FALLBACK_MODEL)
   }
 }
